@@ -1,1 +1,0 @@
-option('debug_mode', type: 'feature', description: 'turn on additional build checks relevant for developers')

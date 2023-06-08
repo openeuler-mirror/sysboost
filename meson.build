@@ -1,71 +1,78 @@
 # SPDX-License-Identifier: MulanPSL-2.0
 
-project('DFE', 'C',
-        version: run_command(find_program('cat', 'more'), files('VERSION'), check: true).stdout().strip(),
-        license: 'MulanPSL',
-        default_options: [
-            'buildtype=release',
-            'default_library=static',
-            'warning_level=2',
-        ],
-        meson_version: '>= 0.49.2'
-)
+sysboosts = [
+        'src',
+        'tests'
+]
 
-# check for developer mode
-debug_mode = false
-if get_option('debug_mode').auto()
-    if meson.version().version_compare('>=0.53') # fs module available
-        fs = import('fs')
-        debug_mode = fs.is_dir('.git')
-    endif
+default_cflags = machine_args
+
+if get_option('buildtype').contains('debug')
+	default_cflags += [ '-pedantic', '-DPEDANTIC' ]
 else
-    debug_mode = get_option('debug_mode').enabled()
-endif
-if debug_mode
-    message('## Building in Developer Mode ##')
+	default_cflags += [ '-UPEDANTIC' ]
 endif
 
-# set up some global vars for compiler, platform, configuration, etc.
-cc = meson.get_compiler('c')
-si_source_root = meson.current_source_dir()
-si_build_root = meson.current_build_dir()
-si_static_libraries = []
-abi_version_file = files('ABI_VERSION')
-
-if host_machine.cpu_family().startswith('x86')
-    arch_subdir = 'x86'
-elif host_machine.cpu_family().startswith('arm') or host_machine.cpu_family().startswith('aarch')
-    arch_subdir = 'arm'
-elif host_machine.cpu_family().startswith('riscv')
-    arch_subdir = 'riscv'
+if cc.has_argument('-Wno-format-truncation')
+	default_cflags += '-Wno-format-truncation'
 endif
 
-machine_args = ['-Wall', '-Werror', '-Wextra', '-Wformat', '-D_GNU_SOURCE',
-                '-fno-jump-tables', '-Wl,-z,relro,-z,now', '-Bsymbolic', '-zcommon-page-size=2097152', '-zmax-page-size=2097152']
-lk_args = ['-Wl,--emit-relocs', '-Wl,-z,relro,-z,now']
+default_ldflags = lk_args
 
-global_inc = include_directories('.',
-    'lib/sys/include',
-    #'lib/sys/@0@/include'.format(host_machine.system()),
-    #'lib/sys/@0@/include'.format(arch_subdir),
-)
+foreach src:sysboosts
+    build = true
+    sources = []
+    includes = []
+    cflags = default_cflags + ['-Wno-pointer-arith', '-Wno-pedantic']
+    ldflags = default_ldflags
+    objs = []
+    ext_deps = []
+    deps = []
 
-# build libs
-subdir('lib')
-subdir('tests')
-subdir('sysboost')
+    subdir(src)
 
-# final output, list all the libs and drivers to be built
-# this does not affect any part of the build, for information only.
-output_message = '\n=================\nLibraries Enabled\n=================\n'
-output_message += '\nlibs:\n\t'
-output_count = 0
-foreach lib:enabled_libs
-    output_message += lib + ', '
-    output_count += 1
-    if output_count == 8
-        output_message += '\n\t'
-        output_count = 0
+    dep_objs = []
+    foreach dep_name:deps
+        if not is_variable(dep_name)
+            build = false
+            message('Missing dependency "@0@" for app "@1@"'.format(dep_name, src))
+            break
+        endif
+        dep_objs += [get_variable(dep_name)]
+	message('"@0@" add depend lib "@1@"'.format(src, dep_name))
+    endforeach
+
+    if not build
+        continue
+    endif
+
+    link_libs = []
+
+    if get_option('buildtype').contains('debug')
+        cflags += ['-DDEBUG', '-Og', '-g', '-rdynamic']
+        ldflags += ['-rdynamic']
+    else
+    	cflags += ['-O2']
+    endif
+
+    if src == 'tests'
+        foreach tt:tests
+            path = join_paths(src, tt)
+            subdir(path)
+        endforeach
+    else
+        link_libs = si_static_libraries
+        cflags += ['-fpic', '-pie']
+        executable('sysboost', sources,
+                install: true,
+                c_args: cflags,
+                link_args: ldflags + ['-Wl,--whole-archive', '/usr/lib64/liblzma.a', '-Wl,--no-whole-archive'],
+                link_whole: link_libs,
+                dependencies: ext_deps + dep_objs,
+                include_directories: includes)
+        foreach tl:tools
+            path = join_paths(src, tl)
+            subdir(path)
+        endforeach
     endif
 endforeach
-message(output_message + '\n')
