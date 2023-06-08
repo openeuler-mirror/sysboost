@@ -1,7 +1,27 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 # sysboost
 
 #### 介绍
 Sysboost converts dynamic links into static links by combining executable files and dynamic library files. This reduces the overhead and delay of dynamic links and improves the execution efficiency of programs.
+=======
+# native-turbo
+
+#### 介绍
+<<<<<<< HEAD
+Native-Turbo is the performance optimization framework of native microarchitecture of operating system.
+>>>>>>> e2ad41a (Initial commit)
+=======
+Native-Turbo 是操作系统原生性能加速框架; 通过微架构优化和软硬件协同等技术, 提升大型应用性能;
+
+
+>>>>>>> 928a69a (native-turbo: add doc and architecture description)
+=======
+# sysboost
+
+#### 介绍
+Sysboost converts dynamic links into static links by combining executable files and dynamic library files. This reduces the overhead and delay of dynamic links and improves the execution efficiency of programs.
+>>>>>>> 9a6e0d8 (Splitting the sysboost repository)
 
 #### 软件架构
 软件架构说明
