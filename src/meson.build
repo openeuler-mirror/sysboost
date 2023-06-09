@@ -6,7 +6,41 @@ elif arch_subdir == 'arm'
     cpu_arch = 'aarch64'
 endif
 
-sources = files([
+tools = [
+        'static_template',
+        'libhook'
+]
+
+default_cflags = machine_args + ['-Wno-pointer-arith', '-Wno-pedantic']
+default_ldflags = lk_args
+
+ext_deps = []
+deps = static_link_libraries + ['libsi_sys.a', 'libsi_array.a']
+link_libs = si_static_libraries
+
+if get_option('buildtype').contains('debug')
+	default_cflags += [ '-pedantic', '-DPEDANTIC', '-Og', '-g', '-rdynamic' ]
+	default_ldflags += ['-rdynamic']
+else
+	default_cflags += [ '-UPEDANTIC', '-O2' ]
+endif
+
+if cc.has_argument('-Wno-format-truncation')
+	default_cflags += '-Wno-format-truncation'
+endif
+
+foreach tool:tools
+	name = tool
+	sources = []
+	includes = []
+	cflags = default_cflags
+	ldflags = default_ldflags
+
+	subdir(name)
+endforeach
+
+
+core_sources = files([
                 'main.c',
                 'elf_link_elf.c',
                 'elf_read_elf.c',
@@ -19,9 +53,12 @@ sources = files([
                 'elf_write_elf.c',
                 ])
 
-tools = [
-        'static_template',
-        'libhook'
-]
+cflags += ['-fpic', '-pie']
 
-deps += ['static_si_array', 'static_si_sys']
+executable('sysboost', core_sources,
+        install: true,
+        c_args: default_cflags,
+        link_args: default_ldflags + ['-Wl,--whole-archive', '/usr/lib64/liblzma.a', '-Wl,--no-whole-archive'],
+        link_with: link_libs,
+        dependencies: deps,
+        include_directories: includes)
