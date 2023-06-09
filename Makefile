@@ -11,8 +11,27 @@ sysboostd:
 	clear
 	cargo build
 
+sysboost:
+	rm -rf build
+	meson build
+
+sysboost-debug:
+	rm -rf build
+	meson build --buildtype=debug
+	make -C sysboost
+
 clean:
+	ninja -C build clean
+	make -C sysboost clean
 	cargo clean
+
+format:
+	meson --internal clangformat ./ ./build
+	cargo fmt
+
+static_template_debug:
+	readelf -W -a ./build/sysboost/src/static_template/static_template > static_template.elf
+	objdump -d ./build/sysboost/src/static_template/static_template > static_template.asm
 
 test: sysboostd
 	clear
@@ -23,5 +42,11 @@ test: sysboostd
 test-debug:
 	cargo test -- --nocapture
 
-format:
-	cargo fmt
+bash-test: static_template_debug
+	clear
+	./build/sysboost/sysboost -static ./build/sysboost/src/static_template/sysboost_static_template bash/bash bash/libtinfo.so
+	readelf -W -a bash.rto > bash.rto.elf
+	objdump -d bash.rto > bash.rto.asm
+
+bash-gdb:
+	gdb --args ./build/sysboost/sysboost -static ./build/sysboost/src/static_template/static_template bash/bash bash/libtinfo.so
