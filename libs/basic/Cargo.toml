@@ -19,8 +19,5 @@ pathdiff = "0.2.1"
 caps = "0.5.5"
 lazy_static = "1.4.0"
 
-[dev-dependencies]
-libtests = { path = "../libtests" }
-
 [features]
 selinux = []
