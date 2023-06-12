@@ -5,20 +5,23 @@ SYSBOOST=../build/sysboost/sysboost
 SYSBOOSTD_INSTALL_PATH=/usr/bin/sysboostd
 SYSBOOST_INSTALL_PATH=/usr/bin/sysboost
 
-all: sysboostd
+all: sysboostd sysboost
 
 sysboostd:
 	clear
 	cargo build
 
-sysboost:
+release:
 	rm -rf build
 	meson build
 
-sysboost-debug:
+debug:
 	rm -rf build
 	meson build --buildtype=debug
 	make -C sysboost
+
+sysboost:
+	ninja -C build -v
 
 clean:
 	ninja -C build clean

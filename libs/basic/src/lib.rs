@@ -11,7 +11,6 @@
 // See the Mulan PSL v2 for more details.
 
 //!
-pub mod condition;
 pub mod conf_parser;
 pub mod device;
 pub mod env_cargo;
@@ -28,7 +27,6 @@ pub mod parse_util;
 pub mod path_lookup;
 pub mod path_util;
 pub mod proc_cmdline;
-pub mod process_util;
 pub mod rlimit_util;
 pub mod security;
 pub mod show_table;

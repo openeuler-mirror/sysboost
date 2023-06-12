@@ -9,7 +9,7 @@ default-run = "sysboostd"
 
 [[bin]]
 name ="sysboostd"
-path ="bin/main.rs"
+path = "bin/main.rs"
 
 [target.'cfg(not(windows))'.dependencies]
 basic = { path = "libs/basic" }

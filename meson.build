@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MulanPSL-2.0
 
-project('SYSBOOST', 'C', 'rust',
+project('SYSBOOST', 'C',
         version: run_command(find_program('cat', 'more'), files('VERSION'), check: true).stdout().strip(),
         license: 'MulanPSL',
         default_options: [
@@ -11,24 +11,9 @@ project('SYSBOOST', 'C', 'rust',
         meson_version: '>= 0.49.2'
 )
 
-# check for developer mode
-debug_mode = false
-if get_option('debug_mode').auto()
-    if meson.version().version_compare('>=0.53') # fs module available
-        fs = import('fs')
-        debug_mode = fs.is_dir('.git')
-    endif
-else
-    debug_mode = get_option('debug_mode').enabled()
-endif
-if debug_mode
-    message('## Building in Developer Mode ##')
-endif
-
 # set up some global vars for compiler, platform, configuration, etc.
 static_link_libraries = []
 cc = meson.get_compiler('c')
-rustc = meson.get_compiler('rust')
 si_source_root = meson.current_source_dir()
 si_build_root = meson.current_build_dir()
 si_static_libraries = []
@@ -45,10 +30,6 @@ endif
 machine_args = ['-Wall', '-Werror', '-Wextra', '-Wformat', '-D_GNU_SOURCE',
                 '-fno-jump-tables', '-Wl,-z,relro,-z,now', '-Bsymbolic', '-zcommon-page-size=2097152', '-zmax-page-size=2097152']
 lk_args = []
-
-# build sysboostd
-subdir('libs')
-subdir('bin')
 
 # build sysboost
 subdir('src')
