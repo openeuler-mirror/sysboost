@@ -4,8 +4,8 @@
 
 #include "elf_link_common.h"
 #include "elf_read_elf.h"
-#include "si_array.h"
-#include "si_common.h"
+#include <si_array.h>
+#include <si_common.h>
 
 elf_link_t *elf_link_new(void);
 int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode);

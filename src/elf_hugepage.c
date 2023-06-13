@@ -11,8 +11,8 @@
 #include <unistd.h>
 
 #include "elf_link_common.h"
-#include "si_debug.h"
-#include "si_log.h"
+#include <si_debug.h>
+#include <si_log.h>
 
 #ifndef PF_HUGEPAGE
 #define PF_HUGEPAGE (0x01000000)

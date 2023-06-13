@@ -12,9 +12,9 @@
 #include <unistd.h>
 
 #include "elf_link_common.h"
-#include "si_common.h"
-#include "si_debug.h"
-#include "si_log.h"
+#include <si_common.h>
+#include <si_debug.h>
+#include <si_log.h>
 
 static char *special_dynsyms[] = {
     "__pointer_chk_guard",

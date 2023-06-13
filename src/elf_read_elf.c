@@ -13,7 +13,7 @@
 #include <limits.h>
 
 #include "elf_read_elf.h"
-#include "si_common.h"
+#include <si_common.h>
 #include <si_debug.h>
 #include <si_log.h>
 

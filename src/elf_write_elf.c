@@ -14,9 +14,9 @@
 
 #include "elf_link_common.h"
 #include "elf_read_elf.h"
-#include "si_common.h"
-#include "si_debug.h"
-#include "si_log.h"
+#include <si_common.h>
+#include <si_debug.h>
+#include <si_log.h>
 
 unsigned int elf_align_file(elf_link_t *elf_link, unsigned int align)
 {

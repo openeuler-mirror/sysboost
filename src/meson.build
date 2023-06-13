@@ -15,8 +15,7 @@ default_cflags = machine_args + ['-Wno-pointer-arith', '-Wno-pedantic']
 default_ldflags = lk_args
 
 ext_deps = []
-deps = static_link_libraries + ['libsi_sys.a', 'libsi_array.a']
-link_libs = si_static_libraries
+deps = static_link_libraries
 
 if get_option('buildtype').contains('debug')
 	default_cflags += [ '-pedantic', '-DPEDANTIC', '-Og', '-g', '-rdynamic' ]
@@ -39,6 +38,9 @@ foreach tool:tools
 	subdir(name)
 endforeach
 
+default_ldflags += ['-Wl,--whole-archive', '/usr/lib64/libsi_sys.a']
+default_ldflags += ['-Wl,--whole-archive', '/usr/lib64/libsi_array.a']
+default_ldflags += ['-Wl,--whole-archive', '/usr/lib64/liblzma.a', '-Wl,--no-whole-archive']
 
 core_sources = files([
                 'main.c',
@@ -58,7 +60,6 @@ cflags += ['-fpic', '-pie']
 executable('sysboost', core_sources,
         install: true,
         c_args: default_cflags,
-        link_args: default_ldflags + ['-Wl,--whole-archive', '/usr/lib64/liblzma.a', '-Wl,--no-whole-archive'],
-        link_with: link_libs,
+        link_args: default_ldflags,
         dependencies: deps,
         include_directories: includes)

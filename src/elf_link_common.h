@@ -7,9 +7,9 @@
 #include <stdint.h>
 
 #include "elf_read_elf.h"
-#include "si_array.h"
-#include "si_common.h"
-#include "si_debug.h"
+#include <si_array.h>
+#include <si_common.h>
+#include <si_debug.h>
 
 #define ELF_SEGMENT_ALIGN (0x200000)
 

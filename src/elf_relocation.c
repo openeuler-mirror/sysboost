@@ -11,8 +11,8 @@
 
 #include "elf_link_common.h"
 #include "elf_relocation.h"
-#include "si_debug.h"
-#include "si_log.h"
+#include <si_debug.h>
+#include <si_log.h>
 
 #define BYTES_NOP1 0x90
 
