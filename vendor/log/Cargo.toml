@@ -10,10 +10,10 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
+rust-version = "1.60.0"
 name = "log"
-version = "0.4.18"
+version = "0.4.19"
 authors = ["The Rust Project Developers"]
-build = "build.rs"
 exclude = ["rfcs/**/*"]
 description = """
 A lightweight logging facade for Rust
