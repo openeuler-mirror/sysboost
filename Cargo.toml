@@ -17,5 +17,5 @@ daemonize = "0.x"
 
 serde = { version = "1.0.143", features = ["serde_derive"] }
 toml = "0.5.9"
-inotify = "0.10"
+inotify = "0.9"
 log = "0.4"

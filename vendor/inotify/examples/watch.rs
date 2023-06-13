@@ -15,8 +15,7 @@ fn main() {
         .expect("Failed to determine current directory");
 
     inotify
-        .watches()
-        .add(
+        .add_watch(
             current_dir,
             WatchMask::MODIFY | WatchMask::CREATE | WatchMask::DELETE,
         )

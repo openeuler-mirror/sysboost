@@ -1,9 +1,7 @@
 use std::{
     ops::Deref,
     os::unix::io::{
-        AsFd,
         AsRawFd,
-        BorrowedFd,
         FromRawFd,
         IntoRawFd,
         RawFd,
@@ -76,13 +74,6 @@ impl IntoRawFd for FdGuard {
 impl AsRawFd for FdGuard {
     fn as_raw_fd(&self) -> RawFd {
         self.fd
-    }
-}
-
-impl AsFd for FdGuard {
-    #[inline]
-    fn as_fd(&self) -> BorrowedFd<'_> {
-        unsafe { BorrowedFd::borrow_raw(self.fd) }
     }
 }
 

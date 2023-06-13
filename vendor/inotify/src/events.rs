@@ -12,6 +12,7 @@ use inotify_sys as ffi;
 
 use crate::fd_guard::FdGuard;
 use crate::watches::WatchDescriptor;
+use crate::util::align_buffer;
 
 
 /// Iterator over inotify events
@@ -34,10 +35,10 @@ impl<'a> Events<'a> {
         -> Self
     {
         Events {
-            fd,
-            buffer,
-            num_bytes,
-            pos: 0,
+            fd       : fd,
+            buffer   : buffer,
+            num_bytes: num_bytes,
+            pos      : 0,
         }
     }
 }
@@ -62,26 +63,26 @@ impl<'a> Iterator for Events<'a> {
 /// An inotify event
 ///
 /// A file system event that describes a change that the user previously
-/// registered interest in. To watch for events, call [`Watches::add`]. To
+/// registered interest in. To watch for events, call [`Inotify::add_watch`]. To
 /// retrieve events, call [`Inotify::read_events_blocking`] or
 /// [`Inotify::read_events`].
 ///
-/// [`Watches::add`]: struct.Watches.html#method.add
+/// [`Inotify::add_watch`]: struct.Inotify.html#method.add_watch
 /// [`Inotify::read_events_blocking`]: struct.Inotify.html#method.read_events_blocking
 /// [`Inotify::read_events`]: struct.Inotify.html#method.read_events
 #[derive(Clone, Debug)]
 pub struct Event<S> {
     /// Identifies the watch this event originates from
     ///
-    /// This [`WatchDescriptor`] is equal to the one that [`Watches::add`]
+    /// This [`WatchDescriptor`] is equal to the one that [`Inotify::add_watch`]
     /// returned when interest for this event was registered. The
     /// [`WatchDescriptor`] can be used to remove the watch using
-    /// [`Watches::remove`], thereby preventing future events of this type
+    /// [`Inotify::rm_watch`], thereby preventing future events of this type
     /// from being created.
     ///
     /// [`WatchDescriptor`]: struct.WatchDescriptor.html
-    /// [`Watches::add`]: struct.Watches.html#method.add
-    /// [`Watches::remove`]: struct.Watches.html#method.remove
+    /// [`Inotify::add_watch`]: struct.Inotify.html#method.add_watch
+    /// [`Inotify::rm_watch`]: struct.Inotify.html#method.rm_watch
     pub wd: WatchDescriptor,
 
     /// Indicates what kind of event this is
@@ -117,7 +118,7 @@ impl<'a> Event<&'a OsStr> {
             fd,
         };
 
-        let name = if name.is_empty() {
+        let name = if name == "" {
             None
         }
         else {
@@ -149,32 +150,37 @@ impl<'a> Event<&'a OsStr> {
         -> (usize, Self)
     {
         let event_size = mem::size_of::<ffi::inotify_event>();
+        let event_align = mem::align_of::<ffi::inotify_event>();
 
-        // Make sure that the buffer is big enough to contain an event, without
+        // Make sure that the buffer can satisfy the alignment requirements for `inotify_event`
+        assert!(buffer.len() >= event_align);
+
+        // Discard the unaligned portion, if any, of the supplied buffer
+        let buffer = align_buffer(buffer);
+
+        // Make sure that the aligned buffer is big enough to contain an event, without
         // the name. Otherwise we can't safely convert it to an `inotify_event`.
         assert!(buffer.len() >= event_size);
 
-        let ffi_event_ptr = buffer.as_ptr() as *const ffi::inotify_event;
+
+        let event = buffer.as_ptr() as *const ffi::inotify_event;
 
         // We have a pointer to an `inotify_event`, pointing to the beginning of
         // `buffer`. Since we know, as per the assertion above, that there are
         // enough bytes in the buffer for at least one event, we can safely
-        // read that `inotify_event`.
-        // We call `read_unaligned()` since the byte buffer has alignment 1
-        // and `inotify_event` has a higher alignment, so `*` cannot be used to dereference
-        // the unaligned pointer (undefined behavior).
-        let ffi_event = unsafe { ffi_event_ptr.read_unaligned() };
+        // convert that pointer into a reference.
+        let event = unsafe { &*event };
 
         // The name's length is given by `event.len`. There should always be
         // enough bytes left in the buffer to fit the name. Let's make sure that
         // is the case.
         let bytes_left_in_buffer = buffer.len() - event_size;
-        assert!(bytes_left_in_buffer >= ffi_event.len as usize);
+        assert!(bytes_left_in_buffer >= event.len as usize);
 
         // Directly after the event struct should be a name, if there's one
         // associated with the event. Let's make a new slice that starts with
         // that name. If there's no name, this slice might have a length of `0`.
-        let bytes_consumed = event_size + ffi_event.len as usize;
+        let bytes_consumed = event_size + event.len as usize;
         let name = &buffer[event_size..bytes_consumed];
 
         // Remove trailing '\0' bytes
@@ -192,7 +198,7 @@ impl<'a> Event<&'a OsStr> {
 
         let event = Event::new(
             fd,
-            &ffi_event,
+            event,
             OsStr::from_bytes(name),
         );
 
@@ -200,15 +206,8 @@ impl<'a> Event<&'a OsStr> {
     }
 
     /// Returns an owned copy of the event.
-    #[deprecated = "use `to_owned()` instead; methods named `into_owned()` usually take self by value"]
-    #[allow(clippy::wrong_self_convention)]
-    pub fn into_owned(&self) -> EventOwned {
-        self.to_owned()
-    }
-
-    /// Returns an owned copy of the event.
     #[must_use = "cloning is often expensive and is not expected to have side effects"]
-    pub fn to_owned(&self) -> EventOwned {
+    pub fn into_owned(&self) -> EventOwned {
         Event {
             wd: self.wd.clone(),
             mask: self.mask,
@@ -351,7 +350,7 @@ bitflags! {
         /// Watch was removed
         ///
         /// This event will be generated, if the watch was removed explicitly
-        /// (via [`Watches::remove`]), or automatically (because the file was
+        /// (via [`Inotify::rm_watch`]), or automatically (because the file was
         /// deleted or the file system was unmounted).
         ///
         /// See [`inotify_sys::IN_IGNORED`].
@@ -402,6 +401,8 @@ mod tests {
         sync,
     };
 
+    use crate::util;
+
     use inotify_sys as ffi;
 
     use super::Event;
@@ -410,6 +411,9 @@ mod tests {
     #[test]
     fn from_buffer_should_not_mistake_next_event_for_name_of_previous_event() {
         let mut buffer = [0u8; 1024];
+
+        // Make sure the buffer is properly aligned before writing raw events into it
+        let buffer = util::align_buffer_mut(&mut buffer);
 
         // First, put a normal event into the buffer
         let event = ffi::inotify_event {
