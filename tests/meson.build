@@ -7,7 +7,7 @@ foreach test:tests
 	sources = []
 	includes = []
 	cflags = []
-	ldflags = []
+	ldflags = ['-Wl,--emit-relocs', '-Wl,-z,relro,-z,now']
 
 	subdir(name)
 endforeach
