@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MulanPSL-2.0
-ROOT_DIR=../../../
+ROOT_DIR=../../
 BUILD_DIR=$(ROOT_DIR)build/
-SYSBOOST=$(BUILD_DIR)sysboost/sysboost
+SYSBOOST=$(BUILD_DIR)src/sysboost
 BASH=/usr/bin/bash
 
-TEMPLATE_FILE=$(BUILD_DIR)sysboost/src/static_template/sysboost_static_template
+TEMPLATE_FILE=$(BUILD_DIR)src/static_template/sysboost_static_template
 TEMPLATE_FILE_PUB_PATH=/usr/lib/relocation/sysboost_static_template.relocation
 
 LIBC=/usr/lib64/libc.so.6
@@ -24,14 +24,14 @@ bash:
 	xz $(TEMPLATE_FILE)
 	mv -f $(TEMPLATE_FILE).xz $(TEMPLATE_FILE_PUB_PATH)
 	@echo ===rto===
-	$(SYSBOOST) -static $(BASH) $(LIBTINFO) $(LIBC)
+	$(SYSBOOST) --static $(BASH) $(LIBTINFO) $(LIBC)
 	readelf -W -a bash.rto > bash.rto.elf
 	objdump -d bash.rto > bash.rto.asm
 	@echo ===run===
 	./bash.rto -c "echo 1"
 
 rto:
-	gdb --args $(SYSBOOST) -static $(BASH) $(LIBTINFO) $(LIBC)
+	gdb --args $(SYSBOOST) --static $(BASH) $(LIBTINFO) $(LIBC)
 
 nolibc:
 	clear
@@ -41,14 +41,14 @@ nolibc:
 	xz $(TEMPLATE_FILE)
 	mv -f $(TEMPLATE_FILE).xz $(TEMPLATE_FILE_PUB_PATH)
 	@echo ===rto2===
-	$(SYSBOOST) -static-nolibc $(BASH) $(LIBTINFO)
+	$(SYSBOOST) --static-nolibc $(BASH) $(LIBTINFO)
 	readelf -W -a bash.rto > bash.rto.elf
 	objdump -d bash.rto > bash.rto.asm
 	@echo ===run===
 	./bash.rto -c "echo 1"
 
 rto2:
-	gdb --args $(SYSBOOST) -static-nolibc $(BASH) $(LIBTINFO)
+	gdb --args $(SYSBOOST) --static-nolibc $(BASH) $(LIBTINFO)
 
 run:
 	gdb --args ./bash.rto -c "echo 1"
