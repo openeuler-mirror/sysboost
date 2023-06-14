@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MulanPSL-2.0 */
 #include <stdio.h>
 
 __attribute__((constructor)) void constructor_in_lib1(void)

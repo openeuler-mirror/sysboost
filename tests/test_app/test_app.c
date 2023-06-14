@@ -1,10 +1,13 @@
-#include <dlfcn.h>
+/* SPDX-License-Identifier: MulanPSL-2.0 */
+#define _GNU_SOURCE
+#include <features.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <dlfcn.h>
 
 extern int lib1_add(int a, int b);
 extern int lib2_add(int a, int b);
