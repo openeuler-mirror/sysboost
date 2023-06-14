@@ -6,7 +6,6 @@ cflags += ['-fpic', '-pie', '-pthread', '-ldl']
 executable('simple_app', sources,
         c_args: cflags,
         link_args: ldflags,
-        link_whole: link_libs,
         build_rpath : './',
-        dependencies: ext_deps + dep_objs,
+        dependencies: ext_deps,
         include_directories: includes)
