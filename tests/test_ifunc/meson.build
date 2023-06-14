@@ -6,7 +6,6 @@ cflags += ['-fpic', '-pie', '-pthread', '-ldl', '-static-pie', '-Wl,-z,relro,-z,
 executable('test_ifunc', sources,
         c_args: cflags,
         link_args: ldflags + cflags,
-        link_whole: link_libs,
         build_rpath : './',
-        dependencies: ext_deps + dep_objs,
+        dependencies: ext_deps,
         include_directories: includes)
