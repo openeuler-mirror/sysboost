@@ -114,7 +114,7 @@ void elf_unload_xz(elf_file_t *ef)
 	free(ef->hdr);
 }
 
-static const char magic_xz[] = {0xfd, '7', 'z', 'X', 'Z', 0};
+static const unsigned char magic_xz[] = {0xfd, '7', 'z', 'X', 'Z', 0};
 
 bool elf_is_xz_file(elf_file_t *ef)
 {
