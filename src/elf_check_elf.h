@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #include "elf_link_common.h"
-#include "si_common.h"
+#include <si_common.h>
 
 void elf_check_elf(elf_link_t *elf_link);
 

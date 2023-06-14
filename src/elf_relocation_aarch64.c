@@ -11,8 +11,8 @@
 
 #include "elf_link_common.h"
 #include "elf_write_elf.h"
-#include "si_debug.h"
-#include "si_log.h"
+#include <si_debug.h>
+#include <si_log.h>
 
 #define unlikely(x) __builtin_expect((x), 0)
 

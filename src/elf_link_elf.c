@@ -16,8 +16,8 @@
 #include "elf_write_elf.h"
 #include "elf_link_elf.h"
 #include "si_array.h"
-#include "si_debug.h"
-#include "si_log.h"
+#include <si_debug.h>
+#include <si_log.h>
 
 #ifdef __aarch64__
 #define LD_SO_STATIC_TEMPLATE "/lib/ld-linux-aarch64.so.1"
