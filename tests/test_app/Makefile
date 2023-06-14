@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MulanPSL-2.0
-ROOT_DIR=../../../
+ROOT_DIR=../../
 BUILD_DIR=$(ROOT_DIR)build/
-SYSBOOST=$(BUILD_DIR)sysboost/sysboost
-TEST_APP=$(BUILD_DIR)sysboost/tests/test_app/test_app
-LIB1=$(BUILD_DIR)sysboost/tests/test_app/libutil1.so
-LIB2=$(BUILD_DIR)sysboost/tests/test_app/libutil2.so
+SYSBOOST=$(BUILD_DIR)src/sysboost
+TEST_APP=$(BUILD_DIR)tests/test_app/test_app
+LIB1=$(BUILD_DIR)tests/test_app/libutil1.so
+LIB2=$(BUILD_DIR)tests/test_app/libutil2.so
 
-LIBHOOK=$(BUILD_DIR)sysboost/src/libhook/libhook.so
+LIBHOOK=$(BUILD_DIR)src/libhook/libhook.so
 LIBHOOK_R=/usr/lib/relocation/libhook.so.relocation
 
 LIBC=/usr/lib64/libc.so.6
@@ -51,7 +51,7 @@ run1:
 test-s: prepare
 	clear
 	@echo ===rto===
-	$(SYSBOOST) -static $(TEST_APP) $(LIB1) $(LIB2) $(LIBC)
+	$(SYSBOOST) --static $(TEST_APP) $(LIB1) $(LIB2) $(LIBC)
 	readelf -W -a $(TEST_APP).rto > test_app.rto.elf
 	objdump -d $(TEST_APP).rto > test_app.rto.asm
 	@echo ===run-ori===
@@ -60,7 +60,7 @@ test-s: prepare
 	./test_app.rto
 
 rto:
-	gdb --args $(SYSBOOST) -static $(TEST_APP) $(LIB1) $(LIB2) $(LIBC)
+	gdb --args $(SYSBOOST) --static $(TEST_APP) $(LIB1) $(LIB2) $(LIBC)
 
 run:
 	gdb --args ./test_app.rto
