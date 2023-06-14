@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MulanPSL-2.0
-ROOT_DIR=../../../
+ROOT_DIR=../../
 BUILD_DIR=$(ROOT_DIR)build/
 SYSBOOST=$(BUILD_DIR)sysboost/sysboost
 TEST_APP=$(BUILD_DIR)sysboost/tests/test_simple/simple_app

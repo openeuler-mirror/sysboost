@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MulanPSL-2.0 */
 #include <stdio.h>
 
 // __thread int g_thread_lib21 = 5;
