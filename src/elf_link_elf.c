@@ -232,16 +232,21 @@ static void copy_old_sections(elf_link_t *elf_link)
 static Elf64_Shdr *add_tmp_section(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *src_sec)
 {
 	int j = elf_link->out_ef.hdr->e_shnum;
-	if (j == MAX_ELF_SECTION - 1)
+	if (j == MAX_ELF_SECTION - 1) {
 		si_panic("not more new elf sections can be created\n");
+	}
 
-	memcpy(&elf_link->out_ef.sechdrs[j], src_sec, sizeof(Elf64_Shdr));
-	append_obj_mapping(elf_link, ef, NULL, src_sec, &elf_link->out_ef.sechdrs[j]);
+	Elf64_Shdr *dst_sec = &elf_link->out_ef.sechdrs[j];
+	if (src_sec != NULL) {
+		memcpy(dst_sec, src_sec, sizeof(Elf64_Shdr));
+		append_obj_mapping(elf_link, ef, NULL, src_sec, dst_sec);
+	}
+
 	j++;
 	elf_link->out_ef.hdr->e_shnum = j;
 
 	// sec name change after .shstrtab
-	return &elf_link->out_ef.sechdrs[j - 1];
+	return dst_sec;
 }
 
 static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, const char *name)
@@ -578,6 +583,58 @@ static void write_so_path_struct(elf_link_t *elf_link)
 	}
 }
 
+static void write_sysboost_section(elf_link_t *elf_link)
+{
+	if (is_static_mode(elf_link) == false) {
+		return;
+	}
+
+	// add .sysboost_data section to record APP entry addr
+	elf_link->sysboost_data = (elf_sysboost_data_t *)write_elf_file_zero(elf_link, sizeof(elf_sysboost_data_t));
+	elf_link->sysboost_data->version = SYSBOOST_DATA_VERSION;
+
+	Elf64_Shdr *sec = add_tmp_section(elf_link, NULL, NULL);
+	// name index will modify after name string ready
+	sec->sh_name = 0;
+	sec->sh_type = SHT_NOTE;
+	sec->sh_flags = SHF_ALLOC;
+	sec->sh_addr = (unsigned long)elf_link->sysboost_data - ((unsigned long)elf_link->out_ef.hdr);
+	sec->sh_offset = sec->sh_addr;
+	sec->sh_size = sizeof(elf_sysboost_data_t);
+	sec->sh_link = 0;
+	sec->sh_info = 0;
+	sec->sh_addralign = SYSBOOST_DATA_ALIGN;
+	sec->sh_entsize = 0;
+	elf_link->sysboost_data_sec = sec;
+}
+
+// call after .text ready
+static void modify_app_entry_addr(elf_link_t *elf_link)
+{
+	if (is_static_mode(elf_link) == false) {
+		return;
+	}
+
+	elf_file_t *main_ef = get_main_ef(elf_link);
+	unsigned long old_sym_addr = find_sym_old_addr(main_ef, "main");
+	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, main_ef, old_sym_addr);
+	elf_link->sysboost_data->entry_addr = new_sym_addr;
+}
+
+// call after .shstrtab ready
+static void append_sysboost_sec_name(elf_link_t *elf_link)
+{
+	if (is_static_mode(elf_link) == false) {
+		return;
+	}
+
+	write_elf_file(elf_link, SYSBOOST_DATA_SEC_NAME, sizeof(SYSBOOST_DATA_SEC_NAME));
+	unsigned int index = elf_link->out_ef.shstrtab_sec->sh_size;
+	elf_link->sysboost_data_sec->sh_name = index;
+	elf_link->out_ef.shstrtab_sec->sh_size += sizeof(SYSBOOST_DATA_SEC_NAME);
+}
+
+// .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt
 static void write_first_LOAD_segment(elf_link_t *elf_link)
 {
 	Elf64_Phdr *p;
@@ -593,6 +650,12 @@ static void write_first_LOAD_segment(elf_link_t *elf_link)
 		if (sechdrs[i].sh_flags & SHF_EXECINSTR) {
 			break;
 		}
+
+		// write after NOTE section, so it can load in first PAGE memory
+		if ((sechdrs[i - 1].sh_type == SHT_NOTE) && (sechdrs[i].sh_type != SHT_NOTE)) {
+			write_sysboost_section(elf_link);
+		}
+
 		name = elf_get_tmp_section_name(elf_link, &sechdrs[i]);
 		if (is_direct_call_optimize(elf_link) == true) {
 			if (!strcmp(name, ".rela.plt"))
@@ -603,8 +666,9 @@ static void write_first_LOAD_segment(elf_link_t *elf_link)
 
 	// after merge section, .dynstr put new addr
 	Elf64_Shdr *tmp_sec = find_tmp_section_by_name(elf_link, ".dynstr");
-	if (tmp_sec)
+	if (tmp_sec) {
 		elf_link->out_ef.dynstr_data = (char *)elf_link->out_ef.hdr + tmp_sec->sh_offset;
+	}
 
 	// write at end of first segment
 	if (elf_link->hook_func) {
@@ -1276,6 +1340,8 @@ static void write_shstrtab(elf_link_t *elf_link)
 	Elf64_Shdr *sec = write_merge_section(elf_link, sec_name);
 
 	elf_link->out_ef.shstrtab_data = (char *)elf_link->out_ef.hdr + sec->sh_offset;
+
+	append_sysboost_sec_name(elf_link);
 }
 
 static void modify_section_name_index(elf_link_t *elf_link)
@@ -1285,6 +1351,9 @@ static void modify_section_name_index(elf_link_t *elf_link)
 
 	// modify section name index, skip first one
 	for (int i = 1; i < sec_count; i++) {
+		if (secs[i].sh_name == 0) {
+			continue;
+		}
 		elf_obj_mapping_t *obj_mapping = elf_get_mapping_by_dst(elf_link, &secs[i]);
 		secs[i].sh_name = get_new_name_offset(elf_link, obj_mapping->src_ef, obj_mapping->src_ef->shstrtab_sec, secs[i].sh_name);
 	}
@@ -1305,6 +1374,11 @@ static void modify_elf_header(elf_link_t *elf_link)
 	// .text offset
 	elf_file_t *template_ef = get_template_ef(elf_link);
 	hdr->e_entry = get_new_addr_by_old_addr(elf_link, template_ef, hdr->e_entry);
+
+	modify_app_entry_addr(elf_link);
+
+	// set hugepage flag
+	elf_set_hugepage(elf_link);
 }
 
 // .init_array first func is frame_dummy, frame_dummy call register_tm_clones
@@ -1445,9 +1519,6 @@ int elf_link_write(elf_link_t *elf_link)
 	modify_elf_header(elf_link);
 
 	do_special_adapts(elf_link);
-
-	// set hugepage flag
-	elf_set_hugepage(elf_link);
 
 	truncate_elf_file(elf_link);
 
