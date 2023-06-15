@@ -347,6 +347,10 @@ static void *elf_get_mapping_dst_obj(elf_link_t *elf_link, void *src_obj)
 
 char *elf_get_tmp_section_name(elf_link_t *elf_link, Elf64_Shdr *shdr)
 {
+	if (shdr->sh_name == 0) {
+		return NULL;
+	}
+
 	// sh_name maybe not change, use old elf string
 	elf_obj_mapping_t *obj_mapping = elf_get_mapping_by_dst(elf_link, shdr);
 
@@ -369,6 +373,9 @@ Elf64_Shdr *find_tmp_section_by_name(elf_link_t *elf_link, const char *sec_name)
 	for (i = 1; i < shnum; i++) {
 		shdr = &sechdrs[i];
 		name = elf_get_tmp_section_name(elf_link, shdr);
+		if (name == NULL) {
+			continue;
+		}
 		if (strcmp(name, sec_name) == 0) {
 			return shdr;
 		}

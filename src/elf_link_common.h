@@ -30,6 +30,19 @@ enum RtoMode {
 	ELF_LINK_STATIC_NOLIBC,
 };
 
+#define SYSBOOST_DATA_ALIGN (8)
+#define SYSBOOST_DATA_VERSION (1)
+#define SYSBOOST_DATA_SEC_NAME ".sysboost_data"
+
+// | Byte0   | Byte1 ... Byte7 |
+// | version | pad             |
+// | APP entry addr            |
+typedef struct {
+	uint8_t version;
+	char pad[7];
+	unsigned long entry_addr;
+} elf_sysboost_data_t;
+
 typedef struct {
 	elf_file_t in_efs[MAX_ELF_FILE];
 	elf_file_t out_ef;
@@ -57,9 +70,13 @@ typedef struct {
 	bool delete_symbol_version;
 	bool direct_call_optimize;
 	bool direct_vdso_optimize;
+
 	// use libhook func to hook libc
 	bool hook_func;
 	unsigned long so_path_struct;
+
+	elf_sysboost_data_t *sysboost_data;
+	Elf64_Shdr *sysboost_data_sec;
 } elf_link_t;
 
 typedef struct {
