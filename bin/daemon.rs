@@ -21,6 +21,7 @@ use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
+use goblin::elf::Elf;
 
 const SYSBOOST_PATH: &str = "/usr/bin/sysboost";
 const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
@@ -37,7 +38,7 @@ const MAX_BOOST_PROGRAM: u32 = 10;
 pub struct RtoConfig {
 	pub elf_path: String,
 	pub mode: String,
-	pub libs: Option<String>,
+	pub libs: Vec<String>,
 
 	#[serde(skip)]
 	watch_paths: Vec<String>,
@@ -153,7 +154,9 @@ fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	let arg_mode = format!("-{}", conf.mode);
 	args.push(arg_mode);
 	args.push(conf.elf_path.to_owned());
-	args.push(conf.libs.as_ref().unwrap_or(&String::from("")).split_whitespace().collect());
+	for lib in conf.libs.iter() {
+		args.push(lib.split_whitespace().collect());
+	}
 	return run_child(SYSBOOST_PATH, &args);
 }
 
@@ -255,11 +258,30 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 		return None;
 	}
 
+	// TODO: feature, auto get deps
+	// feature, PATH may change libs
+	let elf_bytes = match fs::read(&conf.elf_path) {
+		Ok(elf_bytes) => elf_bytes,
+		Err(_e) => {
+			log::info!("Error: read elf file fault, please check config.");
+			return None;
+		}
+	};
+	let elf = match Elf::parse(&elf_bytes) {
+		Ok(elf) => elf,
+		Err(_e) => {
+			log::info!("Error: parse elf file fault, please check the elf file");
+			return None;
+		}
+	};
+	for libs in elf.libraries {
+		conf.libs.push(libs.to_string())
+	}
 	// add elf file to watch list
 	conf.watch_paths.push(conf.elf_path.clone());
-	conf.watch_paths.push(conf.libs.as_ref().unwrap_or(&String::from("")).split_whitespace().collect());
-	// TODO: feature, auto get deps
-	// TODO: feature, PATH may change libs
+	for lib in conf.libs.iter() {
+		conf.watch_paths.push(lib.split_whitespace().collect());
+	}
 
 	return Some(conf);
 }
@@ -379,6 +401,7 @@ fn start_service() {
 
 	let mut rto_configs: Vec<RtoConfig> = Vec::new();
 	refresh_all_config(&mut rto_configs);
+
 	let mut elf_inotify = watch_old_elf_files(&rto_configs);
 
 	loop {
