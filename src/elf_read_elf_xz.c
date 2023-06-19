@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: MulanPSL-2.0 */
 #include <errno.h>
-#include <unistd.h>
-#include <string.h>
+#include <lzma.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <lzma.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "elf_read_elf.h"
 #include <si_log.h>
@@ -42,8 +42,8 @@ static int xz_uncompress(lzma_stream *strm, elf_file_t *ef)
 	void *p = NULL;
 	size_t total = 0;
 
-	strm->avail_in  = 0;
-	strm->next_out  = out_buf;
+	strm->avail_in = 0;
+	strm->next_out = out_buf;
 	strm->avail_out = sizeof(out_buf);
 
 	while (true) {
@@ -53,7 +53,7 @@ static int xz_uncompress(lzma_stream *strm, elf_file_t *ef)
 				ret = -errno;
 				goto out;
 			}
-			strm->next_in  = in_buf;
+			strm->next_in = in_buf;
 			strm->avail_in = rdret;
 			if (rdret == 0)
 				action = LZMA_FINISH;
@@ -83,7 +83,7 @@ static int xz_uncompress(lzma_stream *strm, elf_file_t *ef)
 	ef->hdr = p;
 	ef->length = total;
 	return 0;
- out:
+out:
 	free(p);
 	return ret;
 }

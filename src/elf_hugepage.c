@@ -19,7 +19,7 @@
 #endif
 
 #ifndef EF_AARCH64_AOT
-#define EF_AARCH64_AOT      (0x00010000U)
+#define EF_AARCH64_AOT (0x00010000U)
 #endif
 
 #ifndef EF_AARCH64_HUGEPAGE

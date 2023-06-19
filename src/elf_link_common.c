@@ -91,7 +91,6 @@ static void append_symbol_mapping_by_name(elf_link_t *elf_link, char *key, elf_f
 	append_symbol_mapping(elf_link, key, new_sym_addr);
 }
 
-
 static void init_ifunc_symbol_addr(elf_link_t *elf_link)
 {
 	(void)elf_link;
@@ -568,7 +567,6 @@ static unsigned long _get_ifunc_new_addr_by_dl(elf_link_t *elf_link, elf_file_t 
 
 	return get_new_addr_by_old_addr(elf_link, ef, old_addr);
 }
-
 
 static char *ifunc_mapping[][2] = {
     {"memmove", "__memmove_generic"},
