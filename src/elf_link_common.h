@@ -3,8 +3,8 @@
 #define _ELF_LINK_COMMON_H
 
 #include <stdbool.h>
-#include <string.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "elf_read_elf.h"
 #include <si_array.h>
@@ -24,10 +24,16 @@
 
 #define LIBHOOK "libhook.so"
 
+#define ELF_LINK_SHARE_S "share"
+#define ELF_LINK_STATIC_S "static"
+#define ELF_LINK_STATIC_NOLIBC_S "static-nolibc"
+#define ELF_LINK_STATIC_NOLD_S "static-nold"
+
 enum RtoMode {
 	ELF_LINK_SHARE = 0,
 	ELF_LINK_STATIC,
 	ELF_LINK_STATIC_NOLIBC,
+	ELF_LINK_STATIC_NOLD,
 };
 
 #define SYSBOOST_DATA_ALIGN (8)

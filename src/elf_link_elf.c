@@ -12,9 +12,9 @@
 
 #include "elf_check_elf.h"
 #include "elf_hugepage.h"
+#include "elf_link_elf.h"
 #include "elf_relocation.h"
 #include "elf_write_elf.h"
-#include "elf_link_elf.h"
 #include "si_array.h"
 #include <si_debug.h>
 #include <si_log.h>
@@ -60,15 +60,32 @@ elf_link_t *elf_link_new()
 	return elf_link;
 }
 
+char *elf_link_mode_str(unsigned int mode)
+{
+	switch (mode) {
+	case ELF_LINK_STATIC:
+		return ELF_LINK_STATIC_S;
+	case ELF_LINK_STATIC_NOLIBC:
+		return ELF_LINK_STATIC_NOLIBC_S;
+	case ELF_LINK_STATIC_NOLD:
+		return ELF_LINK_STATIC_NOLD_S;
+	default:
+		return ELF_LINK_SHARE_S;
+	}
+}
+
 int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 {
 	elf_file_t *ef = NULL;
 
-	if (mode != ELF_LINK_STATIC && mode != ELF_LINK_STATIC_NOLIBC) {
+	elf_link->link_mode = mode;
+	if (mode == ELF_LINK_SHARE) {
+		return 0;
+	}
+	if (mode > ELF_LINK_STATIC_NOLD) {
 		return -1;
 	}
 
-	elf_link->link_mode = mode;
 	elf_link->direct_call_optimize = true;
 	// TODO: feature, probe AUX parameter
 	elf_link->direct_vdso_optimize = false;
@@ -76,6 +93,10 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 	if (elf_link->in_ef_nr != 0) {
 		SI_LOG_ERR("set mode must before add elf file\n");
 		return -1;
+	}
+
+	if (mode == ELF_LINK_STATIC_NOLD) {
+		return 0;
 	}
 
 	// static mode use template

@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include <elf.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,7 +11,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <limits.h>
 
 #include "elf_read_elf.h"
 #include <si_common.h>
@@ -374,8 +374,8 @@ void read_elf_sections(elf_file_t *ef)
 			ef->dynstr_sec = &sechdrs[index_str];
 			ef->dynstr_data = (char *)hdr + sechdrs[index_str].sh_offset;
 		} else if (strcmp(elf_get_section_name(ef, &sechdrs[i]), ".note.gnu.build-id") == 0) {
-			nhdr = (Elf64_Nhdr *)((void*)hdr + sechdrs[i].sh_offset);
-			ef->build_id = (char *)((void*)hdr + sechdrs[i].sh_offset + sizeof(Elf64_Nhdr) + nhdr->n_namesz);
+			nhdr = (Elf64_Nhdr *)((void *)hdr + sechdrs[i].sh_offset);
+			ef->build_id = (char *)((void *)hdr + sechdrs[i].sh_offset + sizeof(Elf64_Nhdr) + nhdr->n_namesz);
 		}
 	}
 }
