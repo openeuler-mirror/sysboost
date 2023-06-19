@@ -12,11 +12,10 @@
 use inotify::{EventMask, Inotify, WatchMask};
 use log::{self};
 use serde::Deserialize;
-use std::fs;
+use std::{fs, env};
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs as UnixFs;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::thread;
@@ -236,6 +235,44 @@ fn read_config(path: &PathBuf) -> Option<RtoConfig> {
 	return parse_config(contents);
 }
 
+fn find_file_in_dirs(file_name: &str, dirs: &str) -> Option<String> {
+	let dir_entries = fs::read_dir(dirs).ok()?;
+	for entry in dir_entries {
+		let entry = entry.ok()?;
+		let path = entry.path();
+		if path.is_file() && path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default() == file_name {
+			return Some(path.to_string_lossy().into_owned());
+		}
+	}
+	None
+}
+
+// Obtain the full path from real path, environment variable PATH, current dir
+fn get_lib_full_path(lib: &str, rpaths: Vec<&str>, paths: Vec<&str>) -> Option<String> {
+	if !(rpaths.is_empty()) {
+		for rpath in rpaths {
+			let full_dir = find_file_in_dirs(&lib, &rpath);
+			if let Some(ref _n) = full_dir {
+				return full_dir;
+			}
+		}
+	} else if !(paths.is_empty()) {
+		for path in paths {
+			let full_dir = find_file_in_dirs(&lib, &path);
+			if let Some(ref _n) = full_dir {
+				return full_dir;
+			}
+		}
+	} else {
+		let d = "./";
+		let full_dir = find_file_in_dirs(&lib, &d);
+		if let Some(ref _n) = full_dir {
+			return full_dir;
+		}
+	}
+	None
+}
+
 fn process_config(path: PathBuf) -> Option<RtoConfig> {
 	let conf_e = read_config(&path);
 	let mut conf = match conf_e {
@@ -274,9 +311,18 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 			return None;
 		}
 	};
-	for libs in elf.libraries {
-		conf.libs.push(libs.to_string())
+	let rpaths = elf.rpaths;
+	if let Some(paths_temp) = env::var_os("PATH") {
+		let paths_str = paths_temp.to_string_lossy();
+		let lib_paths: Vec<&str> = paths_str.split(':').collect();
+		for lib in elf.libraries {
+			let findlib = get_lib_full_path(lib, rpaths.clone(), lib_paths.clone()).unwrap_or("".to_string());
+			conf.libs.push(findlib);
+		}
+	} else {
+		log::info!("The environment variable PATH is empty. Please check.");
 	}
+
 	// add elf file to watch list
 	conf.watch_paths.push(conf.elf_path.clone());
 	for lib in conf.libs.iter() {
