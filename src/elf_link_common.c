@@ -125,9 +125,13 @@ static void init_static_mode_symbol_change(elf_link_t *elf_link)
 	append_symbol_mapping_by_name(elf_link, "exit", ef, "_exit");
 }
 
-// layout for vdso and out.ELF
+// layout for vdso and app and ld.so
+// ld.so | vvar | vdso | app
+// xxK   | 8K     4K     2M+
+// without ld.so
 // vvar | vdso | app
 // 8K     4K     2M+
+
 static unsigned long vdso_get_new_addr(Elf64_Sym *sym)
 {
 	return 0UL - 4096UL + (unsigned long)sym->st_value;
@@ -144,14 +148,14 @@ void init_vdso_symbol_addr(elf_link_t *elf_link)
 	elf_file_t *vdso_ef = &elf_link->vdso_ef;
 
 	// TODO: feature, probe AUX parameter
-	elf_link->direct_vdso_optimize = false;
+	//elf_link->direct_vdso_optimize = false;
 
 	vdso_ef->file_name = "vdso";
 	vdso_ef->hdr = (Elf64_Ehdr *)0xfffff7ffb000UL;
 	elf_parse_hdr(vdso_ef);
 
 	if (vdso_ef->dynsym_sec == NULL) {
-		SI_LOG_DEBUG(".dynsym not exist\n");
+		si_panic(".dynsym not exist\n");
 	}
 
 	elf_show_dynsym(vdso_ef);
@@ -173,6 +177,34 @@ void init_vdso_symbol_addr(elf_link_t *elf_link)
 	return;
 }
 
+void init_ld_symbol_addr(elf_link_t *elf_link)
+{
+	elf_file_t *ef = &elf_link->vdso_ef;
+
+	// TODO: feature, probe AUX parameter
+
+	ef->file_name = "ld.so";
+	ef->hdr = (Elf64_Ehdr *)0xfffff7ffb000UL;
+	elf_parse_hdr(ef);
+
+	if (ef->dynsym_sec == NULL) {
+		si_panic(".dynsym not exist\n");
+	}
+
+	elf_show_dynsym(ef);
+
+	int sym_count = ef->dynsym_sec->sh_size / sizeof(Elf64_Sym);
+	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->dynsym_sec->sh_offset);
+	for (int j = 0; j < sym_count; j++) {
+		Elf64_Sym *sym = &syms[j];
+		char *name = elf_get_dynsym_name(ef, sym);
+		unsigned long symbol_addr = (unsigned long)ef->hdr + (unsigned long)sym->st_value;
+		append_symbol_mapping(elf_link, name, symbol_addr);
+	}
+
+	return;
+}
+
 void init_symbol_mapping(elf_link_t *elf_link)
 {
 	// Assume that ifunc function name is unique
@@ -181,6 +213,9 @@ void init_symbol_mapping(elf_link_t *elf_link)
 	init_static_mode_symbol_change(elf_link);
 	init_hook_func_symbol_change(elf_link);
 
+	if (is_direct_call_optimize(elf_link) && is_static_nold_mode(elf_link)) {
+		init_ld_symbol_addr(elf_link);
+	}
 	if (is_direct_vdso_optimize(elf_link) == true) {
 		init_vdso_symbol_addr(elf_link);
 	}

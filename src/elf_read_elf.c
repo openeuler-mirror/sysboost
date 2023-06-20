@@ -597,7 +597,7 @@ int elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly)
 
 	// ELF must have relocation
 	sec = elf_find_section_by_name(ef, ".rela.text");
-	if (sec == NULL) {
+	if ((sec == NULL) && is_readonly) {
 		SI_LOG_ERR("ELF must have .rela.text, %s\n", file_name);
 		return -1;
 	}
