@@ -125,6 +125,11 @@ static inline bool is_static_nolibc_mode(elf_link_t *elf_link)
 	return elf_link->link_mode == ELF_LINK_STATIC_NOLIBC;
 }
 
+static inline bool is_static_nold_mode(elf_link_t *elf_link)
+{
+	return elf_link->link_mode == ELF_LINK_STATIC_NOLD;
+}
+
 static inline bool is_hook_func(elf_link_t *elf_link)
 {
 	return elf_link->hook_func;

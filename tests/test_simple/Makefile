@@ -32,14 +32,14 @@ simple_app:
 simple: simple_app
 	clear
 	@echo ===rto===
-	$(SYSBOOST) --static $(TEST_APP) $(LIBC)
+	$(SYSBOOST) --static-nold $(TEST_APP) $(LIBC)
 	readelf -W -a $(TEST_APP).rto > simple_app.rto.elf
 	objdump -d $(TEST_APP).rto > simple_app.rto.asm
 	@echo ===run===
 	$(TEST_APP).rto
 
 rto:
-	gdb --args $(SYSBOOST) --static $(TEST_APP) $(LIBC)
+	gdb --args $(SYSBOOST) --static-nold $(TEST_APP) $(LIBC)
 
 run:
 	gdb --args $(TEST_APP).rto

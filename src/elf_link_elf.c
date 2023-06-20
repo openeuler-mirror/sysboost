@@ -88,7 +88,7 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 
 	elf_link->direct_call_optimize = true;
 	// TODO: feature, probe AUX parameter
-	elf_link->direct_vdso_optimize = false;
+	//elf_link->direct_vdso_optimize = false;
 
 	if (elf_link->in_ef_nr != 0) {
 		SI_LOG_ERR("set mode must before add elf file\n");
