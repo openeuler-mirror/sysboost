@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/user.h>
 
 #include "elf_link_common.h"
 #include "elf_read_elf.h"
@@ -43,10 +44,10 @@ unsigned int elf_align_file_section(elf_link_t *elf_link, Elf64_Shdr *sec, bool 
 	} else {
 		// use next PAGE
 		if (is_align_file_offset) {
-			elf_link->next_file_offset = ALIGN(elf_link->next_file_offset, (1UL << PAGE_SHIFT));
+			elf_link->next_file_offset = ALIGN(elf_link->next_file_offset, PAGE_SIZE);
 			elf_link->next_file_offset += old_offset_in_page;
 		}
-		elf_link->next_mem_addr = ALIGN(elf_link->next_mem_addr, (1UL << PAGE_SHIFT));
+		elf_link->next_mem_addr = ALIGN(elf_link->next_mem_addr, PAGE_SIZE);
 		elf_link->next_mem_addr += old_offset_in_page;
 	}
 

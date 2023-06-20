@@ -20,9 +20,9 @@
 #include <si_log.h>
 
 #ifdef __aarch64__
-#define LD_SO_STATIC_TEMPLATE "/lib/ld-linux-aarch64.so.1"
+#define LD_SO_PATH "/lib/ld-linux-aarch64.so.1"
 #else
-#define LD_SO_STATIC_TEMPLATE "/lib64/ld-linux-x86-64.so.2"
+#define LD_SO_PATH "/lib64/ld-linux-x86-64.so.2"
 #endif
 
 // mode: static share
@@ -96,6 +96,11 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 	}
 
 	if (mode == ELF_LINK_STATIC_NOLD) {
+		int ret = elf_read_file(LD_SO_PATH, &elf_link->ld_ef, true);
+		if (ret != 0) {
+			SI_LOG_ERR("elf_read_file fail, %s\n", LD_SO_PATH);
+			return -1;
+		}
 		return 0;
 	}
 
@@ -103,7 +108,7 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 	if (mode == ELF_LINK_STATIC_NOLIBC) {
 		ef = elf_link_add_infile(elf_link, RELOCATION_ROOT_DIR "/sysboost_static_template.relocation");
 	} else {
-		ef = elf_link_add_infile(elf_link, LD_SO_STATIC_TEMPLATE);
+		ef = elf_link_add_infile(elf_link, LD_SO_PATH);
 	}
 
 	if (ef == NULL) {
@@ -138,7 +143,7 @@ static int elf_link_prepare(elf_link_t *elf_link)
 elf_file_t *elf_link_add_infile(elf_link_t *elf_link, char *path)
 {
 	elf_file_t *ef = &elf_link->in_efs[elf_link->in_ef_nr];
-	int ret = elf_read_file(path, ef, true);
+	int ret = elf_read_file_relocation(path, ef);
 	if (ret != 0) {
 		return NULL;
 	}

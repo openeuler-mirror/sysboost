@@ -56,6 +56,7 @@ typedef struct {
 	unsigned int link_mode;
 
 	elf_file_t vdso_ef;
+	elf_file_t ld_ef;
 	elf_file_t *hook_func_ef;
 	elf_file_t *libc_ef;
 
