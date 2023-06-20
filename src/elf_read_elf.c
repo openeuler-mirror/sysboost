@@ -486,7 +486,7 @@ static int read_elf_info(elf_file_t *ef, bool is_readonly)
 	return 0;
 }
 
-static int _elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly)
+int elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly)
 {
 	int fd = -1;
 	int ret = 0;
@@ -514,12 +514,31 @@ static int _elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly)
 		return -1;
 	}
 
+	// check elf arch
+	if (ef->hdr->e_machine != LOCAL_RUNNING_ARCH) {
+		SI_LOG_ERR("ELF arch is wrong, %s\n", file_name);
+		return -1;
+	}
+
+	// ELF must pie, we read insn with offset
+	if (ef->hdr_Phdr->p_vaddr != 0UL) {
+		SI_LOG_ERR("ELF must compile with pie, %s\n", file_name);
+		return -1;
+	}
+
+	// this memory will free by process exit
+	ef->file_name = strdup(file_name);
 	return 0;
 }
 
 static void _elf_close_file(elf_file_t *ef)
 {
 	close(ef->fd);
+	if (ef->file_name != NULL) {
+		free(ef->file_name);
+		ef->file_name = NULL;
+	}
+
 	if (ef->is_xz_file) {
 		elf_unload_xz(ef);
 	} else {
@@ -549,9 +568,9 @@ static int read_relocation_file(char *file_name, elf_file_t *ef)
 	}
 
 	(void *)memset(ef, 0, sizeof(elf_file_t));
-	ret = _elf_read_file(rel_file_name, ef, true);
+	ret = elf_read_file(rel_file_name, ef, true);
 	if (ret != 0) {
-		SI_LOG_ERR("_elf_read_file fail, %s\n", rel_file_name);
+		SI_LOG_ERR("elf_read_file fail, %s\n", rel_file_name);
 		return -1;
 	}
 
@@ -564,31 +583,28 @@ static int read_relocation_file(char *file_name, elf_file_t *ef)
 	return 0;
 }
 
-int elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly)
+static bool is_elf_have_relocation(elf_file_t *ef)
+{
+	Elf64_Shdr *sec = elf_find_section_by_name(ef, ".rela.text");
+	if (sec == NULL) {
+		return false;
+	}
+
+	return true;
+}
+
+int elf_read_file_relocation(char *file_name, elf_file_t *ef)
 {
 	int ret = 0;
 
-	ret = _elf_read_file(file_name, ef, is_readonly);
+	ret = elf_read_file(file_name, ef, true);
 	if (ret != 0) {
-		SI_LOG_ERR("_elf_read_file fail, %s\n", file_name);
-		return -1;
-	}
-
-	// check elf arch
-	if (ef->hdr->e_machine != LOCAL_RUNNING_ARCH) {
-		SI_LOG_ERR("ELF arch is wrong, %s\n", file_name);
-		return -1;
-	}
-
-	// ELF must pie, we read insn with offset
-	if (ef->hdr_Phdr->p_vaddr != 0UL) {
-		SI_LOG_ERR("ELF must compile with pie, %s\n", file_name);
+		SI_LOG_ERR("elf_read_file fail, %s\n", file_name);
 		return -1;
 	}
 
 	// check elf have relocation
-	Elf64_Shdr *sec = elf_find_section_by_name(ef, ".rela.text");
-	if ((sec == NULL) && is_readonly) {
+	if (is_elf_have_relocation(ef) == false) {
 		ret = read_relocation_file(file_name, ef);
 		if (ret != 0) {
 			return -1;
@@ -596,14 +612,11 @@ int elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly)
 	}
 
 	// ELF must have relocation
-	sec = elf_find_section_by_name(ef, ".rela.text");
-	if ((sec == NULL) && is_readonly) {
+	if (is_elf_have_relocation(ef) == false) {
 		SI_LOG_ERR("ELF must have .rela.text, %s\n", file_name);
 		return -1;
 	}
 
-	// this memory will free by process exit
-	ef->file_name = strdup(file_name);
 	return 0;
 }
 

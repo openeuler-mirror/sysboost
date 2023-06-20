@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/user.h>
 
 #include "elf_link_common.h"
 #include <si_common.h>
@@ -127,14 +128,33 @@ static void init_static_mode_symbol_change(elf_link_t *elf_link)
 
 // layout for vdso and app and ld.so
 // ld.so | vvar | vdso | app
-// xxK   | 8K     4K     2M+
+// xxK   | 8K   | 4K   | 2M+
 // without ld.so
 // vvar | vdso | app
-// 8K     4K     2M+
+// 8K   | 4K   | 2M+
+static unsigned long ld_hdr_addr_to_main_elf(elf_file_t *ef)
+{
+	Elf64_Phdr *p = ef->data_Phdr;
+	if (p == NULL) {
+		si_panic("ld.so data segment is NULL\n");
+	}
+	if (p->p_align != PAGE_SIZE) {
+		si_panic("ld.so is not align 4K\n");
+	}
+	unsigned long load_len = p->p_vaddr + p->p_memsz;
+	load_len = ALIGN(load_len, PAGE_SIZE);
+	return 0UL - (PAGE_SIZE * 3) - load_len;
+}
+
+static unsigned long ld_get_new_addr(unsigned long hdr_addr, Elf64_Sym *sym)
+{
+	return hdr_addr + (unsigned long)sym->st_value;
+}
 
 static unsigned long vdso_get_new_addr(Elf64_Sym *sym)
 {
-	return 0UL - 4096UL + (unsigned long)sym->st_value;
+	// user space PAGE_SIZE is 4K
+	return 0UL - PAGE_SIZE + (unsigned long)sym->st_value;
 }
 
 #define VDSO_PREFIX_LEN (sizeof("__kernel_") - 1)
@@ -143,15 +163,24 @@ static char *vdso_name_to_syscall_name(char *name)
 	return name + VDSO_PREFIX_LEN;
 }
 
+static unsigned long vdso_hdr_addr_cur()
+{
+	// find func in vdso, vdso is only 4K, so get elf hdr by align
+	unsigned long func = (unsigned long)dlsym(RTLD_DEFAULT, "__kernel_clock_gettime");
+	char *error = dlerror();
+	if (error != NULL) {
+		si_panic("%s\n", error);
+	}
+
+	return ALIGN(func, PAGE_SIZE) - PAGE_SIZE;
+}
+
 void init_vdso_symbol_addr(elf_link_t *elf_link)
 {
 	elf_file_t *vdso_ef = &elf_link->vdso_ef;
 
-	// TODO: feature, probe AUX parameter
-	//elf_link->direct_vdso_optimize = false;
-
 	vdso_ef->file_name = "vdso";
-	vdso_ef->hdr = (Elf64_Ehdr *)0xfffff7ffb000UL;
+	vdso_ef->hdr = (Elf64_Ehdr *)vdso_hdr_addr_cur();
 	elf_parse_hdr(vdso_ef);
 
 	if (vdso_ef->dynsym_sec == NULL) {
@@ -179,13 +208,7 @@ void init_vdso_symbol_addr(elf_link_t *elf_link)
 
 void init_ld_symbol_addr(elf_link_t *elf_link)
 {
-	elf_file_t *ef = &elf_link->vdso_ef;
-
-	// TODO: feature, probe AUX parameter
-
-	ef->file_name = "ld.so";
-	ef->hdr = (Elf64_Ehdr *)0xfffff7ffb000UL;
-	elf_parse_hdr(ef);
+	elf_file_t *ef = &elf_link->ld_ef;
 
 	if (ef->dynsym_sec == NULL) {
 		si_panic(".dynsym not exist\n");
@@ -193,12 +216,15 @@ void init_ld_symbol_addr(elf_link_t *elf_link)
 
 	elf_show_dynsym(ef);
 
+	// addr relative to main ELF
+	unsigned long hdr_addr = ld_hdr_addr_to_main_elf(ef);
+
 	int sym_count = ef->dynsym_sec->sh_size / sizeof(Elf64_Sym);
 	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->dynsym_sec->sh_offset);
 	for (int j = 0; j < sym_count; j++) {
 		Elf64_Sym *sym = &syms[j];
 		char *name = elf_get_dynsym_name(ef, sym);
-		unsigned long symbol_addr = (unsigned long)ef->hdr + (unsigned long)sym->st_value;
+		unsigned long symbol_addr = ld_get_new_addr(hdr_addr, sym);
 		append_symbol_mapping(elf_link, name, symbol_addr);
 	}
 
@@ -631,11 +657,12 @@ static unsigned long _get_ifunc_new_addr(elf_link_t *elf_link, char *sym_name)
 static unsigned long append_ifunc_symbol(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, char *sym_name)
 {
 	unsigned long ret;
-	if (is_static_nolibc_mode(elf_link))
+	if (is_static_nolibc_mode(elf_link)) {
 		ret = _get_ifunc_new_addr(elf_link, sym_name);
-	else
+	} else {
 		// use ifunc return value
 		ret = _get_ifunc_new_addr_by_dl(elf_link, ef, sym, sym_name);
+	}
 	append_symbol_mapping(elf_link, sym_name, ret);
 	SI_LOG_DEBUG("ifunc %s %16lx\n", sym_name, ret);
 

@@ -66,8 +66,6 @@ static unsigned gen_branch_binary(unsigned binary, unsigned addr, unsigned offse
 #define IMM_LO_SHIFT 29
 #define IMM_LO_LEN 2
 #define IMM_LO_MASK ((1UL << IMM_LO_LEN) - 1)
-#define PAGE_SHIFT 12
-#define PAGE_MASK (~((1UL << PAGE_SHIFT) - 1))
 #define OPCODE_ADRP (0x9UL << 28)
 #define OPCODE_ADRP_MASK (0x9FUL << 24)
 #define REG_LEN 5U
