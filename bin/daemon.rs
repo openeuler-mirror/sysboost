@@ -26,6 +26,8 @@ const SYSBOOST_PATH: &str = "/usr/bin/sysboost";
 const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
 const KO_PATH: &str = "/lib/modules/sysboost/binfmt_rto.ko";
 const KO_RTO_PARAM_PATH: &str = "/sys/module/binfmt_rto/parameters/use_rto";
+const LDSO: &str = "ld-";
+const LIBCSO: &str = "libc.so";
 
 // sleep some time wait for next event
 const MIN_SLEEP_TIME: u64 = 10;
@@ -281,6 +283,45 @@ fn get_lib_full_path(lib: &str, confpaths:Vec<&str>, rpaths: Vec<&str>, paths: V
 	None
 }
 
+// read elf file as using readelf
+fn parse_elf_file(elf_path: &str) -> Option<Elf> {
+	let elf_bytes = match fs::read(&elf_path) {
+		Ok(elf_bytes) => elf_bytes,
+		Err(_e) => {
+			log::info!("Error: read elf file fault, please check config.");
+			return None
+		}
+	};
+	match Elf::parse(&elf_bytes) {
+		Ok(elf) => Some(elf),
+		Err(_e) => {
+			log::info!("Error: parse elf file fault, please check the elf file");
+			None
+		}
+	};
+	None
+}
+
+fn find_libs(conf: &RtoConfig, elf: &Elf) -> Vec<String> {
+	let mut libs = conf.libs.clone();
+
+	let confpaths_temp = conf.PATH.as_ref().map_or_else(String::new, |v| v.clone());
+	let confpaths: Vec<&str> = confpaths_temp.split(':').collect();
+	let rpaths = elf.rpaths.clone();
+	if let Some(paths_temp) = env::var_os("PATH") {
+		let paths_str = paths_temp.to_string_lossy();
+		let lib_paths: Vec<&str> = paths_str.split(':').collect();
+		for lib in elf.libraries.iter() {
+			let findlib = get_lib_full_path(lib, confpaths.clone(), rpaths.clone(), lib_paths.clone()).unwrap_or("".to_string());
+			libs.push(findlib);
+		}
+		libs
+	} else {
+		log::info!("The environment variable PATH is empty. Please check.");
+		libs
+	}
+}
+
 fn process_config(path: PathBuf) -> Option<RtoConfig> {
 	let conf_e = read_config(&path);
 	let mut conf = match conf_e {
@@ -288,35 +329,22 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 		None => return None,
 	};
 
+	let elf = match parse_elf_file(&conf.elf_path) {
+		Some(elf) => elf,
+		None => return None,
+	};
+
 	// auto get lib path
-	let elf_bytes = match fs::read(&conf.elf_path) {
-		Ok(elf_bytes) => elf_bytes,
-		Err(_e) => {
-			log::info!("Error: read elf file fault, please check config.");
-			return None;
-		}
-	};
-	let elf = match Elf::parse(&elf_bytes) {
-		Ok(elf) => elf,
-		Err(_e) => {
-			log::info!("Error: parse elf file fault, please check the elf file");
-			return None;
-		}
-	};
-
-	let confpaths_temp = conf.PATH.as_ref().map_or_else(String::new, |v| v.clone());
-	let confpaths: Vec<&str> = confpaths_temp.split(':').collect();
-
-	let rpaths = elf.rpaths;
-	if let Some(paths_temp) = env::var_os("PATH") {
-		let paths_str = paths_temp.to_string_lossy();
-		let lib_paths: Vec<&str> = paths_str.split(':').collect();
-		for lib in elf.libraries {
-			let findlib = get_lib_full_path(lib, confpaths.clone(), rpaths.clone(), lib_paths.clone()).unwrap_or("".to_string());
-			conf.libs.push(findlib);
-		}
-	} else {
-		log::info!("The environment variable PATH is empty. Please check.");
+	// In static-nolibc mode, ld and libc need to be deleted after detection.
+	// In share mode, no detection is performed based on libs.
+	if conf.mode == "static" {
+		let libs = find_libs(&conf, &elf);
+		conf.libs = libs;
+	} else if conf.mode == "static-nolibc" {
+		let mut libs = find_libs(&conf, &elf);
+		libs.retain(|s| !s.contains(LDSO));
+		libs.retain(|s| !s.contains(LIBCSO));
+		conf.libs = libs;
 	}
 
 	// add elf file to watch list
