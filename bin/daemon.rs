@@ -38,7 +38,7 @@ pub struct RtoConfig {
 	pub elf_path: String,
 	pub mode: String,
 	pub libs: Vec<String>,
-	pub PATH: Option<Vec<String>>,
+	pub PATH: Option<String>,
 
 	#[serde(skip)]
 	watch_paths: Vec<String>,
@@ -303,8 +303,10 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 			return None;
 		}
 	};
-	let confpaths_temp = conf.PATH.as_ref().map_or_else(Vec::new, |v| v.clone());
-	let confpaths: Vec<&str> = confpaths_temp.iter().map(|s| s.as_str()).collect();
+
+	let confpaths_temp = conf.PATH.as_ref().map_or_else(String::new, |v| v.clone());
+	let confpaths: Vec<&str> = confpaths_temp.split(':').collect();
+
 	let rpaths = elf.rpaths;
 	if let Some(paths_temp) = env::var_os("PATH") {
 		let paths_str = paths_temp.to_string_lossy();
