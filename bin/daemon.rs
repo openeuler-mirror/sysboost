@@ -38,6 +38,7 @@ pub struct RtoConfig {
 	pub elf_path: String,
 	pub mode: String,
 	pub libs: Vec<String>,
+	pub PATH: Option<Vec<String>>,
 
 	#[serde(skip)]
 	watch_paths: Vec<String>,
@@ -248,8 +249,15 @@ fn find_file_in_dirs(file_name: &str, dirs: &str) -> Option<String> {
 }
 
 // Obtain the full path from real path, environment variable PATH, current dir
-fn get_lib_full_path(lib: &str, rpaths: Vec<&str>, paths: Vec<&str>) -> Option<String> {
-	if !(rpaths.is_empty()) {
+fn get_lib_full_path(lib: &str, confpaths:Vec<&str>, rpaths: Vec<&str>, paths: Vec<&str>) -> Option<String> {
+	if !(confpaths.is_empty()) {
+		for confpath in confpaths {
+			let full_dir = find_file_in_dirs(&lib, &confpath);
+			if let Some(ref _n) = full_dir {
+				return full_dir;
+			}
+		}
+	} else if !(rpaths.is_empty()) {
 		for rpath in rpaths {
 			let full_dir = find_file_in_dirs(&lib, &rpath);
 			if let Some(ref _n) = full_dir {
@@ -280,23 +288,7 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 		None => return None,
 	};
 
-	let ret = gen_app_rto(&conf);
-	if ret != 0 {
-		return None;
-	}
-
-	let ret = db_add_link(&conf.elf_path);
-	if ret != 0 {
-		return None;
-	}
-
-	let ret = set_app_aot_flag(&conf.elf_path, true);
-	if ret != 0 {
-		return None;
-	}
-
-	// TODO: feature, auto get deps
-	// feature, PATH may change libs
+	// auto get lib path
 	let elf_bytes = match fs::read(&conf.elf_path) {
 		Ok(elf_bytes) => elf_bytes,
 		Err(_e) => {
@@ -311,12 +303,14 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 			return None;
 		}
 	};
+	let confpaths_temp = conf.PATH.as_ref().map_or_else(Vec::new, |v| v.clone());
+	let confpaths: Vec<&str> = confpaths_temp.iter().map(|s| s.as_str()).collect();
 	let rpaths = elf.rpaths;
 	if let Some(paths_temp) = env::var_os("PATH") {
 		let paths_str = paths_temp.to_string_lossy();
 		let lib_paths: Vec<&str> = paths_str.split(':').collect();
 		for lib in elf.libraries {
-			let findlib = get_lib_full_path(lib, rpaths.clone(), lib_paths.clone()).unwrap_or("".to_string());
+			let findlib = get_lib_full_path(lib, confpaths.clone(), rpaths.clone(), lib_paths.clone()).unwrap_or("".to_string());
 			conf.libs.push(findlib);
 		}
 	} else {
@@ -327,6 +321,21 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 	conf.watch_paths.push(conf.elf_path.clone());
 	for lib in conf.libs.iter() {
 		conf.watch_paths.push(lib.split_whitespace().collect());
+	}
+
+	let ret = gen_app_rto(&conf);
+	if ret != 0 {
+		return None;
+	}
+
+	let ret = db_add_link(&conf.elf_path);
+	if ret != 0 {
+		return None;
+	}
+
+	let ret = set_app_aot_flag(&conf.elf_path, true);
+	if ret != 0 {
+		return None;
 	}
 
 	return Some(conf);
