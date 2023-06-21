@@ -464,7 +464,33 @@ fn watch_old_elf_files(rto_configs: &Vec<RtoConfig>) -> Inotify {
 	return inotify;
 }
 
-fn check_elf_files_modify(inotify: &mut Inotify) -> bool {
+fn watch_old_config_files() -> Inotify {
+	let mut inotify = Inotify::init().expect("Failed to init inotify.");
+	// read configs /etc/sysboost.d, like bash.toml
+	let dir_e = fs::read_dir(&Path::new("/etc/sysboost.d"));
+	let dir = match dir_e {
+		Ok(dir) => dir,
+		Err(e) => {
+			log::error!("{}", e);
+			return inotify;
+		}
+	};
+	for entry in dir {
+		let entry = entry.ok().unwrap();
+		let file_path = entry.path();
+
+		match inotify.add_watch(file_path, WatchMask::MODIFY) {
+			Ok(_) => {}
+			Err(e) => {
+				log::error!("watch config fail {}", e);
+				return inotify;
+			}
+		};
+	}
+	return inotify;
+}
+
+fn check_files_modify(inotify: &mut Inotify) -> bool {
 	let mut buffer = [0u8; 4096];
 	let events = match inotify.read_events(&mut buffer) {
 		Ok(events) => events,
@@ -519,10 +545,14 @@ fn start_service() {
 		thread::sleep(Duration::from_secs(MIN_SLEEP_TIME));
 
 		// do not support config dynamic modify, need restart service
-		// TODO: feature, check config file modify
+		// check config file modify
+		let is_elf_modify = check_files_modify(&mut conf_inotify);
+		if is_elf_modify == true {
+			return;
+		}
 
 		// check ELF modify, renew rto
-		let is_elf_modify = check_elf_files_modify(&mut elf_inotify);
+		let is_elf_modify = check_files_modify(&mut elf_inotify);
 		if is_elf_modify == true {
 			return;
 		}
