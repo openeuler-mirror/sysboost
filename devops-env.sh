@@ -2,4 +2,4 @@
 set -x
 
 # install tools
-sudo yum install -y gcc meson cargo xz-devel
+sudo yum install -y gcc meson cargo xz-devel kernel-devel

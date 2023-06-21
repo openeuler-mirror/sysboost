@@ -92,11 +92,6 @@ static void append_symbol_mapping_by_name(elf_link_t *elf_link, char *key, elf_f
 	append_symbol_mapping(elf_link, key, new_sym_addr);
 }
 
-static void init_ifunc_symbol_addr(elf_link_t *elf_link)
-{
-	(void)elf_link;
-}
-
 static void init_hook_func_symbol_change(elf_link_t *elf_link)
 {
 	if (is_hook_func(elf_link) == false) {
@@ -163,6 +158,7 @@ static char *vdso_name_to_syscall_name(char *name)
 	return name + VDSO_PREFIX_LEN;
 }
 
+// AT_SYSINFO_EHDR is addr of vdso header, but here compute it
 static unsigned long vdso_hdr_addr_cur()
 {
 	// find func in vdso, vdso is only 4K, so get elf hdr by align
@@ -233,9 +229,6 @@ void init_ld_symbol_addr(elf_link_t *elf_link)
 
 void init_symbol_mapping(elf_link_t *elf_link)
 {
-	// Assume that ifunc function name is unique
-	init_ifunc_symbol_addr(elf_link);
-
 	init_static_mode_symbol_change(elf_link);
 	init_hook_func_symbol_change(elf_link);
 
@@ -654,6 +647,8 @@ static unsigned long _get_ifunc_new_addr(elf_link_t *elf_link, char *sym_name)
 	return 0;
 }
 
+// ifunc is in ELFs, so it can not init when start
+// Assume that ifunc function name is unique
 static unsigned long append_ifunc_symbol(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, char *sym_name)
 {
 	unsigned long ret;

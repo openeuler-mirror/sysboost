@@ -87,8 +87,6 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 	}
 
 	elf_link->direct_call_optimize = true;
-	// TODO: feature, probe AUX parameter
-	//elf_link->direct_vdso_optimize = false;
 
 	if (elf_link->in_ef_nr != 0) {
 		SI_LOG_ERR("set mode must before add elf file\n");
@@ -101,6 +99,8 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 			SI_LOG_ERR("elf_read_file fail, %s\n", LD_SO_PATH);
 			return -1;
 		}
+		// in this mode, ld.so and vdso layout must fixed
+		elf_link->direct_vdso_optimize = true;
 		return 0;
 	}
 
