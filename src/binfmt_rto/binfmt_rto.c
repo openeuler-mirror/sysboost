@@ -49,6 +49,13 @@
 #include <asm/param.h>
 #include <asm/page.h>
 
+#ifndef CONFIG_ELF_SYSBOOST
+#define CONFIG_ELF_SYSBOOST 1
+#endif
+
+#ifdef CONFIG_ELF_SYSBOOST
+#include <linux/kprobes.h>
+
 static bool use_rto = false;
 module_param(use_rto, bool, 0600);
 MODULE_PARM_DESC(use_rto, "if use rto featue");
@@ -63,16 +70,22 @@ MODULE_PARM_DESC(use_rto, "if use rto featue");
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
+#ifdef CONFIG_ARM64
 	proc_symbol(spectre_v4_enable_task_mitigation);
+	proc_symbol(cpu_get_elf_hwcap);
+	proc_symbol(cpu_get_elf_hwcap2);
+	proc_symbol(signal_minsigstksz);
+#else
+	proc_symbol(elf_hwcap2);
+	proc_symbol(get_sigframe_size);
+	proc_symbol(set_personality_64bit);
+#endif
 	proc_symbol(arch_randomize_brk);
 	proc_symbol(arch_setup_additional_pages);
 	proc_symbol(arch_mmap_rnd);
 	proc_symbol(randomize_stack_top);
 	proc_symbol(randomize_va_space);
 	proc_symbol(dump_user_range);
-	proc_symbol(cpu_get_elf_hwcap2);
-	proc_symbol(cpu_get_elf_hwcap);
-	proc_symbol(signal_minsigstksz);
 	proc_symbol(arch_align_stack);
 	proc_symbol(arch_elf_adjust_prot);
 	proc_symbol(task_cputime);
@@ -81,16 +94,22 @@ static struct global_symbols {
 
 #define proc_symbol_char(x) #x
 static char *global_symbol_names[] = {
+#ifdef CONFIG_ARM64
 	proc_symbol_char(spectre_v4_enable_task_mitigation),
+	proc_symbol_char(cpu_get_elf_hwcap),
+	proc_symbol_char(cpu_get_elf_hwcap2),
+	proc_symbol_char(signal_minsigstksz),
+#else
+	proc_symbol_char(elf_hwcap2),
+	proc_symbol_char(get_sigframe_size),
+	proc_symbol_char(set_personality_64bit),
+#endif
 	proc_symbol_char(arch_randomize_brk),
 	proc_symbol_char(arch_setup_additional_pages),
 	proc_symbol_char(arch_mmap_rnd),
 	proc_symbol_char(randomize_stack_top),
 	proc_symbol_char(randomize_va_space),
 	proc_symbol_char(dump_user_range),
-	proc_symbol_char(cpu_get_elf_hwcap2),
-	proc_symbol_char(cpu_get_elf_hwcap),
-	proc_symbol_char(signal_minsigstksz),
 	proc_symbol_char(arch_align_stack),
 	proc_symbol_char(arch_elf_adjust_prot),
 	proc_symbol_char(task_cputime),
@@ -158,13 +177,70 @@ int init_symbols(void)
 
 #ifdef ELF_HWCAP
 #undef ELF_HWCAP
-#define ELF_HWCAP		(g_sym.cpu_get_elf_hwcap())
+#define ELF_HWCAP (__cpu_get_elf_hwcap())
+static inline unsigned long __cpu_get_elf_hwcap(void)
+{
+#ifdef CONFIG_ARM64
+	return g_sym.cpu_get_elf_hwcap();
+#else
+	// x86 boot_cpu_data is export
+	return (boot_cpu_data.x86_capability[CPUID_1_EDX]);
+#endif
+}
 #endif
 
 #ifdef ELF_HWCAP2
 #undef ELF_HWCAP2
-#define ELF_HWCAP2		(g_sym.cpu_get_elf_hwcap2())
+#define ELF_HWCAP2 (__cpu_get_elf_hwcap2())
+static inline unsigned long __cpu_get_elf_hwcap2(void)
+{
+#ifdef CONFIG_ARM64
+	return g_sym.cpu_get_elf_hwcap2();
+#else
+	// x86 is global val elf_hwcap2, not export
+	return *(u32 *)g_sym.elf_hwcap2;
 #endif
+}
+#endif
+
+#ifdef ARCH_DLINFO
+#undef ARCH_DLINFO
+#endif
+
+#ifdef CONFIG_ARM64
+#define ARCH_DLINFO							\
+do {									\
+	NEW_AUX_ENT(AT_SYSINFO_EHDR,					\
+		    (elf_addr_t)current->mm->context.vdso);		\
+									\
+	/*								\
+	 * Should always be nonzero unless there's a kernel bug.	\
+	 * If we haven't determined a sensible value to give to		\
+	 * userspace, omit the entry:					\
+	 */								\
+	if (likely(*g_sym.signal_minsigstksz))				\
+		NEW_AUX_ENT(AT_MINSIGSTKSZ, *g_sym.signal_minsigstksz);	\
+	else								\
+		NEW_AUX_ENT(AT_IGNORE, 0);				\
+} while (0)
+#else
+// x86 ignore vdso64_enabled
+#define ARCH_DLINFO							\
+do {									\
+	NEW_AUX_ENT(AT_SYSINFO_EHDR,				\
+			(unsigned long __force)current->mm->context.vdso); \
+	NEW_AUX_ENT(AT_MINSIGSTKSZ, g_sym.get_sigframe_size());		\
+} while (0)
+#endif
+
+#ifdef CONFIG_X86_64
+#ifdef SET_PERSONALITY2
+#undef SET_PERSONALITY2
+#endif
+#define SET_PERSONALITY2(ex, state) (g_sym.set_personality_64bit())
+#endif
+
+#endif /* CONFIG_ELF_SYSBOOST */
 
 #ifndef ELF_COMPAT
 #define ELF_COMPAT 0
@@ -362,23 +438,6 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 	} while (0)
 
 #ifdef ARCH_DLINFO
-#undef ARCH_DLINFO
-#define ARCH_DLINFO							\
-do {									\
-	NEW_AUX_ENT(AT_SYSINFO_EHDR,					\
-		    (elf_addr_t)current->mm->context.vdso);		\
-									\
-	/*								\
-	 * Should always be nonzero unless there's a kernel bug.	\
-	 * If we haven't determined a sensible value to give to		\
-	 * userspace, omit the entry:					\
-	 */								\
-	if (likely(*g_sym.signal_minsigstksz))				\
-		NEW_AUX_ENT(AT_MINSIGSTKSZ, *g_sym.signal_minsigstksz);	\
-	else								\
-		NEW_AUX_ENT(AT_IGNORE, 0);				\
-} while (0)
-
 	/* 
 	 * ARCH_DLINFO must come first so PPC can do its special alignment of
 	 * AUXV.
@@ -951,6 +1010,7 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 	return ret == -ENOENT ? 0 : ret;
 }
 
+#ifdef CONFIG_ELF_SYSBOOST
 static struct file * try_get_rto_file(struct file *file)
 {
 	char *buffer, *rto_path;
@@ -1011,7 +1071,13 @@ static inline int try_replace_file(struct linux_binprm *bprm)
 	return 0;
 }
 
-static inline void rto_start_thread(struct pt_regs *regs, unsigned long pc,
+#ifdef CONFIG_ARM64
+#ifdef start_thread
+#undef start_thread
+#endif
+
+// arm64 start_thread is inline function, so copy it
+static inline void start_thread(struct pt_regs *regs, unsigned long pc,
 				    unsigned long sp)
 {
 	start_thread_common(regs, pc);
@@ -1019,6 +1085,8 @@ static inline void rto_start_thread(struct pt_regs *regs, unsigned long pc,
 	g_sym.spectre_v4_enable_task_mitigation(current);
 	regs->sp = sp;
 }
+#endif /* CONFIG_ARM64 */
+#endif /* CONFIG_ELF_SYSBOOST */
 
 static int load_elf_binary(struct linux_binprm *bprm)
 {
@@ -1043,12 +1111,14 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct mm_struct *mm;
 	struct pt_regs *regs;
 
+#ifdef CONFIG_ELF_SYSBOOST
 load_rto:
 	retval = -ENOEXEC;
 	/* close feature to rmmod this ko */
 	if (!use_rto) {
 		goto out;
 	}
+#endif
 
 	/* First of all, some simple consistency checks */
 	if (memcmp(elf_ex->e_ident, ELFMAG, SELFMAG) != 0)
@@ -1067,10 +1137,12 @@ load_rto:
 	if (!elf_phdata)
 		goto out;
 
+#ifdef CONFIG_ELF_SYSBOOST
 	if (elf_ex->e_flags & EF_AARCH64_AOT) {
 		if (!try_replace_file(bprm))
 			goto load_rto;
 	}
+#endif
 
 	elf_ppnt = elf_phdata;
 	for (i = 0; i < elf_ex->e_phnum; i++, elf_ppnt++) {
@@ -1533,7 +1605,7 @@ out_free_interp:
 #endif
 
 	finalize_exec(bprm);
-	rto_start_thread(regs, elf_entry, bprm->p);
+	start_thread(regs, elf_entry, bprm->p);
 	retval = 0;
 out:
 	return retval;
@@ -2516,7 +2588,9 @@ end_coredump:
 
 static int init_rto_binfmt(void)
 {
+#ifdef CONFIG_ELF_SYSBOOST
 	init_symbols();
+#endif
 	insert_binfmt(&elf_format);
 	return 0;
 }

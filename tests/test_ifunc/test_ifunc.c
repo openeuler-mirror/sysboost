@@ -44,6 +44,8 @@
 #define NO_COMPILE_OPTIMIZE(func_str) asm volatile("jmp " func_str)
 #endif
 
+// test ifunc function can find right addr
+
 int main(void)
 {
 	char src[10] = {0};
