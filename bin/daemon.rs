@@ -40,7 +40,9 @@ pub struct RtoConfig {
 	pub elf_path: String,
 	pub mode: String,
 	pub libs: Vec<String>,
-	pub PATH: Option<String>,
+
+	#[serde(rename = "PATH")]
+	pub path: Option<String>,
 
 	#[serde(skip)]
 	watch_paths: Vec<String>,
@@ -305,7 +307,7 @@ fn parse_elf_file(elf_path: &str) -> Option<Elf> {
 fn find_libs(conf: &RtoConfig, elf: &Elf) -> Vec<String> {
 	let mut libs = conf.libs.clone();
 
-	let confpaths_temp = conf.PATH.as_ref().map_or_else(String::new, |v| v.clone());
+	let confpaths_temp = conf.path.as_ref().map_or_else(String::new, |v| v.clone());
 	let confpaths: Vec<&str> = confpaths_temp.split(':').collect();
 	let rpaths = elf.rpaths.clone();
 	if let Some(paths_temp) = env::var_os("PATH") {
