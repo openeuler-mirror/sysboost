@@ -580,4 +580,40 @@ mod tests {
 
 		assert_eq!(exit_code, 0);
 	}
+
+	#[test]
+	fn test_process_config() {
+		// Create a temporary directory for testing
+		let temp_dir = tempfile::tempdir().unwrap();
+
+		// Create a temporary ELF file for testing
+		let bash_path = "/usr/bin/bash";
+		let elf_path = temp_dir.path().join("bash");
+		std::fs::copy(&bash_path, &elf_path).unwrap();
+
+		// Create a temporary config file for testing
+		let config_path = temp_dir.path().join("test.toml");
+		std::fs::write(&config_path, "elf_path = './bash' mode = 'static' PATH = '/usr/lib64:/usr/bin'").unwrap();
+
+		let conf_e = read_config(&config_path.clone());
+		let conf = match conf_e {
+			Some(conf) => conf,
+			None => return,
+		};
+
+		let elf = match parse_elf_file(&conf.elf_path) {
+			Some(elf) => elf,
+			None => return,
+		};
+
+		let libs = find_libs(&conf, &elf);
+
+		let bash_libs = vec![
+			String::from("/usr/lib64/libtinfo.so.6"),
+			String::from("/usr/lib64/libc.so.6"),
+			String::from("/lib/ld-linux-aarch64.so.1"),
+		];
+
+		assert_eq!(libs, bash_libs);
+	}
 }
