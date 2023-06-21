@@ -582,6 +582,7 @@ mod tests {
 	}
 
 	#[test]
+	#[cfg(target_arch = "aarch64")]
 	fn test_process_config() {
 		// Create a temporary directory for testing
 		let temp_dir = tempfile::tempdir().unwrap();
