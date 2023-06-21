@@ -482,6 +482,28 @@ fn check_elf_files_modify(inotify: &mut Inotify) -> bool {
 	return false;
 }
 
+fn watch_old_config_files() -> Inotify {
+	// read configs /etc/sysboost.d, like bash.toml
+	let dir_e = fs::read_dir(&Path::new("/etc/sysboost.d"));
+	let dir = match dir_e {
+		Ok(dir) => dir,
+		Err(e) => {
+			log::error!("{}", e);
+			return;
+		}
+	};
+	let mut inotify = Inotify::init().expect("Failed to init inotify.");
+	for entry in dir {
+		let file_path = Path::new(entry);
+		match inotify.add_watch(file_path, WatchMask::MODIFY) {
+			Ok(_) => {}
+			Err(e) => {
+				log::error!("watch config fail {}", e);
+			}
+		};
+	}
+}
+
 fn start_service() {
 	set_ko_rto_flag(false);
 	clean_last_rto();
@@ -490,6 +512,7 @@ fn start_service() {
 	refresh_all_config(&mut rto_configs);
 
 	let mut elf_inotify = watch_old_elf_files(&rto_configs);
+	let mut conf_inotify = watch_old_config_files();
 
 	loop {
 		// wait some time
