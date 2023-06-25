@@ -58,7 +58,7 @@
 
 static bool use_rto = false;
 module_param(use_rto, bool, 0600);
-MODULE_PARM_DESC(use_rto, "if use rto featue");
+MODULE_PARM_DESC(use_rto, "use rto featue");
 
 #ifndef EF_AARCH64_AOT
 #define EF_AARCH64_AOT      (0x00010000U)
@@ -67,6 +67,8 @@ MODULE_PARM_DESC(use_rto, "if use rto featue");
 #ifndef EF_AARCH64_HUGEPAGE
 #define EF_AARCH64_HUGEPAGE (0x00020000U)
 #endif
+
+extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
@@ -79,9 +81,12 @@ static struct global_symbols {
 	proc_symbol(elf_hwcap2);
 	proc_symbol(get_sigframe_size);
 	proc_symbol(set_personality_64bit);
+	proc_symbol(vdso64_enabled);
+	proc_symbol(map_vdso);
+	proc_symbol(vdso_image_64);
 #endif
-	proc_symbol(arch_randomize_brk);
 	proc_symbol(arch_setup_additional_pages);
+	proc_symbol(arch_randomize_brk);
 	proc_symbol(arch_mmap_rnd);
 	proc_symbol(randomize_stack_top);
 	proc_symbol(randomize_va_space);
@@ -103,9 +108,12 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(elf_hwcap2),
 	proc_symbol_char(get_sigframe_size),
 	proc_symbol_char(set_personality_64bit),
+	proc_symbol_char(vdso64_enabled),
+	proc_symbol_char(map_vdso),
+	proc_symbol_char(vdso_image_64),
 #endif
-	proc_symbol_char(arch_randomize_brk),
 	proc_symbol_char(arch_setup_additional_pages),
+	proc_symbol_char(arch_randomize_brk),
 	proc_symbol_char(arch_mmap_rnd),
 	proc_symbol_char(randomize_stack_top),
 	proc_symbol_char(randomize_va_space),
@@ -223,21 +231,42 @@ do {									\
 	else								\
 		NEW_AUX_ENT(AT_IGNORE, 0);				\
 } while (0)
+
+#define __arch_setup_additional_pages(bprm, uses_interp, load_bias, is_rto_format) (g_sym.arch_setup_additional_pages(bprm, uses_interp))
+
 #else
-// x86 ignore vdso64_enabled
+// x86
 #define ARCH_DLINFO							\
 do {									\
-	NEW_AUX_ENT(AT_SYSINFO_EHDR,				\
-			(unsigned long __force)current->mm->context.vdso); \
+	if (*(unsigned int *)g_sym.vdso64_enabled)			\
+		NEW_AUX_ENT(AT_SYSINFO_EHDR,				\
+			    (unsigned long __force)current->mm->context.vdso); \
 	NEW_AUX_ENT(AT_MINSIGSTKSZ, g_sym.get_sigframe_size());		\
 } while (0)
-#endif
 
-#ifdef CONFIG_X86_64
+int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, unsigned long load_bias, bool is_rto_format)
+{
+	if (!is_rto_format) {
+		return g_sym.arch_setup_additional_pages(bprm, uses_interp);
+	}
+
+	if (!*(unsigned int *)g_sym.vdso64_enabled)
+		return 0;
+
+	// layout for vdso and app and ld.so
+	// ld.so | vvar | vdso | app
+	// xxK   | 8K   | 4K   | 2M+
+	// without ld.so
+	// vvar | vdso | app
+	// 8K   | 4K   | 2M+
+	return g_sym.map_vdso(g_sym.vdso_image_64, load_bias - (PAGE_SIZE * 3));
+}
+
 #ifdef SET_PERSONALITY2
 #undef SET_PERSONALITY2
 #endif
 #define SET_PERSONALITY2(ex, state) (g_sym.set_personality_64bit())
+
 #endif
 
 #endif /* CONFIG_ELF_SYSBOOST */
@@ -781,7 +810,7 @@ static inline int make_prot(u32 p_flags, struct arch_elf_state *arch_state,
 static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 		struct file *interpreter,
 		unsigned long no_base, struct elf_phdr *interp_elf_phdata,
-		struct arch_elf_state *arch_state)
+		struct arch_elf_state *arch_state, bool is_rto_format)
 {
 	struct elf_phdr *eppnt;
 	unsigned long load_addr = 0;
@@ -808,6 +837,19 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 		error = -EINVAL;
 		goto out;
 	}
+
+#ifdef CONFIG_ELF_SYSBOOST
+	// layout for vdso and app and ld.so
+	// ld.so | vvar | vdso | app
+	// xxK   | 8K   | 4K   | 2M+
+	// without ld.so
+	// vvar | vdso | app
+	// 8K   | 4K   | 2M+
+	if (is_rto_format) {
+		load_addr = no_base - (PAGE_SIZE * 3) - ELF_PAGESTART(total_size);
+		load_addr_set = 1;
+	}
+#endif
 
 	eppnt = interp_elf_phdata;
 	for (i = 0; i < interp_elf_ex->e_phnum; i++, eppnt++) {
@@ -1112,6 +1154,8 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct pt_regs *regs;
 
 #ifdef CONFIG_ELF_SYSBOOST
+	bool is_rto_format = elf_ex->e_flags & EF_AARCH64_AOT;
+
 load_rto:
 	retval = -ENOEXEC;
 	/* close feature to rmmod this ko */
@@ -1138,6 +1182,7 @@ load_rto:
 		goto out;
 
 #ifdef CONFIG_ELF_SYSBOOST
+	/* e_flags will change */
 	if (elf_ex->e_flags & EF_AARCH64_AOT) {
 		if (!try_replace_file(bprm))
 			goto load_rto;
@@ -1510,7 +1555,7 @@ out_free_interp:
 		elf_entry = load_elf_interp(interp_elf_ex,
 					    interpreter,
 					    load_bias, interp_elf_phdata,
-					    &arch_state);
+					    &arch_state, is_rto_format);
 		if (!IS_ERR((void *)elf_entry)) {
 			/*
 			 * load_elf_interp() returns relocation
@@ -1544,7 +1589,7 @@ out_free_interp:
 	set_binfmt(&elf_format);
 
 #ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
-	retval = g_sym.arch_setup_additional_pages(bprm, !!interpreter);
+	retval = __arch_setup_additional_pages(bprm, !!interpreter, load_bias, is_rto_format);
 	if (retval < 0)
 		goto out;
 #endif /* ARCH_HAS_SETUP_ADDITIONAL_PAGES */
