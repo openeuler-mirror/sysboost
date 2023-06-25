@@ -508,28 +508,6 @@ fn check_files_modify(inotify: &mut Inotify) -> bool {
 	return false;
 }
 
-fn watch_old_config_files() -> Inotify {
-	// read configs /etc/sysboost.d, like bash.toml
-	let dir_e = fs::read_dir(&Path::new("/etc/sysboost.d"));
-	let dir = match dir_e {
-		Ok(dir) => dir,
-		Err(e) => {
-			log::error!("{}", e);
-			return;
-		}
-	};
-	let mut inotify = Inotify::init().expect("Failed to init inotify.");
-	for entry in dir {
-		let file_path = Path::new(entry);
-		match inotify.add_watch(file_path, WatchMask::MODIFY) {
-			Ok(_) => {}
-			Err(e) => {
-				log::error!("watch config fail {}", e);
-			}
-		};
-	}
-}
-
 fn start_service() {
 	set_ko_rto_flag(false);
 	clean_last_rto();
@@ -595,7 +573,7 @@ mod tests {
 		// wait modify happen
 		thread::sleep(Duration::from_secs(1));
 
-		let is_elf_modify = check_elf_files_modify(&mut elf_inotify);
+		let is_elf_modify = check_files_modify(&mut elf_inotify);
 		assert_eq!(is_elf_modify, true);
 	}
 
@@ -619,7 +597,7 @@ mod tests {
 		// wait modify happen
 		thread::sleep(Duration::from_secs(1));
 
-		let is_elf_modify = check_elf_files_modify(&mut elf_inotify);
+		let is_elf_modify = check_files_modify(&mut elf_inotify);
 		assert_eq!(is_elf_modify, true);
 	}
 
@@ -636,7 +614,7 @@ mod tests {
 
 	#[test]
 	#[cfg(target_arch = "aarch64")]
-	fn test_process_config() {
+	fn test_process_config_arm() {
 		// Create a temporary directory for testing
 		let temp_dir = tempfile::tempdir().unwrap();
 
@@ -661,6 +639,9 @@ mod tests {
 		};
 
 		let libs = find_libs(&conf, &elf);
+		let mut libs_nolibc = find_libs(&conf, &elf);
+		libs_nolibc.retain(|s| !s.contains(LDSO));
+		libs_nolibc.retain(|s| !s.contains(LIBCSO));
 
 		let bash_libs = vec![
 			String::from("/usr/lib64/libtinfo.so.6"),
@@ -668,6 +649,58 @@ mod tests {
 			String::from("/lib/ld-linux-aarch64.so.1"),
 		];
 
+		let bash_libs_nolibc = vec![
+			String::from("/usr/lib64/libtinfo.so.6"),
+		];
+
 		assert_eq!(libs, bash_libs);
+		assert_eq!(libs_nolibc, bash_libs_nolibc);
+
+	}
+
+	#[test]
+	#[cfg(target_arch = "x86")]
+	fn test_process_config_x86() {
+		// Create a temporary directory for testing
+		let temp_dir = tempfile::tempdir().unwrap();
+
+		// Create a temporary ELF file for testing
+		let bash_path = "/usr/bin/bash";
+		let elf_path = temp_dir.path().join("bash");
+		std::fs::copy(&bash_path, &elf_path).unwrap();
+
+		// Create a temporary config file for testing
+		let config_path = temp_dir.path().join("test.toml");
+		std::fs::write(&config_path, "elf_path = './bash' mode = 'static' PATH = '/usr/lib64:/usr/bin'").unwrap();
+
+		let conf_e = read_config(&config_path.clone());
+		let conf = match conf_e {
+			Some(conf) => conf,
+			None => return,
+		};
+
+		let elf = match parse_elf_file(&conf.elf_path) {
+			Some(elf) => elf,
+			None => return,
+		};
+
+		let libs = find_libs(&conf, &elf);
+		let mut libs_nolibc = find_libs(&conf, &elf);
+		libs_nolibc.retain(|s| !s.contains(LDSO));
+		libs_nolibc.retain(|s| !s.contains(LIBCSO));
+
+		let bash_libs = vec![
+			String::from("/usr/lib64/libtinfo.so.6"),
+			String::from("/usr/lib64/libc.so.6"),
+			String::from("/lib64/ld-linux-x86-64.so.2"),
+		];
+
+		let bash_libs_nolibc = vec![
+			String::from("/usr/lib64/libtinfo.so.6"),
+		];
+
+		assert_eq!(libs, bash_libs);
+		assert_eq!(libs_nolibc, bash_libs_nolibc);
+
 	}
 }
