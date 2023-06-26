@@ -703,4 +703,39 @@ mod tests {
 		assert_eq!(libs_nolibc, bash_libs_nolibc);
 
 	}
+
+	#[test]
+	fn test_watch_old_config_files() {
+		let dir_path = "/etc/sysboost.d";
+		let file_path = "/etc/sysboost.d/test.toml";
+
+		if !Path::new(dir_path).exists() {
+			match std::fs::create_dir(dir_path) {
+				Ok(_) => {}
+				Err(e) => {
+					log::error!("create dir failed: {}", e);
+				}
+			};
+		}
+
+		let _file = std::fs::File::create(file_path).unwrap();
+		let path = Path::new(file_path);
+		std::fs::write(&path, "elf_path = './bash' mode = 'static' PATH = '/usr/lib64:/usr/bin'").unwrap();
+		let mut conf_inotify = watch_old_config_files();
+		match std::fs::write(&path, b"Modified content") {
+			Ok(_) => {}
+			Err(e) => {
+				log::error!("write file failed: {}", e);
+			}
+		};
+		let is_elf_modify = check_files_modify(&mut conf_inotify);
+
+		match std::fs::remove_file(file_path) {
+			Ok(_) => {}
+			Err(e) => {
+				log::error!("delete dir failed: {}", e);
+			}
+		};
+		assert_eq!(is_elf_modify, true);
+	}
 }
