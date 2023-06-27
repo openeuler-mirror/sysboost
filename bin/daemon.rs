@@ -355,6 +355,10 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 		conf.watch_paths.push(lib.split_whitespace().collect());
 	}
 
+	// add config file to watch list
+	let path_str = path.clone().into_os_string().into_string().unwrap();
+	conf.watch_paths.push(path_str);
+
 	let ret = gen_app_rto(&conf);
 	if ret != 0 {
 		return None;
@@ -443,7 +447,7 @@ fn clean_last_rto() {
 	}
 }
 
-fn watch_old_elf_files_perapp(conf: &RtoConfig, inotify: &mut Inotify) {
+fn watch_old_files_perapp(conf: &RtoConfig, inotify: &mut Inotify) {
 	for entry in &conf.watch_paths {
 		let file_path = Path::new(entry);
 		match inotify.add_watch(file_path, WatchMask::MODIFY) {
@@ -455,37 +459,11 @@ fn watch_old_elf_files_perapp(conf: &RtoConfig, inotify: &mut Inotify) {
 	}
 }
 
-fn watch_old_elf_files(rto_configs: &Vec<RtoConfig>) -> Inotify {
+fn watch_old_files(rto_configs: &Vec<RtoConfig>) -> Inotify {
 	// init fail exit program
 	let mut inotify = Inotify::init().expect("Failed to init inotify.");
 	for entry in rto_configs {
-		watch_old_elf_files_perapp(&entry, &mut inotify);
-	}
-	return inotify;
-}
-
-fn watch_old_config_files() -> Inotify {
-	let mut inotify = Inotify::init().expect("Failed to init inotify.");
-	// read configs /etc/sysboost.d, like bash.toml
-	let dir_e = fs::read_dir(&Path::new("/etc/sysboost.d"));
-	let dir = match dir_e {
-		Ok(dir) => dir,
-		Err(e) => {
-			log::error!("{}", e);
-			return inotify;
-		}
-	};
-	for entry in dir {
-		let entry = entry.ok().unwrap();
-		let file_path = entry.path();
-
-		match inotify.add_watch(file_path, WatchMask::MODIFY) {
-			Ok(_) => {}
-			Err(e) => {
-				log::error!("watch config fail {}", e);
-				return inotify;
-			}
-		};
+		watch_old_files_perapp(&entry, &mut inotify);
 	}
 	return inotify;
 }
@@ -515,22 +493,17 @@ fn start_service() {
 	let mut rto_configs: Vec<RtoConfig> = Vec::new();
 	refresh_all_config(&mut rto_configs);
 
-	let mut elf_inotify = watch_old_elf_files(&rto_configs);
-	let mut conf_inotify = watch_old_config_files();
+	let mut file_inotify = watch_old_files(&rto_configs);
 
 	loop {
 		// wait some time
 		thread::sleep(Duration::from_secs(MIN_SLEEP_TIME));
 
 		// do not support config dynamic modify, need restart service
-		// check config file modify
-		let is_elf_modify = check_files_modify(&mut conf_inotify);
-		if is_elf_modify == true {
-			return;
-		}
 
-		// check ELF modify, renew rto
-		let is_elf_modify = check_files_modify(&mut elf_inotify);
+		// check config file and ELF file modify,
+		// if they have changed, we need to renew rto
+		let is_elf_modify = check_files_modify(&mut file_inotify);
 		if is_elf_modify == true {
 			return;
 		}
@@ -704,38 +677,4 @@ mod tests {
 
 	}
 
-	#[test]
-	fn test_watch_old_config_files() {
-		let dir_path = "/etc/sysboost.d";
-		let file_path = "/etc/sysboost.d/test.toml";
-
-		if !Path::new(dir_path).exists() {
-			match std::fs::create_dir(dir_path) {
-				Ok(_) => {}
-				Err(e) => {
-					log::error!("create dir failed: {}", e);
-				}
-			};
-		}
-
-		let _file = std::fs::File::create(file_path).unwrap();
-		let path = Path::new(file_path);
-		std::fs::write(&path, "elf_path = './bash' mode = 'static' PATH = '/usr/lib64:/usr/bin'").unwrap();
-		let mut conf_inotify = watch_old_config_files();
-		match std::fs::write(&path, b"Modified content") {
-			Ok(_) => {}
-			Err(e) => {
-				log::error!("write file failed: {}", e);
-			}
-		};
-		let is_elf_modify = check_files_modify(&mut conf_inotify);
-
-		match std::fs::remove_file(file_path) {
-			Ok(_) => {}
-			Err(e) => {
-				log::error!("delete dir failed: {}", e);
-			}
-		};
-		assert_eq!(is_elf_modify, true);
-	}
 }
