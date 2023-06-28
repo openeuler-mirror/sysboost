@@ -11,6 +11,17 @@
 #include <si_common.h>
 #include <si_debug.h>
 
+// aarch64 header file is not define PAGE_SIZE
+#ifndef PAGE_SHIFT
+#define PAGE_SHIFT              12
+#endif
+#ifndef PAGE_SIZE
+#define PAGE_SIZE               (1UL << PAGE_SHIFT)
+#endif
+#ifndef PAGE_MASK
+#define PAGE_MASK               (~(PAGE_SIZE-1))
+#endif
+
 #define ELF_SEGMENT_ALIGN (0x200000)
 
 #define SKIP_ONE_RELA (1)
