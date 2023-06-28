@@ -6,6 +6,10 @@ PWD := $(shell pwd)
 modules:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
+install:
+	rmmod binfmt_rto || true
+	insmod binfmt_rto.ko use_rto=1 debug=1
+
 .PHONEY: clean
 
 clean:
