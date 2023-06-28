@@ -60,6 +60,11 @@ static bool use_rto = false;
 module_param(use_rto, bool, 0600);
 MODULE_PARM_DESC(use_rto, "use rto featue");
 
+/* debug mode only process rto format */
+static int debug = 0;
+module_param(debug, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(debug, "debug mode");
+
 #ifndef EF_AARCH64_AOT
 #define EF_AARCH64_AOT      (0x00010000U)
 #endif
@@ -1158,6 +1163,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 
 load_rto:
 	retval = -ENOEXEC;
+
 	/* close feature to rmmod this ko */
 	if (!use_rto) {
 		goto out;
@@ -1186,6 +1192,8 @@ load_rto:
 	if (elf_ex->e_flags & EF_AARCH64_AOT) {
 		if (!try_replace_file(bprm))
 			goto load_rto;
+	} else if (debug) {
+		goto out;
 	}
 #endif
 

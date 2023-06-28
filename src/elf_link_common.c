@@ -85,6 +85,19 @@ unsigned long get_new_addr_by_symbol_mapping(elf_link_t *elf_link, char *symbol_
 	return NOT_FOUND;
 }
 
+void show_symbol_mapping(elf_link_t *elf_link)
+{
+	int len = elf_link->symbol_mapping_arr->len;
+	elf_symbol_mapping_t *sym_maps = elf_link->symbol_mapping_arr->data;
+	elf_symbol_mapping_t *sym_map = NULL;
+
+	printf("symbol_name   symbol_addr\n");
+	for (int i = 0; i < len; i++) {
+		sym_map = &sym_maps[i];
+		printf("%-32s %016lx\n", sym_map->symbol_name, sym_map->symbol_addr);
+	}
+}
+
 static void append_symbol_mapping_by_name(elf_link_t *elf_link, char *key, elf_file_t *ef, char *sym_name)
 {
 	unsigned long old_sym_addr = find_sym_old_addr(ef, sym_name);
@@ -554,8 +567,11 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 			goto out;
 	}
 
-	if (is_share_mode(elf_link) == false)
+	if (is_share_mode(elf_link) == false) {
+		si_log_set_global_level(SI_LOG_LEVEL_DEBUG);
+		show_symbol_mapping(elf_link);
 		si_panic("not found symbol %s\n", sym_name);
+	}
 
 out:
 	if (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC)
