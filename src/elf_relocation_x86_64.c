@@ -241,7 +241,7 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 	Elf64_Sym *sym = NULL;
 	int ret = 0;
 
-	sym = (Elf64_Sym *)((void *)ef->hdr + ef->symtab_sec->sh_offset) + ELF64_R_SYM(rela->r_info);
+	sym = elf_get_symtab_by_rela(ef, rela);
 
 	switch (ELF64_R_TYPE(rela->r_info)) {
 	case R_X86_64_NONE:

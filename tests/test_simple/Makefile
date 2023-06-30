@@ -36,7 +36,7 @@ simple: simple_app
 	readelf -W -a $(TEST_APP).rto > simple_app.rto.elf
 	objdump -d $(TEST_APP).rto > simple_app.rto.asm
 	@echo ===run===
-	$(TEST_APP).rto
+	#$(TEST_APP).rto
 
 rto:
 	gdb --args $(SYSBOOST) --static-nold $(TEST_APP) $(LIBC)

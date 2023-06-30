@@ -91,10 +91,10 @@ void show_symbol_mapping(elf_link_t *elf_link)
 	elf_symbol_mapping_t *sym_maps = elf_link->symbol_mapping_arr->data;
 	elf_symbol_mapping_t *sym_map = NULL;
 
-	printf("symbol_name   symbol_addr\n");
+	SI_LOG_DEBUG("symbol_name                      symbol_addr\n");
 	for (int i = 0; i < len; i++) {
 		sym_map = &sym_maps[i];
-		printf("%-32s %016lx\n", sym_map->symbol_name, sym_map->symbol_addr);
+		SI_LOG_DEBUG("%-32s %016lx\n", sym_map->symbol_name, sym_map->symbol_addr);
 	}
 }
 
@@ -165,23 +165,36 @@ static unsigned long vdso_get_new_addr(Elf64_Sym *sym)
 	return 0UL - PAGE_SIZE + (unsigned long)sym->st_value;
 }
 
+#ifdef __aarch64__
+// __kernel_clock_gettime
 #define VDSO_PREFIX_LEN (sizeof("__kernel_") - 1)
+#define DL_SYSINFO_DSO_OFFSET (0x2e8)
+#else
+// __vdso_clock_gettime
+#define VDSO_PREFIX_LEN (sizeof("__vdso_") - 1)
+#define DL_SYSINFO_DSO_OFFSET (0x2e8)
+#endif
+
 static char *vdso_name_to_syscall_name(char *name)
 {
 	return name + VDSO_PREFIX_LEN;
 }
 
-// AT_SYSINFO_EHDR is addr of vdso header, but here compute it
+// AT_SYSINFO_EHDR is addr of vdso header
+// it can not use dlsym to find vdso symbol
 static unsigned long vdso_hdr_addr_cur()
 {
-	// find func in vdso, vdso is only 4K, so get elf hdr by align
-	unsigned long func = (unsigned long)dlsym(RTLD_DEFAULT, "__kernel_clock_gettime");
+	// _rtld_global_ro->_dl_sysinfo_dso, offset is fixed by libc
+	unsigned long addr = (unsigned long)dlsym(0, "_rtld_global_ro");
 	char *error = dlerror();
 	if (error != NULL) {
 		si_panic("%s\n", error);
 	}
-
-	return ALIGN(func, PAGE_SIZE) - PAGE_SIZE;
+	addr = addr + DL_SYSINFO_DSO_OFFSET;
+#ifdef __aarch64__
+	si_panic("TODO: DL_SYSINFO_DSO_OFFSET is need check\n");
+#endif
+	return *(unsigned long *)addr;
 }
 
 void init_vdso_symbol_addr(elf_link_t *elf_link)
@@ -233,6 +246,9 @@ void init_ld_symbol_addr(elf_link_t *elf_link)
 	for (int j = 0; j < sym_count; j++) {
 		Elf64_Sym *sym = &syms[j];
 		char *name = elf_get_dynsym_name(ef, sym);
+		if (name == NULL || name[0] == '\0') {
+			continue;
+		}
 		unsigned long symbol_addr = ld_get_new_addr(hdr_addr, sym);
 		append_symbol_mapping(elf_link, name, symbol_addr);
 	}
@@ -251,6 +267,8 @@ void init_symbol_mapping(elf_link_t *elf_link)
 	if (is_direct_vdso_optimize(elf_link) == true) {
 		init_vdso_symbol_addr(elf_link);
 	}
+
+	show_symbol_mapping(elf_link);
 }
 
 void show_sec_mapping(elf_link_t *elf_link)
