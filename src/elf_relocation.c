@@ -116,6 +116,7 @@ static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, El
 void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
 {
 	int type;
+	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
 
 	// modify offset
 	dst_rela->r_offset = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_offset);
@@ -150,6 +151,15 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		// some symbol do not export in .dynsym, change to R_AARCH64_RELATIVE
 		modify_rela_to_RELATIVE(elf_link, src_ef, src_rela, dst_rela);
 		break;
+	case R_X86_64_64:
+	case R_AARCH64_ABS64:
+		// [44] .bss              NOBITS          00000000001f3520 1f2510 00d590 00  WA  0   0 32
+		// 00000000001f2698  0000000e00000001 R_X86_64_64            0000000000000000 _rtld_global@GLIBC_PRIVATE + 0
+		// 14: 0000000000000000     0 OBJECT  GLOBAL DEFAULT  UND _rtld_global@GLIBC_PRIVATE (37)
+		if ((ELF64_ST_TYPE(sym->st_info) == STT_FUNC) || (ELF64_ST_TYPE(sym->st_info) == STT_OBJECT)) {
+			modify_rela_to_RELATIVE(elf_link, src_ef, src_rela, dst_rela);
+		}
+		break;
 	case R_X86_64_IRELATIVE:
 		// 000000000002f9e0  0000000000000025 R_X86_64_IRELATIVE                        15ec0
 		// 129: 0000000000015ec0    40 FUNC    LOCAL  DEFAULT   13 __x86_cpu_features_ifunc
@@ -157,9 +167,6 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 	case R_X86_64_RELATIVE:
 	case R_AARCH64_RELATIVE:
 		dst_rela->r_addend = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_addend);
-		break;
-	case R_X86_64_64:
-	case R_AARCH64_ABS64:
 		break;
 	case R_AARCH64_TLS_TPREL:
 		// all TLS got entry will be modified directly when processing instructions later,

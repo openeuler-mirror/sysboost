@@ -377,6 +377,24 @@ static void append_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t
 	write_elf_file_section(elf_link, ef, sec, dst_sec);
 }
 
+static void merge_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t *ef, Elf64_Shdr *sec)
+{
+	// in append_section, the first section need change this
+	dst_sec->sh_offset = 0;
+	dst_sec->sh_addr = 0;
+
+	append_section(elf_link, dst_sec, ef, sec);
+	dst_sec->sh_size = elf_link->next_mem_addr - dst_sec->sh_addr;
+}
+
+static void merge_section_with_name(elf_link_t *elf_link, Elf64_Shdr *dst_sec, char *sec_name)
+{
+	elf_file_t *ef = get_main_ef(elf_link);
+	Elf64_Shdr *sec = elf_find_section_by_name(ef, sec_name);
+	merge_section(elf_link, dst_sec, ef, sec);
+	SI_LOG_DEBUG("section %-20s %08lx %08lx %06lx\n", sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
+}
+
 static void merge_filter_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t *ef, section_filter_func filter)
 {
 	int count = ef->hdr->e_shnum;
@@ -410,7 +428,7 @@ static void merge_filter_sections(elf_link_t *elf_link, char *sec_name, section_
 	}
 
 	dst_sec->sh_size = elf_link->next_mem_addr - dst_sec->sh_addr;
-	SI_LOG_DEBUG("merge_filter_sections: section %-20s %08lx %08lx %06lx\n", sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
+	SI_LOG_DEBUG("section %-20s %08lx %08lx %06lx\n", sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
 }
 
 static void merge_text_sections(elf_link_t *elf_link)
@@ -524,7 +542,7 @@ static void copy_from_old_elf(elf_link_t *elf_link)
 	copy_elf_file(template_ef, 0, out_ef, 0, elf_link->next_file_offset);
 	elf_link->next_mem_addr = elf_link->next_file_offset;
 
-	// reserve 3 segment space
+	// reserve 3 segment space, main ELF may not have TLS segment
 	write_elf_file_zero(elf_link, template_ef->hdr->e_phentsize * 3);
 
 	// copy old sections, remove RELA
@@ -575,6 +593,8 @@ static void modify_INTERP_segment(elf_link_t *elf_link)
 	p->p_offset = tmp_sec->sh_offset;
 	p->p_vaddr = p->p_offset;
 	p->p_paddr = p->p_offset;
+	p->p_filesz = tmp_sec->sh_size;
+	p->p_memsz = p->p_filesz;
 }
 
 static void modify_GNU_EH_FRAME_segment(elf_link_t *elf_link)
@@ -609,6 +629,7 @@ static void write_so_path_struct(elf_link_t *elf_link)
 	}
 }
 
+/*
 static void write_sysboost_section(elf_link_t *elf_link)
 {
 	if (is_static_mode(elf_link) == false) {
@@ -633,9 +654,10 @@ static void write_sysboost_section(elf_link_t *elf_link)
 	sec->sh_entsize = 0;
 	elf_link->sysboost_data_sec = sec;
 }
+*/
 
 // call after .text ready
-static void modify_app_entry_addr(elf_link_t *elf_link)
+/*static void modify_app_entry_addr(elf_link_t *elf_link)
 {
 	if (is_static_mode(elf_link) == false) {
 		return;
@@ -645,10 +667,10 @@ static void modify_app_entry_addr(elf_link_t *elf_link)
 	unsigned long old_sym_addr = find_sym_old_addr(main_ef, "main");
 	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, main_ef, old_sym_addr);
 	elf_link->sysboost_data->entry_addr = new_sym_addr;
-}
+}*/
 
 // call after .shstrtab ready
-static void append_sysboost_sec_name(elf_link_t *elf_link)
+/*static void append_sysboost_sec_name(elf_link_t *elf_link)
 {
 	if (is_static_mode(elf_link) == false) {
 		return;
@@ -658,29 +680,55 @@ static void append_sysboost_sec_name(elf_link_t *elf_link)
 	unsigned int index = elf_link->out_ef.shstrtab_sec->sh_size;
 	elf_link->sysboost_data_sec->sh_name = index;
 	elf_link->out_ef.shstrtab_sec->sh_size += sizeof(SYSBOOST_DATA_SEC_NAME);
+}*/
+
+// main ELF and libc.so have .interp, need to ignore it
+// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag
+static void write_interp_and_note(elf_link_t *elf_link)
+{
+	Elf64_Shdr *sec = NULL;
+	Elf64_Shdr *begin_sec = NULL;
+	Elf64_Shdr *end_sec = NULL;
+	char *name = NULL;
+
+	begin_sec = find_tmp_section_by_name(elf_link, ".interp");
+	// end is before .gnu.hash
+	end_sec = find_tmp_section_by_name(elf_link, ".gnu.hash");
+
+	if (begin_sec == NULL || end_sec == NULL) {
+		si_panic("section not found\n");
+	}
+
+	for (sec = begin_sec; sec < end_sec; sec = sec + 1) {
+		name = elf_get_tmp_section_name(elf_link, sec);
+		merge_section_with_name(elf_link, sec, name);
+	}
 }
 
 // .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt
 static void write_first_LOAD_segment(elf_link_t *elf_link)
 {
-	Elf64_Phdr *p;
+	Elf64_Phdr *p = NULL;
 	int count = elf_link->out_ef.hdr->e_shnum;
 	Elf64_Shdr *sechdrs = elf_link->out_ef.sechdrs;
 	char *name = NULL;
 
-	// first segment sec is SHF_ALLOC, end by SHF_EXECINSTR
-	for (int i = 1; i < count; i++) {
-		if (!(sechdrs[i].sh_flags & SHF_ALLOC)) {
-			continue;
-		}
+	// main ELF and libc.so have .interp, need to ignore it
+	// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag
+	write_interp_and_note(elf_link);
+
+	// first sec is .gnu.hash, end by SHF_EXECINSTR
+	Elf64_Shdr *sec = find_tmp_section_by_name(elf_link, ".gnu.hash");
+	int i = sec - sechdrs;
+	for (; i < count; i++) {
 		if (sechdrs[i].sh_flags & SHF_EXECINSTR) {
 			break;
 		}
 
 		// write after NOTE section, so it can load in first PAGE memory
-		if ((sechdrs[i - 1].sh_type == SHT_NOTE) && (sechdrs[i].sh_type != SHT_NOTE)) {
+		/*if ((sechdrs[i - 1].sh_type == SHT_NOTE) && (sechdrs[i].sh_type != SHT_NOTE)) {
 			write_sysboost_section(elf_link);
-		}
+		}*/
 
 		name = elf_get_tmp_section_name(elf_link, &sechdrs[i]);
 		if (is_direct_call_optimize(elf_link) == true) {
@@ -1367,7 +1415,7 @@ static void write_shstrtab(elf_link_t *elf_link)
 
 	elf_link->out_ef.shstrtab_data = (char *)elf_link->out_ef.hdr + sec->sh_offset;
 
-	append_sysboost_sec_name(elf_link);
+	//append_sysboost_sec_name(elf_link);
 }
 
 static void modify_section_name_index(elf_link_t *elf_link)
@@ -1401,7 +1449,7 @@ static void modify_elf_header(elf_link_t *elf_link)
 	elf_file_t *template_ef = get_template_ef(elf_link);
 	hdr->e_entry = get_new_addr_by_old_addr(elf_link, template_ef, hdr->e_entry);
 
-	modify_app_entry_addr(elf_link);
+	//modify_app_entry_addr(elf_link);
 
 	// set hugepage flag
 	elf_set_hugepage(elf_link);
@@ -1414,7 +1462,7 @@ char *disabled_funcs[] = {
     "__do_global_dtors_aux",
 };
 #define DISABLED_FUNCS_LEN (sizeof(disabled_funcs) / sizeof(disabled_funcs[0]))
-#define AARCH64_INSN_RET 0xD65F03C0
+#define AARCH64_INSN_RET 0xD65F03C0U
 #define X86_64_INSN_RET 0xC3
 static void modify_init_and_fini(elf_link_t *elf_link)
 {
@@ -1498,14 +1546,13 @@ int elf_link_write(elf_link_t *elf_link)
 		return -1;
 	}
 
-	// copy first LOAD segment
+	// copy ELF header and PHDR segment
 	copy_from_old_elf(elf_link);
-	// elf_show_segments(&elf_link->out_ef);
 
 	elf_link_write_sections(elf_link);
 
-	// PHDR segment
-	if (is_share_mode(elf_link)) {
+	// modify PHDR and INTERP segment
+	if (is_share_mode(elf_link) || is_static_nold_mode(elf_link)) {
 		modify_PHDR_segment(elf_link);
 		modify_INTERP_segment(elf_link);
 	}
@@ -1530,12 +1577,14 @@ int elf_link_write(elf_link_t *elf_link)
 	modify_symtab(elf_link);
 
 	// sort symbol must before get_new_sym_index
+
+	// symbol addr ready before rela use it
+	init_symbol_mapping(elf_link);
+
 	// .rela.dyn
 	modify_rela_dyn(elf_link);
 	// .rela.plt .plt.got
 	modify_got(elf_link);
-
-	init_symbol_mapping(elf_link);
 
 	// modify local call to use jump
 	// .rela.init .rela.text .rela.rodata .rela.tdata .rela.init_array .rela.data

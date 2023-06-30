@@ -47,6 +47,7 @@ enum RtoMode {
 	ELF_LINK_STATIC_NOLD,
 };
 
+/*
 #define SYSBOOST_DATA_ALIGN (8)
 #define SYSBOOST_DATA_VERSION (1)
 #define SYSBOOST_DATA_SEC_NAME ".sysboost_data"
@@ -59,6 +60,7 @@ typedef struct {
 	char pad[7];
 	unsigned long entry_addr;
 } elf_sysboost_data_t;
+*/
 
 typedef struct {
 	elf_file_t in_efs[MAX_ELF_FILE];
@@ -93,7 +95,7 @@ typedef struct {
 	bool hook_func;
 	unsigned long so_path_struct;
 
-	elf_sysboost_data_t *sysboost_data;
+	//elf_sysboost_data_t *sysboost_data;
 	Elf64_Shdr *sysboost_data_sec;
 } elf_link_t;
 
@@ -166,7 +168,7 @@ static inline elf_file_t *get_template_ef(elf_link_t *elf_link)
 
 static inline elf_file_t *get_main_ef(elf_link_t *elf_link)
 {
-	if (is_share_mode(elf_link) == true) {
+	if (is_share_mode(elf_link) || is_static_nold_mode(elf_link)) {
 		return &elf_link->in_efs[0];
 	}
 

@@ -119,7 +119,7 @@ unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name)
 			return i;
 	}
 
-	si_panic("%s fail %s\n", __func__, name);
+	si_panic("find symbol fail %s %s\n", ef->file_name, name);
 	return ~0U; /* unreachable */
 }
 
