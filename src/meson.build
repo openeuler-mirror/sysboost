@@ -18,8 +18,9 @@ ext_deps = []
 deps = static_link_libraries
 
 if get_option('buildtype').contains('debug')
+	# debug compile need with debuginfo
 	default_cflags += [ '-pedantic', '-DPEDANTIC', '-Og', '-g', '-rdynamic' ]
-	default_ldflags += ['-rdynamic']
+	default_ldflags += [ '-Og', '-g', '-rdynamic']
 else
 	default_cflags += [ '-UPEDANTIC', '-O2' ]
 endif
