@@ -17,9 +17,11 @@ default_ldflags = lk_args
 ext_deps = []
 deps = static_link_libraries
 
+# Added -rdynamic option to trace stack information
 if get_option('buildtype').contains('debug')
 	# debug compile need with debuginfo
 	default_cflags += [ '-pedantic', '-DPEDANTIC', '-Og', '-g', '-rdynamic' ]
+	default_cflags += [ '-DDEBUG' ]
 	default_ldflags += [ '-Og', '-g', '-rdynamic']
 else
 	default_cflags += [ '-UPEDANTIC', '-O2' ]
@@ -60,6 +62,7 @@ cflags += ['-fpic', '-pie']
 
 executable('sysboost', core_sources,
         install: true,
+        install_dir: "/usr/bin",
         c_args: default_cflags,
         link_args: default_ldflags,
         dependencies: deps,
