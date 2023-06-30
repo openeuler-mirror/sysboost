@@ -95,6 +95,8 @@ bool elf_is_same_area(const elf_file_t *ef, const Elf64_Shdr *a, const Elf64_Shd
 
 // ELF
 void elf_parse_hdr(elf_file_t *ef);
+void elf_read_elf_phdr(elf_file_t *ef);
+void elf_read_elf_sections(elf_file_t *ef);
 int elf_read_file(char *file_name, elf_file_t *elf, bool is_readonly);
 int elf_read_file_relocation(char *file_name, elf_file_t *ef);
 

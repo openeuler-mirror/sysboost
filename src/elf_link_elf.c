@@ -25,7 +25,6 @@
 #define LD_SO_PATH "/lib64/ld-linux-x86-64.so.2"
 #endif
 
-// mode: static share
 elf_link_t *elf_link_new()
 {
 	elf_link_t *elf_link = NULL;
@@ -39,6 +38,7 @@ elf_link_t *elf_link_new()
 	}
 	bzero(elf_link, sizeof(elf_link_t));
 
+	// prepare temp secs for link
 	elf_link->out_ef.sechdrs = elf_link->tmp_sechdrs_buf;
 
 	elf_link->symbol_mapping_arr = si_array_new(sizeof(elf_symbol_mapping_t));
@@ -199,6 +199,11 @@ static bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *
 {
 	char *name = elf_get_section_name(ef, sec);
 
+	// first section name is empty
+	if (name == NULL || *name == '\0') {
+		return true;
+	}
+
 	// no use .plt, so delete .rela.plt
 	if (is_direct_call_optimize(elf_link) == true) {
 		if (!strcmp(name, ".rela.plt"))
@@ -210,7 +215,7 @@ static bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *
 			return true;
 	}
 
-	if (elf_link->delete_symbol_version == false) {
+	if (is_delete_symbol_version(elf_link) == false) {
 		if (!strcmp(name, ".gnu.version"))
 			return true;
 		if (!strcmp(name, ".gnu.version_r"))
@@ -233,30 +238,12 @@ static bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *
 	*/
 }
 
-static void copy_old_sections(elf_link_t *elf_link)
-{
-	int i, j, count;
-	Elf64_Shdr *src_sec = NULL;
-	elf_file_t *template_ef = get_template_ef(elf_link);
-
-	// copy old sections, remove RELA
-	count = template_ef->hdr->e_shnum;
-	src_sec = template_ef->sechdrs;
-	j = 0;
-	for (i = 0; i < count; i++) {
-		/* keep 0th section and other sections we need */
-		if (i && !is_section_needed(elf_link, template_ef, &src_sec[i]))
-			continue;
-		(void)memcpy((void *)&elf_link->out_ef.sechdrs[j], (void *)&src_sec[i], sizeof(Elf64_Shdr));
-		append_obj_mapping(elf_link, template_ef, NULL, (void *)&src_sec[i],
-				   (void *)&elf_link->out_ef.sechdrs[j]);
-		j++;
-	}
-	elf_link->out_ef.hdr->e_shnum = j;
-}
-
 static Elf64_Shdr *add_tmp_section(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *src_sec)
 {
+	if (is_section_needed(elf_link, ef, src_sec) == false) {
+		return NULL;
+	}
+
 	int j = elf_link->out_ef.hdr->e_shnum;
 	if (j == MAX_ELF_SECTION - 1) {
 		si_panic("not more new elf sections can be created\n");
@@ -275,6 +262,49 @@ static Elf64_Shdr *add_tmp_section(elf_link_t *elf_link, elf_file_t *ef, Elf64_S
 	return dst_sec;
 }
 
+static Elf64_Shdr *add_tmp_section_by_name(elf_link_t *elf_link, const char *name)
+{
+	Elf64_Shdr *tmp_sec = NULL;
+	elf_file_t *ef = get_template_ef(elf_link);
+	int count = elf_link->in_ef_nr;
+	Elf64_Shdr *sec = NULL;
+
+	// find in template elf, then find in other elfs
+	sec = elf_find_section_by_name(ef, name);
+	if (sec != NULL) {
+		goto out;
+	}
+
+	// copy sec_struct to tmp
+	for (int i = 0; i < count; i++) {
+		ef = &elf_link->in_efs[i];
+		sec = elf_find_section_by_name(ef, name);
+		if (sec == NULL) {
+			continue;
+		}
+		// found
+		break;
+	}
+	if (sec == NULL) {
+		return NULL;
+	}
+
+out:
+	tmp_sec = add_tmp_section(elf_link, ef, sec);
+	return tmp_sec;
+}
+
+static void copy_old_sections(elf_link_t *elf_link)
+{
+	Elf64_Shdr *src_sec = NULL;
+	elf_file_t *template_ef = get_template_ef(elf_link);
+
+	// copy first section
+	elf_link->out_ef.hdr->e_shnum = 0;
+	src_sec = template_ef->sechdrs;
+	(void)add_tmp_section(elf_link, template_ef, src_sec);
+}
+
 static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, const char *name)
 {
 	elf_file_t *ef;
@@ -286,7 +316,7 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 
 	tmp_sec->sh_offset = elf_align_file(elf_link, tmp_sec->sh_addralign);
 	tmp_sec->sh_addr = elf_link->next_mem_addr;
-	SI_LOG_DEBUG("write_merge_section: section %s at 0x%lx\n", name, tmp_sec->sh_offset);
+	SI_LOG_DEBUG("section %s at 0x%lx\n", name, tmp_sec->sh_offset);
 
 	for (int i = 0; i < count; i++) {
 		if (!strcmp(name, ".init_array"))
@@ -332,28 +362,11 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 
 static Elf64_Shdr *write_merge_section(elf_link_t *elf_link, const char *name)
 {
-	Elf64_Shdr *tmp_sec = find_tmp_section_by_name(elf_link, name);
-	elf_file_t *ef;
-	int count = elf_link->in_ef_nr;
-	Elf64_Shdr *sec = NULL;
-
+	Elf64_Shdr *tmp_sec = add_tmp_section_by_name(elf_link, name);
 	if (tmp_sec == NULL) {
-		for (int i = 0; i < count; i++) {
-			ef = &elf_link->in_efs[i];
-			sec = elf_find_section_by_name(ef, name);
-			if (sec == NULL) {
-				continue;
-			}
-			// found
-			break;
-		}
-
-		if (sec == NULL) {
-			return NULL;
-		}
-		tmp_sec = add_tmp_section(elf_link, ef, sec);
+		si_panic("section is not needed, %s\n", name);
+		return NULL;
 	}
-
 	return elf_merge_section(elf_link, tmp_sec, name);
 }
 
@@ -387,10 +400,15 @@ static void merge_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t 
 	dst_sec->sh_size = elf_link->next_mem_addr - dst_sec->sh_addr;
 }
 
-static void merge_section_with_name(elf_link_t *elf_link, Elf64_Shdr *dst_sec, char *sec_name)
+static void merge_section_with_name(elf_link_t *elf_link, char *sec_name)
 {
-	elf_file_t *ef = get_main_ef(elf_link);
+	elf_file_t *ef = get_template_ef(elf_link);
 	Elf64_Shdr *sec = elf_find_section_by_name(ef, sec_name);
+	Elf64_Shdr *dst_sec = add_tmp_section(elf_link, ef, sec);
+	if (dst_sec == NULL) {
+		return;
+	}
+
 	merge_section(elf_link, dst_sec, ef, sec);
 	SI_LOG_DEBUG("section %-20s %08lx %08lx %06lx\n", sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
 }
@@ -415,7 +433,11 @@ static void merge_filter_sections(elf_link_t *elf_link, char *sec_name, section_
 {
 	elf_file_t *ef = NULL;
 	int count = elf_link->in_ef_nr;
-	Elf64_Shdr *dst_sec = find_tmp_section_by_name(elf_link, sec_name);
+	Elf64_Shdr *dst_sec = add_tmp_section_by_name(elf_link, sec_name);
+
+	if (dst_sec == NULL) {
+		si_panic("section is not needed, %s\n", sec_name);
+	}
 
 	// in append_section, the first section need change this
 	dst_sec->sh_offset = 0;
@@ -511,8 +533,9 @@ static void modify_section_link(elf_link_t *elf_link)
 		sec = &elf_link->out_ef.sechdrs[i];
 		if (sec->sh_link != 0 && (int)sec->sh_link < count) {
 			find_sec = find_tmp_section_by_src(elf_link, &src_sec[sec->sh_link]);
-			if (find_sec == NULL)
+			if (find_sec == NULL) {
 				si_panic("find sec fail\n");
+			}
 			sec->sh_link = find_sec - elf_link->out_ef.sechdrs;
 		}
 		if (sec->sh_info != 0 && (int)sec->sh_info < count) {
@@ -525,11 +548,6 @@ static void modify_section_link(elf_link_t *elf_link)
 			sec->sh_info = find_sec - elf_link->out_ef.sechdrs;
 		}
 	}
-
-	find_sec = find_tmp_section_by_name(elf_link, ".shstrtab");
-	if (find_sec == NULL)
-		si_panic("find sec .shstrtab fail\n");
-	elf_link->out_ef.hdr->e_shstrndx = find_sec - elf_link->out_ef.sechdrs;
 }
 
 static void copy_from_old_elf(elf_link_t *elf_link)
@@ -547,20 +565,16 @@ static void copy_from_old_elf(elf_link_t *elf_link)
 
 	// copy old sections, remove RELA
 	copy_old_sections(elf_link);
-	elf_link->out_ef.sechdrs = elf_link->out_ef.sechdrs;
 	elf_link->out_ef.shstrtab_data = template_ef->shstrtab_data;
 	elf_link->out_ef.strtab_data = template_ef->strtab_data;
 
 	// use old phdr
-	elf_parse_hdr(&elf_link->out_ef);
+	elf_read_elf_phdr(&elf_link->out_ef);
 
 	// ELF must pie
 	if (elf_link->out_ef.hdr_Phdr->p_vaddr != 0UL) {
 		si_panic("ELF must compile with pie\n");
 	}
-
-	// after parse can use find section
-	modify_section_link(elf_link);
 }
 
 static void modify_PHDR_segment(elf_link_t *elf_link)
@@ -686,22 +700,23 @@ static void write_sysboost_section(elf_link_t *elf_link)
 // .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag
 static void write_interp_and_note(elf_link_t *elf_link)
 {
+	elf_file_t *template_ef = get_template_ef(elf_link);
 	Elf64_Shdr *sec = NULL;
 	Elf64_Shdr *begin_sec = NULL;
 	Elf64_Shdr *end_sec = NULL;
 	char *name = NULL;
 
-	begin_sec = find_tmp_section_by_name(elf_link, ".interp");
+	begin_sec = elf_find_section_by_name(template_ef, ".interp");
 	// end is before .gnu.hash
-	end_sec = find_tmp_section_by_name(elf_link, ".gnu.hash");
+	end_sec = elf_find_section_by_name(template_ef, ".gnu.hash");
 
 	if (begin_sec == NULL || end_sec == NULL) {
 		si_panic("section not found\n");
 	}
 
 	for (sec = begin_sec; sec < end_sec; sec = sec + 1) {
-		name = elf_get_tmp_section_name(elf_link, sec);
-		merge_section_with_name(elf_link, sec, name);
+		name = elf_get_section_name(template_ef, sec);
+		merge_section_with_name(elf_link, name);
 	}
 }
 
@@ -709,19 +724,20 @@ static void write_interp_and_note(elf_link_t *elf_link)
 static void write_first_LOAD_segment(elf_link_t *elf_link)
 {
 	Elf64_Phdr *p = NULL;
-	int count = elf_link->out_ef.hdr->e_shnum;
-	Elf64_Shdr *sechdrs = elf_link->out_ef.sechdrs;
 	char *name = NULL;
+	elf_file_t *template_ef = get_template_ef(elf_link);
+	int count = template_ef->hdr->e_shnum;
+	Elf64_Shdr *secs = template_ef->sechdrs;
 
 	// main ELF and libc.so have .interp, need to ignore it
 	// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag
 	write_interp_and_note(elf_link);
 
 	// first sec is .gnu.hash, end by SHF_EXECINSTR
-	Elf64_Shdr *sec = find_tmp_section_by_name(elf_link, ".gnu.hash");
-	int i = sec - sechdrs;
+	Elf64_Shdr *sec = elf_find_section_by_name(template_ef, ".gnu.hash");
+	int i = sec - secs;
 	for (; i < count; i++) {
-		if (sechdrs[i].sh_flags & SHF_EXECINSTR) {
+		if (secs[i].sh_flags & SHF_EXECINSTR) {
 			break;
 		}
 
@@ -730,11 +746,14 @@ static void write_first_LOAD_segment(elf_link_t *elf_link)
 			write_sysboost_section(elf_link);
 		}*/
 
-		name = elf_get_tmp_section_name(elf_link, &sechdrs[i]);
-		if (is_direct_call_optimize(elf_link) == true) {
-			if (!strcmp(name, ".rela.plt"))
-				continue;
+		name = elf_get_section_name(template_ef, &secs[i]);
+		if (is_direct_call_optimize(elf_link) && (strcmp(name, ".rela.plt") == 0)) {
+			continue;
 		}
+		if (is_delete_symbol_version(elf_link) && ((strcmp(name, ".gnu.version")) == 0 || (strcmp(name, ".gnu.version_r")) == 0)) {
+			continue;
+		}
+
 		write_merge_section(elf_link, name);
 	}
 
@@ -802,6 +821,7 @@ static void write_rodata(elf_link_t *elf_link)
 	}
 
 	merge_rodata_sections(elf_link);
+	write_merge_section(elf_link, ".eh_frame_hdr");
 
 	// rodata
 	elf_file_t *out_ef = &elf_link->out_ef;
@@ -1037,7 +1057,7 @@ static int dynamic_copy_obj(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 			break;
 		case DT_VERNEED:
 		case DT_VERSYM:
-			if (elf_link->delete_symbol_version) {
+			if (is_delete_symbol_version(elf_link)) {
 				continue;
 			}
 			fallthrough;
@@ -1099,7 +1119,7 @@ static int dynamic_copy_obj(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 			new_d_val = sec->sh_size;
 			break;
 		case DT_VERNEEDNUM:
-			if (elf_link->delete_symbol_version) {
+			if (is_delete_symbol_version(elf_link)) {
 				continue;
 			}
 			// TODO: feature, symbol version DT_VERNEEDNUM
@@ -1420,8 +1440,21 @@ static void write_shstrtab(elf_link_t *elf_link)
 
 static void modify_section_name_index(elf_link_t *elf_link)
 {
-	Elf64_Shdr *secs = elf_link->out_ef.sechdrs;
-	int sec_count = elf_link->out_ef.hdr->e_shnum;
+	elf_file_t *ef = &elf_link->out_ef;
+	Elf64_Shdr *secs = ef->sechdrs;
+	int sec_count = ef->hdr->e_shnum;
+
+	// modify section link index, elf_read_elf_sections use link
+	modify_section_link(elf_link);
+
+	// sec points needed by modify_rela_dyn
+	elf_read_elf_sections(ef);
+
+	Elf64_Shdr *find_sec = find_tmp_section_by_name(elf_link, ".shstrtab");
+	if (find_sec == NULL) {
+		si_panic("find sec .shstrtab fail\n");
+	}
+	ef->hdr->e_shstrndx = find_sec - secs;
 
 	// modify section name index, skip first one
 	for (int i = 1; i < sec_count; i++) {
@@ -1432,7 +1465,7 @@ static void modify_section_name_index(elf_link_t *elf_link)
 		secs[i].sh_name = get_new_name_offset(elf_link, obj_mapping->src_ef, obj_mapping->src_ef->shstrtab_sec, secs[i].sh_name);
 	}
 
-	elf_show_sections(&elf_link->out_ef);
+	elf_show_sections(ef);
 }
 
 static void modify_elf_header(elf_link_t *elf_link)
@@ -1442,6 +1475,7 @@ static void modify_elf_header(elf_link_t *elf_link)
 	void *src = elf_link->out_ef.sechdrs;
 
 	// write sections
+	// addr point to sections
 	hdr->e_shoff = elf_link->next_file_offset;
 	write_elf_file(elf_link, src, len);
 

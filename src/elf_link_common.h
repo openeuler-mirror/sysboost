@@ -160,6 +160,11 @@ static inline bool is_direct_vdso_optimize(elf_link_t *elf_link)
 	return elf_link->direct_vdso_optimize;
 }
 
+static inline bool is_delete_symbol_version(elf_link_t *elf_link)
+{
+	return elf_link->delete_symbol_version;
+}
+
 static inline elf_file_t *get_template_ef(elf_link_t *elf_link)
 {
 	// use first ef as template
