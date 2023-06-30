@@ -30,7 +30,6 @@ simple_app:
 
 # static mode
 simple: simple_app
-	clear
 	@echo ===rto===
 	$(SYSBOOST) --static-nold $(TEST_APP) $(LIBC)
 	readelf -W -a $(TEST_APP).rto > simple_app.rto.elf
