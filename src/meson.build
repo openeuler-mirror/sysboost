@@ -62,7 +62,7 @@ cflags += ['-fpic', '-pie']
 
 executable('sysboost', core_sources,
         install: true,
-        install_dir: "/usr/bin",
+        install_dir: '/usr/bin',
         c_args: default_cflags,
         link_args: default_ldflags,
         dependencies: deps,
