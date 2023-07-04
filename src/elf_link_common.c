@@ -544,7 +544,7 @@ unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef,
 	// something wrong had happen
 	si_log_set_global_level(SI_LOG_LEVEL_DEBUG);
 	show_sec_mapping(elf_link);
-	si_panic("get addr fail: %s %lx %lx\n", src_ef->file_name, addr, ret);
+	si_panic("get addr fail: %s addr %lx ret %lx\n", src_ef->file_name, addr, ret);
 	return -1;
 }
 

@@ -68,8 +68,9 @@ int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear)
 		}
 	}
 
-	if (found_index == -1)
-		si_panic("fail\n");
+	if (found_index == -1) {
+		si_panic("%s\n", name);
+	}
 
 	return found_index;
 }
@@ -228,7 +229,6 @@ bool text_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
 
 bool rodata_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
 {
-	(void)ef;
 	if (sec->sh_type != SHT_PROGBITS) {
 		return false;
 	}
@@ -244,6 +244,13 @@ bool rodata_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
 	if (sec->sh_flags & SHF_INFO_LINK) {
 		return false;
 	}
+
+	// exclude .eh_frame_hdr
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".eh_frame_hdr") == 0) {
+		return false;
+	}
+
 	return true;
 }
 
@@ -334,7 +341,7 @@ bool elf_is_same_area(const elf_file_t *ef, const Elf64_Shdr *a, const Elf64_Shd
 	return false;
 }
 
-void read_elf_sections(elf_file_t *ef)
+void elf_read_elf_sections(elf_file_t *ef)
 {
 	unsigned int i;
 	unsigned int index_str;
@@ -396,7 +403,7 @@ aarch64 has 2 LOAD
   GNU_STACK      0x000000 0x0000000000000000 0x0000000000000000 0x000000 0x000000 RW  0x10
   GNU_RELRO      0x1ffca8 0x00000000003ffca8 0x00000000003ffca8 0x000358 0x000358 R   0x1
 */
-void read_elf_phdr(elf_file_t *ef)
+void elf_read_elf_phdr(elf_file_t *ef)
 {
 	int i;
 	char *load_addr;
@@ -433,8 +440,8 @@ void read_elf_phdr(elf_file_t *ef)
 
 void elf_parse_hdr(elf_file_t *ef)
 {
-	read_elf_sections(ef);
-	read_elf_phdr(ef);
+	elf_read_elf_sections(ef);
+	elf_read_elf_phdr(ef);
 }
 
 static int read_elf_info(elf_file_t *ef, bool is_readonly)
