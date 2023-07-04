@@ -73,6 +73,11 @@ MODULE_PARM_DESC(debug, "debug mode");
 #define EF_AARCH64_HUGEPAGE (0x00020000U)
 #endif
 
+/* compat 22.03 LTS, 22.03 LTS SP2 */
+#ifndef MM_SAVED_AUXV
+#define MM_SAVED_AUXV(mm) mm->saved_auxv
+#endif
+
 extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
@@ -1123,8 +1128,10 @@ static inline int try_replace_file(struct linux_binprm *bprm)
 #undef start_thread
 #endif
 
+#define start_thread ___start_thread
+
 // arm64 start_thread is inline function, so copy it
-static inline void start_thread(struct pt_regs *regs, unsigned long pc,
+static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
 				    unsigned long sp)
 {
 	start_thread_common(regs, pc);
@@ -1133,6 +1140,7 @@ static inline void start_thread(struct pt_regs *regs, unsigned long pc,
 	regs->sp = sp;
 }
 #endif /* CONFIG_ARM64 */
+
 #endif /* CONFIG_ELF_SYSBOOST */
 
 static int load_elf_binary(struct linux_binprm *bprm)
