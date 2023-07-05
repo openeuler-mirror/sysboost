@@ -5,7 +5,7 @@ SYSBOOST=../build/sysboost/sysboost
 SYSBOOSTD_INSTALL_PATH=/usr/bin/sysboostd
 SYSBOOST_INSTALL_PATH=/usr/bin/sysboost
 
-all: sysboostd sysboost
+all: sysboostd sysboost binfmt_rto
 
 sysboostd:
 	clear
@@ -13,6 +13,9 @@ sysboostd:
 
 sysboost:
 	ninja -C build -v
+
+binfmt_rto:
+	make -C src/binfmt_rto
 
 release:
 	rm -rf build
