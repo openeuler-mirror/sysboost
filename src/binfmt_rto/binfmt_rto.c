@@ -65,8 +65,8 @@ static int debug = 0;
 module_param(debug, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "debug mode");
 
-#ifndef EF_AARCH64_AOT
-#define EF_AARCH64_AOT      (0x00010000U)
+#ifndef EF_AARCH64_SYMBOLIC_LINK
+#define EF_AARCH64_SYMBOLIC_LINK      (0x00010000U)
 #endif
 
 #ifndef EF_AARCH64_HUGEPAGE
@@ -1167,7 +1167,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct pt_regs *regs;
 
 #ifdef CONFIG_ELF_SYSBOOST
-	bool is_rto_format = elf_ex->e_flags & EF_AARCH64_AOT;
+	bool is_rto_format = elf_ex->e_flags & EF_AARCH64_SYMBOLIC_LINK;
 
 load_rto:
 	retval = -ENOEXEC;
@@ -1197,7 +1197,7 @@ load_rto:
 
 #ifdef CONFIG_ELF_SYSBOOST
 	/* e_flags will change */
-	if (elf_ex->e_flags & EF_AARCH64_AOT) {
+	if (elf_ex->e_flags & EF_AARCH64_SYMBOLIC_LINK) {
 		if (!try_replace_file(bprm))
 			goto load_rto;
 	} else if (debug) {
