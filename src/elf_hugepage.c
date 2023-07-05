@@ -36,11 +36,10 @@
 #endif
 #define OS_SPECIFIC_MASK (0xffffffffU ^ OS_SPECIFIC_FLAG_SYMBOLIC_LINK ^ OS_SPECIFIC_FLAG_HUGEPAGE)
 
-void _elf_set_aot(elf_file_t *ef, bool state)
+void _elf_set_symbolic_link(elf_file_t *ef, bool state)
 {
 	if (state) {
 		ef->hdr->e_flags |= OS_SPECIFIC_FLAG_SYMBOLIC_LINK;
-		ef->hdr->e_flags |= OS_SPECIFIC_FLAG_HUGEPAGE;
 	} else {
 		ef->hdr->e_flags &= OS_SPECIFIC_MASK;
 	}
@@ -61,10 +60,10 @@ void elf_set_hugepage(elf_link_t *elf_link)
 		}
 	}
 
-	_elf_set_aot(ef, true);
+	ef->hdr->e_flags |= OS_SPECIFIC_FLAG_HUGEPAGE;
 }
 
-int elf_set_aot(char *path, bool state)
+int elf_set_symbolic_link(char *path, bool state)
 {
 	// this memory will free by process exit
 	elf_file_t *ef = malloc(sizeof(elf_file_t));
@@ -78,7 +77,7 @@ int elf_set_aot(char *path, bool state)
 		return -1;
 	}
 
-	_elf_set_aot(ef, state);
+	_elf_set_symbolic_link(ef, state);
 
 	close(ef->fd);
 	// This process is a oneshot process. The release of variable ef depends
