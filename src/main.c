@@ -51,14 +51,14 @@ int main(int argc, char *argv[])
 				SI_LOG_ERR("get realpath fail: %s\n", optarg);
 				return -1;
 			}
-			return elf_set_aot(tmp, true);
+			return elf_set_symbolic_link(tmp, true);
 		case 'u':
 			str_ret = realpath(optarg, tmp);
 			if (!str_ret) {
 				SI_LOG_ERR("get realpath fail: %s\n", optarg);
 				return -1;
 			}
-			return elf_set_aot(tmp, false);
+			return elf_set_symbolic_link(tmp, false);
 		case 'h':
 			elf_link->hook_func = true;
 			SI_LOG_INFO("hook func\n");
