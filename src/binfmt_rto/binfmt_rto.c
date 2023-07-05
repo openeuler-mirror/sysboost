@@ -73,6 +73,22 @@ MODULE_PARM_DESC(debug, "debug mode");
 #define EF_AARCH64_HUGEPAGE (0x00020000U)
 #endif
 
+#ifndef EF_X86_64_SYMBOLIC_LINK
+#define EF_X86_64_SYMBOLIC_LINK    (0x00010000U)
+#endif
+
+#ifndef EF_X86_64_HUGEPAGE
+#define EF_X86_64_HUGEPAGE         (0x00020000U)
+#endif
+
+#ifdef CONFIG_ARM64
+#define OS_SPECIFIC_FLAG_SYMBOLIC_LINK EF_AARCH64_SYMBOLIC_LINK
+#define OS_SPECIFIC_FLAG_HUGEPAGE EF_AARCH64_HUGEPAGE
+#else
+#define OS_SPECIFIC_FLAG_SYMBOLIC_LINK EF_X86_64_SYMBOLIC_LINK
+#define OS_SPECIFIC_FLAG_HUGEPAGE EF_X86_64_HUGEPAGE
+#endif
+
 /* compat 22.03 LTS, 22.03 LTS SP2 */
 #ifndef MM_SAVED_AUXV
 #define MM_SAVED_AUXV(mm) mm->saved_auxv
@@ -1167,7 +1183,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct pt_regs *regs;
 
 #ifdef CONFIG_ELF_SYSBOOST
-	bool is_rto_format = elf_ex->e_flags & EF_AARCH64_SYMBOLIC_LINK;
+	bool is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_SYMBOLIC_LINK;
 
 load_rto:
 	retval = -ENOEXEC;
@@ -1197,7 +1213,7 @@ load_rto:
 
 #ifdef CONFIG_ELF_SYSBOOST
 	/* e_flags will change */
-	if (elf_ex->e_flags & EF_AARCH64_SYMBOLIC_LINK) {
+	if (elf_ex->e_flags & OS_SPECIFIC_FLAG_SYMBOLIC_LINK) {
 		if (!try_replace_file(bprm))
 			goto load_rto;
 	} else if (debug) {
