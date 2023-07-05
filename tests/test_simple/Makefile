@@ -55,10 +55,6 @@ nolibc: simple_app
 	@echo ===run===
 	$(TEST_APP).rto
 
-aot: simple_app
-	$(SYSBOOST) -set $(TEST_APP)
-	readelf -W -a $(TEST_APP) > simple_app.aot.elf
-
 env:
 	echo 0 > /proc/sys/kernel/randomize_va_space
 	cat /proc/sys/kernel/randomize_va_space
