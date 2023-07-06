@@ -99,6 +99,7 @@ void elf_read_elf_phdr(elf_file_t *ef);
 void elf_read_elf_sections(elf_file_t *ef);
 int elf_read_file(char *file_name, elf_file_t *elf, bool is_readonly);
 int elf_read_file_relocation(char *file_name, elf_file_t *ef);
+void elf_close_file(elf_file_t *ef);
 
 // debug
 void elf_show_dynsym(elf_file_t *ef);

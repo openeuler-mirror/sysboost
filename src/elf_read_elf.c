@@ -538,7 +538,7 @@ int elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly)
 	return 0;
 }
 
-static void _elf_close_file(elf_file_t *ef)
+void elf_close_file(elf_file_t *ef)
 {
 	close(ef->fd);
 	if (ef->file_name != NULL) {
@@ -563,7 +563,7 @@ static int read_relocation_file(char *file_name, elf_file_t *ef)
 
 	// save old build id
 	memcpy(old_build_id, ef->build_id, BUILD_ID_LEN);
-	_elf_close_file(ef);
+	elf_close_file(ef);
 
 	SI_LOG_DEBUG("read extern relocations\n");
 

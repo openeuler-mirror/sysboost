@@ -51,20 +51,10 @@
 #define OS_SPECIFIC_FLAG_HUGEPAGE EF_X86_64_HUGEPAGE
 #define OS_SPECIFIC_FLAG_RTO EF_X86_64_RTO
 #endif
-#define OS_SPECIFIC_MASK (0xffffffffU ^ OS_SPECIFIC_FLAG_SYMBOLIC_LINK ^ OS_SPECIFIC_FLAG_HUGEPAGE)
+#define OS_SPECIFIC_MASK (0xffffffffU ^ OS_SPECIFIC_FLAG_SYMBOLIC_LINK ^ OS_SPECIFIC_FLAG_HUGEPAGE ^ OS_SPECIFIC_FLAG_RTO)
 
-static void _elf_set_symbolic_link(elf_file_t *ef, bool state)
+static int _elf_set_flags(char *path, unsigned int flags)
 {
-	if (state) {
-		ef->hdr->e_flags |= OS_SPECIFIC_FLAG_SYMBOLIC_LINK;
-	} else {
-		ef->hdr->e_flags &= OS_SPECIFIC_MASK;
-	}
-}
-
-int elf_set_symbolic_link(char *path, bool state)
-{
-	// this memory will free by process exit
 	elf_file_t *ef = malloc(sizeof(elf_file_t));
 	if (ef == NULL) {
 		SI_LOG_ERR("malloc fail\n");
@@ -76,12 +66,49 @@ int elf_set_symbolic_link(char *path, bool state)
 		return -1;
 	}
 
-	_elf_set_symbolic_link(ef, state);
+	ef->hdr->e_flags |= flags;
 
-	close(ef->fd);
-	// This process is a oneshot process. The release of variable ef depends
-	// on the process exit.
+	elf_close_file(ef);
+	free(ef);
+	ef = NULL;
 	return 0;
+}
+
+static int _elf_unset_flags(char *path, unsigned int flags)
+{
+	elf_file_t *ef = malloc(sizeof(elf_file_t));
+	if (ef == NULL) {
+		SI_LOG_ERR("malloc fail\n");
+		return -1;
+	}
+
+	int ret = elf_read_file(path, ef, false);
+	if (ret != 0) {
+		return -1;
+	}
+
+	ef->hdr->e_flags &= (0xffffffffU ^ flags);
+
+	elf_close_file(ef);
+	free(ef);
+	ef = NULL;
+	return 0;
+}
+
+int elf_set_symbolic_link(char *path, bool state)
+{
+	if (state) {
+		return _elf_set_flags(path, OS_SPECIFIC_FLAG_SYMBOLIC_LINK);
+	}
+	return _elf_unset_flags(path, OS_SPECIFIC_FLAG_SYMBOLIC_LINK);
+}
+
+int elf_set_rto(char *path, bool state)
+{
+	if (state) {
+		return _elf_set_flags(path, OS_SPECIFIC_FLAG_RTO);
+	}
+	return _elf_unset_flags(path, OS_SPECIFIC_FLAG_RTO);
 }
 
 void elf_set_hugepage(elf_link_t *elf_link)
@@ -103,4 +130,3 @@ void elf_set_hugepage(elf_link_t *elf_link)
 
 	ef->hdr->e_flags |= OS_SPECIFIC_FLAG_HUGEPAGE;
 }
-

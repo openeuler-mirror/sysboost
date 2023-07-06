@@ -1243,8 +1243,11 @@ load_rto:
 			printk("replace rto file fail, %d\n", ret);
 			goto out;
 		}
-	} else if (debug) {
+	}
+	if (!is_rto_format)
 		goto out;
+	if (debug) {
+		printk("exec in rto mode, is_rto_format %d\n", is_rto_format);
 	}
 #endif
 
