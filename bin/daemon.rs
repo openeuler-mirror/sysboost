@@ -164,6 +164,41 @@ fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	return run_child(SYSBOOST_PATH, &args);
 }
 
+fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
+	let mut args: Vec<String> = Vec::new();
+	let mut ret = 1;
+	args.push("-reorder-blocks=ext-tsp".to_string());
+	args.push("-reorder-functions=hfsort+".to_string());
+	args.push("-split-functions=true".to_string());
+	args.push("-split-all-cold".to_string());
+	args.push("-dyno-stats".to_string());
+	args.push("-icf=1".to_string());
+
+	for lib in conf.libs.iter() {
+		let lib_path = Path::new(&lib);
+		let lib_path = match fs::canonicalize(lib_path) {
+			Ok(p) => p,
+			Err(e) => {
+				log::error!("bolt_optimize_so: get realpath failed: {}", e);
+				return -1;
+			}
+		};
+		let lib_bak_path = lib_path.with_extension("bak");
+		match fs::copy(&lib_path, &lib_bak_path) {
+			Ok(_) => {}
+			Err(e) => {
+				log::error!("Copy failed: {}", e);
+				return -1;
+			}
+		}
+		args.push(lib_bak_path.to_str().unwrap().to_string());
+		args.push("-o".to_string());
+		args.push(lib.split_whitespace().collect());
+		ret = run_child("/usr/bin/llvm-bolt", &args);
+	}
+	return ret;
+}
+
 fn set_app_aot_flag(old_path: &String, is_set: bool) -> i32 {
 	let mut args: Vec<String> = Vec::new();
 	if is_set {
@@ -213,7 +248,7 @@ fn parse_config(contents: String) -> Option<RtoConfig> {
 	};
 
 	let conf = conf_e.unwrap();
-	if conf.mode != "static" && conf.mode != "static-nolibc" && conf.mode != "share" {
+	if conf.mode != "static" && conf.mode != "static-nolibc" && conf.mode != "share" && conf.mode != "bolt" {
 		return None;
 	}
 	if conf.elf_path == SYSBOOST_PATH {
@@ -358,6 +393,13 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 	// add config file to watch list
 	let path_str = path.clone().into_os_string().into_string().unwrap();
 	conf.watch_paths.push(path_str);
+
+	if conf.mode == "bolt" {
+		let ret = bolt_optimize_so(&conf);
+		if ret != 0 {
+			return None;
+		}
+	}
 
 	let ret = gen_app_rto(&conf);
 	if ret != 0 {
