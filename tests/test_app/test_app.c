@@ -2,7 +2,6 @@
 #define _GNU_SOURCE
 #define __USE_GNU 1
 #include <dlfcn.h>
-#include <features.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
