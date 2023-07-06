@@ -1101,12 +1101,9 @@ static struct file * try_get_rto_file(struct file *file)
 	struct file *rto_file;
 
 	buffer = kmalloc(PATH_MAX, GFP_KERNEL);
-	rto_path = dentry_path_raw(file->f_path.dentry, buffer, PATH_MAX - 5);
+	rto_path = file_path(file, buffer, PATH_MAX - 5);
 	strcat(rto_path, ".rto");
 	rto_file = open_exec(rto_path);
-
-	// bug: the path is wrong when NFS
-	printk("zk--- %s\n", rto_path);
 
 	kfree(buffer);
 	return rto_file;
