@@ -9,18 +9,18 @@ KO_DIR=$(ROOT_DIR)src/binfmt_rto
 all: test_ko
 
 link:
-	cp /usr/bin/ls ls_test_link
-	$(SYSBOOST) --set ls_test_link
-	readelf -W -a ls_test_link > ls_test_link.link.elf
+	cp /usr/bin/bash bash_test_link
+	$(SYSBOOST) --set bash_test_link
+	readelf -W -a bash_test_link > bash_test_link.link.elf
 
 test_ko: link
 	make -C $(KO_DIR) install
-	cp /usr/bin/ls ls_test_link.rto
-	./ls_test_link
+	cp /usr/bin/bash bash_test_link.rto
+	./bash_test_link -c "echo 1"
 
 env:
 	echo 0 > /proc/sys/kernel/randomize_va_space
 	cat /proc/sys/kernel/randomize_va_space
 
 clean:
-	$(RM) *.o *.ro *.old *.so *.asm *.elf *.rto *.out ls_test_link
+	$(RM) *.o *.ro *.old *.so *.asm *.elf *.rto *.out bash_test_link
