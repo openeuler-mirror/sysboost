@@ -73,6 +73,10 @@ MODULE_PARM_DESC(debug, "debug mode");
 #define EF_AARCH64_HUGEPAGE (0x00020000U)
 #endif
 
+#ifndef EF_AARCH64_RTO
+#define EF_AARCH64_RTO (0x00040000U)
+#endif
+
 #ifndef EF_X86_64_SYMBOLIC_LINK
 #define EF_X86_64_SYMBOLIC_LINK    (0x00010000U)
 #endif
@@ -80,13 +84,18 @@ MODULE_PARM_DESC(debug, "debug mode");
 #ifndef EF_X86_64_HUGEPAGE
 #define EF_X86_64_HUGEPAGE         (0x00020000U)
 #endif
+#ifndef EF_X86_64_RTO
+#define EF_X86_64_RTO              (0x00040000U)
+#endif
 
 #ifdef CONFIG_ARM64
 #define OS_SPECIFIC_FLAG_SYMBOLIC_LINK EF_AARCH64_SYMBOLIC_LINK
 #define OS_SPECIFIC_FLAG_HUGEPAGE EF_AARCH64_HUGEPAGE
+#define OS_SPECIFIC_FLAG_RTO EF_AARCH64_RTO
 #else
 #define OS_SPECIFIC_FLAG_SYMBOLIC_LINK EF_X86_64_SYMBOLIC_LINK
 #define OS_SPECIFIC_FLAG_HUGEPAGE EF_X86_64_HUGEPAGE
+#define OS_SPECIFIC_FLAG_RTO EF_X86_64_RTO
 #endif
 
 /* compat 22.03 LTS, 22.03 LTS SP2 */
@@ -1096,6 +1105,9 @@ static struct file * try_get_rto_file(struct file *file)
 	strcat(rto_path, ".rto");
 	rto_file = open_exec(rto_path);
 
+	// bug: the path is wrong when NFS
+	printk("zk--- %s\n", rto_path);
+
 	kfree(buffer);
 	return rto_file;
 }
@@ -1190,9 +1202,10 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct pt_regs *regs;
 
 #ifdef CONFIG_ELF_SYSBOOST
-	bool is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_SYMBOLIC_LINK;
+	bool is_rto_format = false;
 
 load_rto:
+	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
 	retval = -ENOEXEC;
 
 	/* close feature to rmmod this ko */
@@ -1219,10 +1232,20 @@ load_rto:
 		goto out;
 
 #ifdef CONFIG_ELF_SYSBOOST
-	/* e_flags will change */
+	/* replace app.rto file, then use binfmt */
 	if (elf_ex->e_flags & OS_SPECIFIC_FLAG_SYMBOLIC_LINK) {
-		if (!try_replace_file(bprm))
-			goto load_rto;
+		int ret = try_replace_file(bprm);
+		if (!ret) {
+			if (elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO) {
+				goto load_rto;
+			} else {
+				goto out;
+			}
+		} else {
+			/* limit print */
+			printk("replace rto file fail, %d\n", ret);
+			goto out;
+		}
 	} else if (debug) {
 		goto out;
 	}
