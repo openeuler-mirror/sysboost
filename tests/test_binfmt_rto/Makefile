@@ -9,13 +9,18 @@ KO_DIR=$(ROOT_DIR)src/binfmt_rto
 all: test_ko
 
 link:
-	cp /usr/bin/bash bash_test_link
+	cp -f /usr/bin/bash bash_test_link
 	$(SYSBOOST) --set bash_test_link
 	readelf -W -a bash_test_link > bash_test_link.link.elf
 
 test_ko: link
 	make -C $(KO_DIR) install
-	cp /usr/bin/bash bash_test_link.rto
+	@echo ===test link===
+	cp -f /usr/bin/bash bash_test_link.rto
+	./bash_test_link -c "echo 1"
+	@echo ===test rto===
+	$(SYSBOOST) --set-rto bash_test_link.rto
+	readelf -W -a bash_test_link.rto > bash_test_link.rto.elf
 	./bash_test_link -c "echo 1"
 
 env:

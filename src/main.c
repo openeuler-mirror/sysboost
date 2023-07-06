@@ -32,6 +32,8 @@ int main(int argc, char *argv[])
 	    {"debug", no_argument, NULL, 'd'},
 	    {"set", required_argument, NULL, 's'},
 	    {"unset", required_argument, NULL, 'u'},
+	    {"set-rto", required_argument, NULL, '1'},
+	    {"unset-rto", required_argument, NULL, '0'},
 	    {"hook", no_argument, NULL, 'h'},
 	    {ELF_LINK_STATIC_S, no_argument, NULL, 'S'},
 	    {ELF_LINK_STATIC_NOLIBC_S, no_argument, NULL, 'N'},
@@ -59,6 +61,20 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 			return elf_set_symbolic_link(tmp, false);
+		case '1':
+			str_ret = realpath(optarg, tmp);
+			if (!str_ret) {
+				SI_LOG_ERR("get realpath fail: %s\n", optarg);
+				return -1;
+			}
+			return elf_set_rto(tmp, true);
+		case '0':
+			str_ret = realpath(optarg, tmp);
+			if (!str_ret) {
+				SI_LOG_ERR("get realpath fail: %s\n", optarg);
+				return -1;
+			}
+			return elf_set_rto(tmp, false);
 		case 'h':
 			elf_link->hook_func = true;
 			SI_LOG_INFO("hook func\n");
