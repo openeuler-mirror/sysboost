@@ -3,9 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "elf_link_common.h"
 #include <si_debug.h>
 #include <si_log.h>
+
+#include "elf_link_common.h"
 
 static void check_bss_addr(elf_file_t *out_ef)
 {
@@ -40,8 +41,9 @@ static bool is_dynsym_valid(Elf64_Sym *sym, const char *name)
 		return true;
 	}
 
-	if (sym->st_shndx == SHN_UNDEF)
+	if (sym->st_shndx == SHN_UNDEF) {
 		return false;
+	}
 
 	return true;
 }
@@ -80,8 +82,9 @@ static void check_dynamic(elf_link_t *elf_link)
 	elf_file_t *out_ef = &elf_link->out_ef;
 	Elf64_Shdr *sec = elf_find_section_by_name(out_ef, ".dynamic");
 
-	if (is_share_mode(elf_link) == false)
+	if (is_share_mode(elf_link) == false) {
 		return;
+	}
 
 	// dyn mode must be DT_BIND_NOW
 	dyn_count = sec->sh_size / sec->sh_entsize;

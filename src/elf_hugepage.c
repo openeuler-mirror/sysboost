@@ -60,11 +60,13 @@ void elf_set_hugepage(elf_link_t *elf_link)
 	Elf64_Phdr *phdr = (Elf64_Phdr *)ef->hdr_Phdr;
 
 	for (i = 0; i < count; i++) {
-		if (phdr[i].p_type == PT_LOAD) {
-			if (exec_only && !(phdr[i].p_flags & PF_X))
-				continue;
-			phdr[i].p_flags |= PF_HUGEPAGE;
+		if (phdr[i].p_type != PT_LOAD) {
+			continue;
 		}
+		if (exec_only && !(phdr[i].p_flags & PF_X)) {
+			continue;
+		}
+		phdr[i].p_flags |= PF_HUGEPAGE;
 	}
 
 	ef->hdr->e_flags |= OS_SPECIFIC_FLAG_HUGEPAGE;
