@@ -103,6 +103,7 @@ static struct global_symbols {
 	proc_symbol(cpu_get_elf_hwcap);
 	proc_symbol(cpu_get_elf_hwcap2);
 	proc_symbol(signal_minsigstksz);
+	proc_symbol(arch_elf_adjust_prot);
 #else
 	proc_symbol(elf_hwcap2);
 	proc_symbol(get_sigframe_size);
@@ -118,7 +119,6 @@ static struct global_symbols {
 	proc_symbol(randomize_va_space);
 	proc_symbol(dump_user_range);
 	proc_symbol(arch_align_stack);
-	proc_symbol(arch_elf_adjust_prot);
 	proc_symbol(task_cputime);
 	proc_symbol(thread_group_cputime);
 } g_sym;
@@ -130,6 +130,7 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(cpu_get_elf_hwcap),
 	proc_symbol_char(cpu_get_elf_hwcap2),
 	proc_symbol_char(signal_minsigstksz),
+	proc_symbol_char(arch_elf_adjust_prot),
 #else
 	proc_symbol_char(elf_hwcap2),
 	proc_symbol_char(get_sigframe_size),
@@ -145,7 +146,6 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(randomize_va_space),
 	proc_symbol_char(dump_user_range),
 	proc_symbol_char(arch_align_stack),
-	proc_symbol_char(arch_elf_adjust_prot),
 	proc_symbol_char(task_cputime),
 	proc_symbol_char(thread_group_cputime)
 };
@@ -259,6 +259,13 @@ do {									\
 } while (0)
 
 #define __arch_setup_additional_pages(bprm, uses_interp, load_bias, is_rto_format) (g_sym.arch_setup_additional_pages(bprm, uses_interp))
+
+
+#ifdef arch_elf_adjust_prot
+#undef arch_elf_adjust_prot
+#endif
+
+#define arch_elf_adjust_prot g_sym.arch_elf_adjust_prot
 
 #else
 // x86
@@ -825,7 +832,7 @@ static inline int make_prot(u32 p_flags, struct arch_elf_state *arch_state,
 	if (p_flags & PF_X)
 		prot |= PROT_EXEC;
 
-	return g_sym.arch_elf_adjust_prot(prot, arch_state, has_interp, is_interp);
+	return arch_elf_adjust_prot(prot, arch_state, has_interp, is_interp);
 }
 
 /* This is much more generalized than the library routine read function,
@@ -2666,7 +2673,10 @@ end_coredump:
 static int init_rto_binfmt(void)
 {
 #ifdef CONFIG_ELF_SYSBOOST
-	init_symbols();
+	int ret = init_symbols();
+	if (ret) {
+		return ret;
+	}
 #endif
 	insert_binfmt(&elf_format);
 	return 0;
