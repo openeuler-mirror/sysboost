@@ -21,48 +21,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "elf_link_common.h"
 #include <si_debug.h>
 #include <si_log.h>
 
-#ifndef PF_HUGEPAGE
-#define PF_HUGEPAGE (0x01000000)
-#endif
-
-#ifndef EF_AARCH64_SYMBOLIC_LINK
-#define EF_AARCH64_SYMBOLIC_LINK (0x00010000U)
-#endif
-
-#ifndef EF_AARCH64_HUGEPAGE
-#define EF_AARCH64_HUGEPAGE (0x00020000U)
-#endif
-
-#ifndef EF_AARCH64_RTO
-#define EF_AARCH64_RTO (0x00040000U)
-#endif
-
-#ifndef EF_X86_64_SYMBOLIC_LINK
-#define EF_X86_64_SYMBOLIC_LINK    (0x00010000U)
-#endif
-
-#ifndef EF_X86_64_HUGEPAGE
-#define EF_X86_64_HUGEPAGE         (0x00020000U)
-#endif
-
-#ifndef EF_X86_64_RTO
-#define EF_X86_64_RTO              (0x00040000U)
-#endif
-
-#ifdef __aarch64__
-#define OS_SPECIFIC_FLAG_SYMBOLIC_LINK EF_AARCH64_SYMBOLIC_LINK
-#define OS_SPECIFIC_FLAG_HUGEPAGE EF_AARCH64_HUGEPAGE
-#define OS_SPECIFIC_FLAG_RTO EF_AARCH64_RTO
-#else
-#define OS_SPECIFIC_FLAG_SYMBOLIC_LINK EF_X86_64_SYMBOLIC_LINK
-#define OS_SPECIFIC_FLAG_HUGEPAGE EF_X86_64_HUGEPAGE
-#define OS_SPECIFIC_FLAG_RTO EF_X86_64_RTO
-#endif
-#define OS_SPECIFIC_MASK (0xffffffffU ^ OS_SPECIFIC_FLAG_SYMBOLIC_LINK ^ OS_SPECIFIC_FLAG_HUGEPAGE ^ OS_SPECIFIC_FLAG_RTO)
+#include "elf_link_common.h"
+#include "elf_ext.h"
 
 static int _elf_set_flags(char *path, unsigned int flags)
 {

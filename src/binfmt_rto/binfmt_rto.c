@@ -55,6 +55,7 @@
 
 #ifdef CONFIG_ELF_SYSBOOST
 #include <linux/kprobes.h>
+#include "../elf_ext.h"
 
 static bool use_rto = false;
 module_param(use_rto, bool, 0600);
@@ -64,39 +65,6 @@ MODULE_PARM_DESC(use_rto, "use rto featue");
 static int debug = 0;
 module_param(debug, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "debug mode");
-
-#ifndef EF_AARCH64_SYMBOLIC_LINK
-#define EF_AARCH64_SYMBOLIC_LINK      (0x00010000U)
-#endif
-
-#ifndef EF_AARCH64_HUGEPAGE
-#define EF_AARCH64_HUGEPAGE (0x00020000U)
-#endif
-
-#ifndef EF_AARCH64_RTO
-#define EF_AARCH64_RTO (0x00040000U)
-#endif
-
-#ifndef EF_X86_64_SYMBOLIC_LINK
-#define EF_X86_64_SYMBOLIC_LINK    (0x00010000U)
-#endif
-
-#ifndef EF_X86_64_HUGEPAGE
-#define EF_X86_64_HUGEPAGE         (0x00020000U)
-#endif
-#ifndef EF_X86_64_RTO
-#define EF_X86_64_RTO              (0x00040000U)
-#endif
-
-#ifdef CONFIG_ARM64
-#define OS_SPECIFIC_FLAG_SYMBOLIC_LINK EF_AARCH64_SYMBOLIC_LINK
-#define OS_SPECIFIC_FLAG_HUGEPAGE EF_AARCH64_HUGEPAGE
-#define OS_SPECIFIC_FLAG_RTO EF_AARCH64_RTO
-#else
-#define OS_SPECIFIC_FLAG_SYMBOLIC_LINK EF_X86_64_SYMBOLIC_LINK
-#define OS_SPECIFIC_FLAG_HUGEPAGE EF_X86_64_HUGEPAGE
-#define OS_SPECIFIC_FLAG_RTO EF_X86_64_RTO
-#endif
 
 /* compat 22.03 LTS, 22.03 LTS SP2 */
 #ifndef MM_SAVED_AUXV
@@ -267,8 +235,8 @@ do {									\
 		NEW_AUX_ENT(AT_IGNORE, 0);				\
 } while (0)
 
+// TODO: vdso layout for ARM64
 #define __arch_setup_additional_pages(bprm, uses_interp, load_bias, is_rto_format) (g_sym.arch_setup_additional_pages(bprm, uses_interp))
-
 
 #ifdef arch_elf_adjust_prot
 #undef arch_elf_adjust_prot
@@ -297,13 +265,11 @@ int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, un
 
 	// layout for vdso and app and ld.so
 	// ld.so | vvar | vdso | app
-	// xxK   | 8K   | 4K   | 2M+
 	// without ld.so
 	// vvar | vdso | app
-	// 8K   | 4K   | 2M+
 	if (debug)
-		printk("binfmt_rto: base 0x%lx vdso 0x%lx\n", load_bias, load_bias - (PAGE_SIZE * 3));
-	return g_sym.map_vdso(g_sym.vdso_image_64, load_bias - (PAGE_SIZE * 3));
+		printk("binfmt_rto: base 0x%lx vvar 0x%lx\n", load_bias, load_bias - ELF_VVAR_AND_VDSO_LEN);
+	return g_sym.map_vdso(g_sym.vdso_image_64, load_bias - ELF_VVAR_AND_VDSO_LEN);
 }
 
 #ifdef SET_PERSONALITY2
@@ -885,12 +851,10 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 #ifdef CONFIG_ELF_SYSBOOST
 	// layout for vdso and app and ld.so
 	// ld.so | vvar | vdso | app
-	// xxK   | 8K   | 4K   | 2M+
 	// without ld.so
 	// vvar | vdso | app
-	// 8K   | 4K   | 2M+
 	if (is_rto_format) {
-		load_addr = no_base - (PAGE_SIZE * 3) - ELF_PAGEALIGN(total_size);
+		load_addr = no_base - ELF_VVAR_AND_VDSO_LEN - ELF_PAGEALIGN(total_size);
 		load_addr_set = 1;
 		if (debug)
 			printk("binfmt_rto: base 0x%lx ld_so_addr 0x%lx total_size 0x%lx", no_base, load_addr, total_size);
@@ -2705,6 +2669,7 @@ static int init_rto_binfmt(void)
 		return ret;
 	}
 #endif
+
 	insert_binfmt(&elf_format);
 	return 0;
 }
