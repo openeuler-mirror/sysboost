@@ -301,6 +301,8 @@ int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, un
 	// without ld.so
 	// vvar | vdso | app
 	// 8K   | 4K   | 2M+
+	if (debug)
+		printk("binfmt_rto: base 0x%lx vdso 0x%lx\n", load_bias, load_bias - (PAGE_SIZE * 3));
 	return g_sym.map_vdso(g_sym.vdso_image_64, load_bias - (PAGE_SIZE * 3));
 }
 
@@ -888,8 +890,10 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 	// vvar | vdso | app
 	// 8K   | 4K   | 2M+
 	if (is_rto_format) {
-		load_addr = no_base - (PAGE_SIZE * 3) - ELF_PAGESTART(total_size);
+		load_addr = no_base - (PAGE_SIZE * 3) - ELF_PAGEALIGN(total_size);
 		load_addr_set = 1;
+		if (debug)
+			printk("binfmt_rto: base 0x%lx ld_so_addr 0x%lx total_size 0x%lx", no_base, load_addr, total_size);
 	}
 #endif
 
@@ -1244,7 +1248,7 @@ load_rto:
 			goto out;
 		}
 	}
-	if (!is_rto_format)
+	if (!is_rto_format && !(elf_ex->e_flags & OS_SPECIFIC_FLAG_HUGEPAGE))
 		goto out;
 	if (debug) {
 		printk("exec in rto mode, is_rto_format %d\n", is_rto_format);
