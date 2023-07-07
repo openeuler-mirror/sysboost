@@ -1,4 +1,17 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysMaster is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
+#include "elf_link_common.h"
+
 #include <dlfcn.h>
 #include <elf.h>
 #include <fcntl.h>
@@ -12,7 +25,6 @@
 #include <unistd.h>
 #include <sys/user.h>
 
-#include "elf_link_common.h"
 #include <si_common.h>
 #include <si_debug.h>
 #include <si_log.h>
@@ -35,8 +47,9 @@ bool is_symbol_maybe_undefined(const char *name)
 {
 	// some special symbols are ok even if they are undefined, skip them
 	for (unsigned i = 0; i < SPECIAL_DYNSYMS_LEN; i++) {
-		if (elf_is_same_symbol_name(name, special_dynsyms[i]))
+		if (elf_is_same_symbol_name(name, special_dynsyms[i])) {
 			return true;
+		}
 	}
 
 	return false;
@@ -277,7 +290,6 @@ void show_sec_mapping(elf_link_t *elf_link)
 	elf_sec_mapping_t *sec_rels = elf_link->sec_mapping_arr->data;
 	elf_sec_mapping_t *sec_rel = NULL;
 
-	SI_LOG_INFO("dst_addr  dst_off   dst_sec_addr         src_sec_addr         src_sec_name         src_file             *src_sec          *dst_sec\n");
 	for (int i = 0; i < len; i++) {
 		sec_rel = &sec_rels[i];
 		char *name = elf_get_section_name(sec_rel->src_ef, sec_rel->src_sec);
@@ -338,10 +350,6 @@ int get_new_section_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int
 	if (sec_rel == NULL) {
 		// some sec is no need in out ELF
 		return 0;
-		// char *name = elf_get_section_name(src_ef, src_sec);
-		// printf("elf_find_sec_mapping_by_srcsec fail: file %s name %s src_sec %lx\n", src_ef->file_name, name, (unsigned long)src_sec);
-		// show_sec_mapping(elf_link);
-		// si_panic("elf_find_sec_mapping_by_srcsec fail");
 	}
 
 	return sec_rel->dst_sec - elf_link->out_ef.sechdrs;
@@ -505,8 +513,9 @@ unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsign
 		//   [23] .init_array       INIT_ARRAY       00000000007ffd18  005ffd18
 		//        0000000000000010  0000000000000008  WA       0     0     8
 		// check the combination of SHT_NOBITS and SHF_TLS
-		if ((sec_rel->src_sec->sh_type == SHT_NOBITS) && (sec_rel->src_sec->sh_flags & SHF_TLS))
+		if ((sec_rel->src_sec->sh_type == SHT_NOBITS) && (sec_rel->src_sec->sh_flags & SHF_TLS)) {
 			continue;
+		}
 		found = true;
 		break;
 	}
@@ -570,8 +579,9 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 		for (int j = 0; j < sym_count; j++) {
 			sym = &syms[j];
 			char *name = elf_get_symbol_name(ef, sym);
-			if (elf_is_same_symbol_name(sym_name, name) && sym->st_shndx != SHN_UNDEF)
+			if (elf_is_same_symbol_name(sym_name, name) && sym->st_shndx != SHN_UNDEF) {
 				goto out;
+			}
 		}
 	}
 
@@ -581,8 +591,9 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 	for (int j = 0; j < sym_count; j++) {
 		sym = &syms[j];
 		char *name = elf_get_symbol_name(ef, sym);
-		if (elf_is_same_symbol_name(sym_name, name) && sym->st_shndx != SHN_UNDEF)
+		if (elf_is_same_symbol_name(sym_name, name) && sym->st_shndx != SHN_UNDEF) {
 			goto out;
+		}
 	}
 
 	if (is_share_mode(elf_link) == false) {
@@ -592,16 +603,18 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 	}
 
 out:
-	if (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC)
+	if (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC) {
 		return _get_ifunc_new_addr(elf_link, sym_name);
+	}
 
 	return get_new_addr_by_old_addr(elf_link, ef, sym->st_value);
 }
 
 static char *get_ifunc_nice_name(char *sym_name)
 {
-	if (sym_name == NULL)
+	if (sym_name == NULL) {
 		return sym_name;
+	}
 
 	// ignore prefix of __memchr __strlen __GI_strlen __GI___strnlen __libc_memmove
 	// direct cmp char for performace, compile will optimize branch
@@ -673,8 +686,9 @@ static unsigned long _get_ifunc_new_addr(elf_link_t *elf_link, char *sym_name)
 
 	// func in PIE app, can not dl, so find by name
 	for (unsigned i = 0; i < IFUNC_MAPPING_LEN; i++) {
-		if (elf_is_same_symbol_name(sym_name, ifunc_mapping[i][0]))
+		if (elf_is_same_symbol_name(sym_name, ifunc_mapping[i][0])) {
 			return _get_new_addr_by_sym_name(elf_link, ifunc_mapping[i][1]);
+		}
 	}
 
 	si_panic("ifunc %s is not known\n", sym_name);
@@ -806,8 +820,9 @@ unsigned long get_new_name_offset(elf_link_t *elf_link, elf_file_t *src_ef, Elf6
 
 int get_new_sym_index_no_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index)
 {
-	if (old_index == 0)
+	if (old_index == 0) {
 		return 0;
+	}
 
 	const char *name = get_sym_name_dynsym(src_ef, old_index);
 
@@ -816,8 +831,9 @@ int get_new_sym_index_no_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigne
 
 int get_new_sym_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index)
 {
-	if (old_index == 0)
+	if (old_index == 0) {
 		return 0;
+	}
 
 	const char *name = get_sym_name_dynsym(src_ef, old_index);
 
