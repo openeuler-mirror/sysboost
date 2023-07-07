@@ -29,6 +29,9 @@
 #include <si_debug.h>
 #include <si_log.h>
 
+#include "elf_link_common.h"
+#include "elf_ext.h"
+
 #define INDEX_ZERO  0
 #define INDEX_ONE   1
 #define INDEX_TWO   2
@@ -158,10 +161,8 @@ static void init_static_mode_symbol_change(elf_link_t *elf_link)
 
 // layout for vdso and app and ld.so
 // ld.so | vvar | vdso | app
-// xxK   | 8K   | 4K   | 2M+
 // without ld.so
 // vvar | vdso | app
-// 8K   | 4K   | 2M+
 static unsigned long ld_hdr_addr_to_main_elf(elf_file_t *ef)
 {
 	Elf64_Phdr *p = ef->data_Phdr;
@@ -173,7 +174,7 @@ static unsigned long ld_hdr_addr_to_main_elf(elf_file_t *ef)
 	}
 	unsigned long load_len = p->p_vaddr + p->p_memsz;
 	load_len = ALIGN(load_len, PAGE_SIZE);
-	return 0UL - (PAGE_SIZE * 3) - load_len;
+	return 0UL - ELF_VVAR_AND_VDSO_LEN - load_len;
 }
 
 static unsigned long ld_get_new_addr(unsigned long hdr_addr, Elf64_Sym *sym)
@@ -184,7 +185,7 @@ static unsigned long ld_get_new_addr(unsigned long hdr_addr, Elf64_Sym *sym)
 static unsigned long vdso_get_new_addr(Elf64_Sym *sym)
 {
 	// user space PAGE_SIZE is 4K
-	return 0UL - PAGE_SIZE + (unsigned long)sym->st_value;
+	return 0UL - ELF_VDSO_LEN + (unsigned long)sym->st_value;
 }
 
 #ifdef __aarch64__
