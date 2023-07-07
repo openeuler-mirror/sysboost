@@ -1,4 +1,15 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysMaster is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 #ifndef _ELF_LINK_COMMON_H
 #define _ELF_LINK_COMMON_H
 
@@ -132,8 +143,9 @@ static inline bool is_static_mode(elf_link_t *elf_link)
 static inline bool is_static_nolibc_mode(elf_link_t *elf_link)
 {
 #ifndef __aarch64__
-	if (elf_link->link_mode == ELF_LINK_STATIC_NOLIBC)
+	if (elf_link->link_mode == ELF_LINK_STATIC_NOLIBC) {
 		si_panic("static-nolibc mode not support x86\n");
+	}
 #endif
 
 	return elf_link->link_mode == ELF_LINK_STATIC_NOLIBC;
@@ -269,7 +281,7 @@ void show_sec_mapping(elf_link_t *elf_link);
 void append_sec_mapping(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec, Elf64_Shdr *dst_sec);
 void append_obj_mapping(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec, void *src_obj, void *dst_obj);
 elf_obj_mapping_t *elf_get_mapping_by_dst(elf_link_t *elf_link, void *dst_obj);
-elf_sec_mapping_t *elf_find_sec_mapping_by_dst(elf_link_t *elf_link, void *dst);
+elf_sec_mapping_t *elf_find_sec_mapping_by_dst(elf_link_t *elf_link, void *_dst_offset);
 elf_sec_mapping_t *elf_find_sec_mapping_by_srcsec(elf_link_t *elf_link, Elf64_Shdr *src_sec);
 
 void append_symbol_mapping(elf_link_t *elf_link, char *symbol_name, unsigned long symbol_addr);
