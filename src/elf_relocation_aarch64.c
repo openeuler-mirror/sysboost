@@ -1,4 +1,15 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysboost is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -41,18 +52,19 @@ static int sign_extend_32(int value, int len)
 #define IMM_MASK_BRANCH ((1UL << IMM_LEN_BRANCH) - 1)
 #define OPCODE_MASK_BRANCH (0x3FUL << IMM_LEN_BRANCH)
 #define OPCODE_CALL26 (0x25UL << IMM_LEN_BRANCH)
+#define IMM_BIT_MOVE_LEN 2
 
 static unsigned get_branch_addr(unsigned binary, unsigned offset)
 {
 	unsigned imm = binary & IMM_MASK_BRANCH;
 	imm = sign_extend_32(imm, IMM_LEN_BRANCH);
-	return (imm << 2) + offset;
+	return (imm << IMM_BIT_MOVE_LEN) + offset;
 }
 
 static unsigned gen_branch_binary(unsigned binary, unsigned addr, unsigned offset)
 {
 	unsigned opcode = binary & OPCODE_MASK_BRANCH;
-	return opcode | (((addr - offset) >> 2) & IMM_MASK_BRANCH);
+	return opcode | (((addr - offset) >> IMM_BIT_MOVE_LEN) & IMM_MASK_BRANCH);
 }
 
 // Form PC-relative address to 4KB page adds an immediate value that is shifted left by 12 bits, to the PC value to form a PC-relative address, with
@@ -143,6 +155,9 @@ static inline bool is_adrp_instruction(unsigned binary)
 #define ADDR_SHIFT_64 3
 #define IN_PAGE ((1UL << PAGE_SHIFT) - 1)
 #define LDR_RN_MASK ((1U << REG_LEN) - 1)
+#define ONE_BIT_LEN   1
+#define TWO_BIT_LEN   2
+#define THREE_BIT_LEN 3
 
 static unsigned get_ldr_Rn(unsigned binary)
 {
@@ -156,8 +171,9 @@ static unsigned get_ldr_addr(unsigned binary)
 		si_panic("this LD/ST is not unsigned 64bit mode, opcode %x binary %x\n", opcode, binary);
 		return 0;
 	}
-	if (opcode == OPCODE_STRB || opcode == OPCODE_LDRB)
+	if (opcode == OPCODE_STRB || opcode == OPCODE_LDRB) {
 		return ((binary & IMM_MASK_LDST) >> REG_LEN_LDST);
+	}
 	return ((binary & IMM_MASK_LDST) >> REG_LEN_LDST) << ADDR_SHIFT_64;
 }
 
@@ -167,12 +183,12 @@ static unsigned gen_ldst_binary_inpage(unsigned obj_addr, unsigned binary)
 	obj_addr &= IN_PAGE;
 	unsigned opcode = binary & OPCODE_LDST_MASK;
 	if (opcode == OPCODE_LDR_64 || opcode == OPCODE_STR_64) {
-		obj_addr >>= 3;
+		obj_addr >>= THREE_BIT_LEN;
 	} else if (opcode == OPCODE_LDR_32 || opcode == OPCODE_STR_32) {
-		obj_addr >>= 2;
+		obj_addr >>= TWO_BIT_LEN;
 	} else if (opcode == OPCODE_LDR_16) {
 		// the insn is ldrsh
-		obj_addr >>= 1;
+		obj_addr >>= ONE_BIT_LEN;
 	} else {
 		si_panic("this insn is not LD/ST, opcode %x binary %x\n", opcode, binary);
 	}
@@ -222,8 +238,9 @@ static unsigned gen_add_binary(unsigned addr, unsigned binary)
 static unsigned gen_movk_addr(unsigned addr, unsigned binary)
 {
 	// The 16-digit immediate value should range from 0 to 65535
-	if (addr > MOVK_IMM_MAX)
+	if (addr > MOVK_IMM_MAX) {
 		return addr;
+	}
 	return OPCODE_MOVK | (addr << REG_LEN) | (binary & REG_MASK_MOVK);
 }
 
@@ -236,8 +253,9 @@ static unsigned gen_movk_addr(unsigned addr, unsigned binary)
 #define OPCODE_MOVZ_MASK (0x1FFUL << 23)
 static inline bool is_movz_instruction(unsigned binary)
 {
-	if ((binary & OPCODE_MOVZ_MASK) != OPCODE_MOVZ)
+	if ((binary & OPCODE_MOVZ_MASK) != OPCODE_MOVZ) {
 		return false;
+	}
 	return true;
 }
 
@@ -254,6 +272,9 @@ static unsigned long get_adrp_ldr_new_data_addr(elf_link_t *elf_link, elf_file_t
 	return new_got_data_addr;
 }
 
+#define INSN_EXTEND_TWO   2
+#define INSN_EXTEND_THREE 3
+
 static void modify_adrp_ldr_tls(elf_link_t *elf_link, unsigned long insn_addr, unsigned long obj_addr)
 {
 	// change 4 insn to template ELF, in template ELF no need modid offset
@@ -262,8 +283,8 @@ static void modify_adrp_ldr_tls(elf_link_t *elf_link, unsigned long insn_addr, u
 
 	new_insn_raw = gen_ldst_binary_inpage(obj_addr, 0xf947f400U);
 	elf_write_u32(&elf_link->out_ef, insn_addr + ARM64_INSN_LEN, new_insn_raw);
-	elf_write_u32(&elf_link->out_ef, insn_addr + ARM64_INSN_LEN * 2, 0xd503201fU);
-	elf_write_u32(&elf_link->out_ef, insn_addr + ARM64_INSN_LEN * 3, 0xd503201fU);
+	elf_write_u32(&elf_link->out_ef, insn_addr + ARM64_INSN_LEN * INSN_EXTEND_TWO, 0xd503201fU);
+	elf_write_u32(&elf_link->out_ef, insn_addr + ARM64_INSN_LEN * INSN_EXTEND_THREE, 0xd503201fU);
 }
 
 static void modify_adrp_ldr_tls_ie(elf_link_t *elf_link, unsigned long insn_addr, unsigned long obj_addr,
@@ -363,8 +384,9 @@ static void modify_tls_ie(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela
 		new_got_data_addr = elf_get_new_tls_offset(elf_link, ef, sym->st_value + rela->r_addend) + BIAS;
 		new_insn_addr = get_new_addr_by_old_addr(elf_link, ef, rela->r_offset);
 		modify_mov_tls_ie(elf_link, new_insn_addr, new_got_data_addr, ef, rela->r_offset);
-	} else
+	} else {
 		si_panic("modify_tls_ie find other symbol!\n");
+	}
 }
 
 static void fix_special_symbol_new_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, unsigned long *new_addr)
@@ -454,8 +476,9 @@ static void modify_new_adrp(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *re
 		old_sym_addr = get_adrp_addr(old_insn, old_offset);
 		/* make sure old_sym_addr locate in .got */
 		sym = elf_find_symbol_by_name(ef, "_GLOBAL_OFFSET_TABLE_");
-		if (old_sym_addr < sym->st_value)
+		if (old_sym_addr < sym->st_value) {
 			old_sym_addr = sym->st_value;
+		}
 	} else {
 		old_sym_addr = sym->st_value + rela->r_addend;
 	}
@@ -477,11 +500,13 @@ static void modify_new_adrp(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *re
 static bool is_addr_in_section(unsigned long addr, elf_file_t *ef, char *sec_name)
 {
 	Elf64_Shdr *sec = elf_find_section_by_name(ef, sec_name);
-	if (!sec)
+	if (!sec) {
 		return false;
+	}
 
-	if (addr >= sec->sh_addr && addr < (sec->sh_addr + sec->sh_size))
+	if (addr >= sec->sh_addr && addr < (sec->sh_addr + sec->sh_size)) {
 		return true;
+	}
 	return false;
 }
 
@@ -514,8 +539,9 @@ bool is_special_symbol_redirection(elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *
 	// Some elf files may not contain segments A or B
 	unsigned long old_sym_addr = sym->st_value + rela->r_addend;
 	for (unsigned i = 0; i < UNALIGNED_SECTIONS_LEN; i++) {
-		if (is_addr_in_section(old_sym_addr, ef, unaligned_sections[i]))
+		if (is_addr_in_section(old_sym_addr, ef, unaligned_sections[i])) {
 			return true;
+		}
 	}
 
 	return false;
@@ -524,8 +550,9 @@ bool is_special_symbol_redirection(elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *
 bool is_gmon_start_symbol(elf_file_t *ef, Elf64_Sym *sym)
 {
 	//   2086: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND __gmon_start__
-	if (sym->st_shndx != SHN_UNDEF)
+	if (sym->st_shndx != SHN_UNDEF) {
 		return false;
+	}
 
 	char *name = elf_get_symbol_name(ef, sym);
 	if (elf_is_same_symbol_name(name, "__gmon_start__")) {
@@ -627,7 +654,7 @@ static void check_two_rela_insn_addr(elf_link_t *elf_link, elf_file_t *ef,
 	}
 
 	// other sym not .got
-	/*unsigned long old_obj_addr_page = old_obj_addr & PAGE_MASK;
+	/* unsigned long old_obj_addr_page = old_obj_addr & PAGE_MASK;
 	unsigned long new_obj_addr = get_new_elf_addr(elf_link, ef, old_obj_addr);
 	unsigned long new_obj_addr_page = get_new_elf_addr(elf_link, ef, old_obj_addr_page);
 
@@ -639,7 +666,7 @@ static void check_two_rela_insn_addr(elf_link_t *elf_link, elf_file_t *ef,
 		show_sec_mapping(elf_link);
 		si_panic("check_two_rela_insn_addr fail: old_obj_addr %lx new_obj_addr %lx old_obj_addr_page %lx new_obj_addr_page %lx rela->r_offset %08lx\n",
 			 old_obj_addr, new_obj_addr, old_obj_addr_page, new_obj_addr_page, rela->r_offset);
-	}*/
+	} */
 	(void)elf_link;
 	si_panic("check_two_rela_insn_addr fail: rela->r_offset %08lx\n", rela->r_offset);
 }
@@ -711,6 +738,8 @@ out:
 	SI_LOG_DEBUG("offset %lx->%lx addr %lx->%lx\n", old_offset, new_offset, old_sym_addr, new_sym_addr);
 }
 
+#define AARCH64_ADDRESS_LIMIT (1L << 12)
+
 int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela)
 {
 	Elf64_Sym *sym = NULL;
@@ -774,8 +803,9 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 	case R_AARCH64_LDST32_ABS_LO12_NC:
 	case R_AARCH64_LDST16_ABS_LO12_NC:
 	case R_AARCH64_LDST8_ABS_LO12_NC:
-		if (is_special_symbol_redirection(ef, rela, sym))
-			modify_new_special_insn(elf_link, ef, rela, sym);
+		if (is_special_symbol_redirection(ef, rela, sym)) {
+			 modify_new_special_insn(elf_link, ef, rela, sym);
+		}
 		return 0;
 	case R_AARCH64_LD64_GOT_LO12_NC:
 	case R_AARCH64_LD64_GOTPAGE_LO15:
@@ -790,8 +820,9 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		//    a29c:       9100e063        add     x3, x3, #0x38
 		// These 2 insns means add a range 16M imm
 		new_addr = elf_get_new_tls_offset(elf_link, ef, sym->st_value + rela->r_addend) + BIAS;
-		if ((long)new_addr >= (1L << 12) || (long)new_addr < 0)
+		if ((long)new_addr >= AARCH64_ADDRESS_LIMIT || (long)new_addr < 0) {
 			si_panic("R_AARCH64_TLSLE_ADD_TPREL_HI12: error, new_addr 0x%lx out of bound\n", new_addr);
+		}
 		// if offset more than 4k, we don't take it
 		new_addr &= (~PAGE_MASK);
 		binary = elf_read_u32_va(ef, old_offset);
@@ -847,6 +878,8 @@ void modify_plt_jump(elf_link_t *elf_link, elf_file_t *ef, unsigned long old_off
 	SI_LOG_DEBUG("plt jump at %lx\n", new_offset);
 }
 
+#define INST_EXTENT_FOUR_TIMES   4
+#define INST_EXTENT_SEVEN_TIMES  7
 static void modify_plt_section(elf_link_t *elf_link, elf_file_t *ef, unsigned long old_offset)
 {
 	Elf64_Shdr *old_rela_plt_sec = elf_find_section_by_name(ef, ".rela.plt");
@@ -856,14 +889,14 @@ static void modify_plt_section(elf_link_t *elf_link, elf_file_t *ef, unsigned lo
 	// modify .plt stub
 	old_offset += INST_LEN_BYTE;
 	modify_plt_jump(elf_link, ef, old_offset);
-	old_offset += INST_LEN_BYTE * 7;
+	old_offset += INST_LEN_BYTE * INST_EXTENT_SEVEN_TIMES;
 	// modify func@plt stubs
 	for (int i = 0; i < count; ++i, ++old_rela_entry) {
 		switch (ELF64_R_TYPE(old_rela_entry->r_info)) {
 		case R_AARCH64_JUMP_SLOT:
 		case R_AARCH64_IRELATIVE:
 			modify_plt_jump(elf_link, ef, old_offset);
-			old_offset += INST_LEN_BYTE * 4;
+			old_offset += INST_LEN_BYTE * INST_EXTENT_FOUR_TIMES;
 			break;
 		case R_AARCH64_TLSDESC:
 			if (ELF64_R_SYM(old_rela_entry->r_info)) {
@@ -971,8 +1004,9 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 	unsigned long start, end;
 	int ret = elf_find_func_range_by_name(template_ef, "__run_exit_handlers",
 					      &start, &end);
-	if (ret)
+	if (ret) {
 		si_panic("%s: elf_find_func_range_by_name fail\n", __func__);
+	}
 
 	/* find ldr with __stop___libc_atexit rela in __run_exit_handlers() */
 	Elf64_Shdr *sec = elf_find_section_by_name(template_ef, ".rela.text");
@@ -984,12 +1018,12 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 	for (unsigned i = 0; i < len; i++) {
 		Elf64_Rela *rela = &relas[i];
 		unsigned cur_sym_id = ELF64_R_SYM(rela->r_info);
-		if (sym_id != cur_sym_id)
+		if (sym_id != cur_sym_id || rela->r_offset < start || rela->r_offset >= end) {
 			continue;
-		if (rela->r_offset < start || rela->r_offset >= end)
-			continue;
-		if (old_ldr_addr)
+		}
+		if (old_ldr_addr) {
 			si_panic("%s, found 2 __stop___libc_atexit symbols\n", __func__);
+		}
 		old_ldr_addr = rela->r_offset;
 	}
 	if (!old_ldr_addr)
