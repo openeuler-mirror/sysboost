@@ -1026,8 +1026,9 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 		}
 		old_ldr_addr = rela->r_offset;
 	}
-	if (!old_ldr_addr)
+	if (!old_ldr_addr) {
 		si_panic("%s, didn't find __stop___libc_atexit symbol\n", __func__);
+	}
 	unsigned binary = elf_read_u32(template_ef, old_ldr_addr);
 	unsigned ldr_Rn = get_ldr_Rn(binary);
 
@@ -1035,13 +1036,16 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 	unsigned long old_adrp_addr = 0;
 	for (unsigned long addr = start; addr < end; addr += ARM64_INSN_LEN) {
 		binary = elf_read_u32(template_ef, addr);
-		if (!is_adrp_instruction(binary))
+		if (!is_adrp_instruction(binary)) {
 			continue;
+		}
 		unsigned adrp_Rd = get_adrp_Rd(binary);
-		if (adrp_Rd != ldr_Rn)
+		if (adrp_Rd != ldr_Rn) {
 			continue;
-		if (old_adrp_addr)
+		}
+		if (old_adrp_addr) {
 			si_panic("%s, found 2 matched adrp in __run_exit_handlers()\n", __func__);
+		}
 		old_adrp_addr = addr;
 	}
 	if (!old_adrp_addr)
@@ -1063,14 +1067,16 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 	bool found = false;
 	for (unsigned i = 0; i < len; i++) {
 		Elf64_Rela *rela = &relas[i];
-		if (rela->r_offset != got_addr)
+		if (rela->r_offset != got_addr) {
 			continue;
+		}
 		Elf64_Sym *sym = elf_find_symbol_by_name(out_ef, "__stop___libc_atexit");
 		rela->r_addend = sym->st_value;
 		SI_LOG_DEBUG("change .rela.dyn 0x%lx's value to 0x%lx\n",
 			     rela->r_offset, sym->st_value);
 		found = true;
 	}
-	if (!found)
+	if (!found) {
 		si_panic("didn't find corresponding rela entry in .rela.dyn\n");
+	}
 }

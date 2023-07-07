@@ -1,4 +1,15 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysboost is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -9,10 +20,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "elf_link_common.h"
-#include "elf_relocation.h"
 #include <si_debug.h>
 #include <si_log.h>
+
+#include "elf_link_common.h"
+#include "elf_relocation.h"
 
 #define BYTES_NOP1 0x90
 
@@ -25,7 +37,7 @@
 #define JMP32_INSN_OPCODE 0xE9
 
 #define MAX_INSN_OFFSET 2147483647L
-#define MIN_INSN_OFFSET -2147483648L
+#define MIN_INSN_OFFSET (-2147483648L)
 
 static void modify_local_call_sec(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
 {
