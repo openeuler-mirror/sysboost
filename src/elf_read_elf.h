@@ -1,4 +1,15 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysboost is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 #ifndef _ELF_READ_ELF_H
 #define _ELF_READ_ELF_H
 
@@ -97,7 +108,7 @@ bool elf_is_same_area(const elf_file_t *ef, const Elf64_Shdr *a, const Elf64_Shd
 void elf_parse_hdr(elf_file_t *ef);
 void elf_read_elf_phdr(elf_file_t *ef);
 void elf_read_elf_sections(elf_file_t *ef);
-int elf_read_file(char *file_name, elf_file_t *elf, bool is_readonly);
+int elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly);
 int elf_read_file_relocation(char *file_name, elf_file_t *ef);
 void elf_close_file(elf_file_t *ef);
 

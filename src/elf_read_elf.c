@@ -23,10 +23,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "elf_read_elf.h"
 #include <si_common.h>
 #include <si_debug.h>
 #include <si_log.h>
+
+#include "elf_read_elf.h"
 
 #ifdef __aarch64__
 #define LOCAL_RUNNING_ARCH EM_AARCH64
@@ -40,21 +41,25 @@
 // cmp symbol name without sym version
 bool elf_is_same_symbol_name(const char *a, const char *b)
 {
-	if (a == NULL || b == NULL)
+	if (a == NULL || b == NULL) {
 		return false;
+	}
 
 	while (*a != '\0' && *a != '@' && *b != '\0' && *b != '@') {
-		if (*a != *b)
+		if (*a != *b) {
 			return false;
+		}
 
 		a++;
 		b++;
 	}
 
-	if (*a != '\0' && *a != '@')
+	if (*a != '\0' && *a != '@') {
 		return false;
-	if (*b != '\0' && *b != '@')
+	}
+	if (*b != '\0' && *b != '@') {
 		return false;
+	}
 
 	return true;
 }
@@ -96,8 +101,9 @@ int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
 				unsigned long *start, unsigned long *end)
 {
 	Elf64_Sym *sym = elf_find_symbol_by_name(ef, func_name);
-	if (!sym)
+	if (!sym) {
 		return -1;
+	}
 	*start = sym->st_value;
 
 	Elf64_Shdr *sec = ef->symtab_sec;
@@ -107,13 +113,16 @@ int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
 	*end = ~0UL;
 	for (unsigned i = 0; i < count; i++) {
 		Elf64_Sym *sym = &syms[i];
-		if (sym->st_value <= *start)
+		if (sym->st_value <= *start) {
 			continue;
-		if (sym->st_value < *end)
+		}
+		if (sym->st_value < *end) {
 			*end = sym->st_value;
+		}
 	}
-	if (*end == ~0UL)
+	if (*end == ~0UL) {
 		return -1;
+	}
 	return 0;
 }
 
@@ -127,19 +136,20 @@ unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name)
 		Elf64_Sym *sym = &syms[i];
 		char *sym_name = elf_get_symbol_name(ef, sym);
 		SI_LOG_DEBUG("%s %s\n", name, sym_name);
-		if (elf_is_same_symbol_name(sym_name, name))
+		if (elf_is_same_symbol_name(sym_name, name)) {
 			return i;
+		}
 	}
 
 	si_panic("find symbol fail %s %s\n", ef->file_name, name);
 	return ~0U; /* unreachable */
 }
 
-Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *name)
+Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name)
 {
 	Elf64_Shdr *sec = ef->symtab_sec;
 	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + sec->sh_offset);
-	unsigned i = elf_find_symbol_index_by_name(ef, name);
+	unsigned i = elf_find_symbol_index_by_name(ef, sym_name);
 	return &syms[i];
 }
 
@@ -510,8 +520,9 @@ int elf_read_file(char *file_name, elf_file_t *ef, bool is_readonly)
 	int ret = 0;
 	int flags = O_RDONLY;
 
-	if (is_readonly == false)
+	if (is_readonly == false) {
 		flags = O_RDWR;
+	}
 
 	fd = open(file_name, flags);
 	if (fd == -1) {

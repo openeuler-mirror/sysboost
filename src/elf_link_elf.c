@@ -37,7 +37,7 @@
 #define LD_SO_PATH "/lib64/ld-linux-x86-64.so.2"
 #endif
 
-#define INDEX_TWO   2
+#define EXTEND_SIZE   2
 
 elf_link_t *elf_link_new(void)
 {
@@ -1396,7 +1396,7 @@ static void modify_hash(elf_file_t *elf_file, Elf64_Shdr *sec, Elf64_Shdr *dyn, 
 	for (int i = 0; i < (int)hash.bitmask_nwords; ++i) {
 		hash.bitmask[i] = ~0;
 	}
-	sec_data += INDEX_TWO * hash.bitmask_nwords;
+	sec_data += EXTEND_SIZE * hash.bitmask_nwords;
 	hash.buckets = sec_data;
 	hash.buckets[0] = hash.symbias;
 	sec_data += hash.nbuckets;
