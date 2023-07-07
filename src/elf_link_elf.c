@@ -37,6 +37,8 @@
 #define LD_SO_PATH "/lib64/ld-linux-x86-64.so.2"
 #endif
 
+#define INDEX_TWO   2
+
 elf_link_t *elf_link_new(void)
 {
 	elf_link_t *elf_link = NULL;
@@ -218,20 +220,21 @@ static bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *
 
 	// no use .plt, so delete .rela.plt
 	if (is_direct_call_optimize(elf_link) == true) {
-		if (!strcmp(name, ".rela.plt"))
+		if (!strcmp(name, ".rela.plt")) {
 			return false;
+		}
 	}
 
 	for (unsigned i = 0; i < NEEDED_SECTIONS_LEN; i++) {
-		if (!strcmp(name, needed_sections[i]))
+		if (!strcmp(name, needed_sections[i])) {
 			return true;
+		}
 	}
 
 	if (is_delete_symbol_version(elf_link) == false) {
-		if (!strcmp(name, ".gnu.version"))
+		if (!strcmp(name, ".gnu.version") || !strcmp(name, ".gnu.version_r")) {
 			return true;
-		if (!strcmp(name, ".gnu.version_r"))
-			return true;
+		}
 	}
 
 	return false;
@@ -331,10 +334,11 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 	SI_LOG_DEBUG("section %s at 0x%lx\n", name, tmp_sec->sh_offset);
 
 	for (int i = 0; i < count; i++) {
-		if (!strcmp(name, ".init_array"))
+		if (!strcmp(name, ".init_array")) {
 			ef = &elf_link->in_efs[count - 1 - i];
-		else
+		} else {
 			ef = &elf_link->in_efs[i];
+		}
 		sec = elf_find_section_by_name(ef, name);
 		if (sec == NULL) {
 			continue;
@@ -422,7 +426,8 @@ static void merge_section_with_name(elf_link_t *elf_link, char *sec_name)
 	}
 
 	merge_section(elf_link, dst_sec, ef, sec);
-	SI_LOG_DEBUG("section %-20s %08lx %08lx %06lx\n", sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
+	SI_LOG_DEBUG("section %-20s %08lx %08lx %06lx\n",
+			sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
 }
 
 static void merge_filter_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t *ef, section_filter_func filter)
@@ -646,7 +651,8 @@ static void write_so_path_struct(elf_link_t *elf_link)
 	int count = elf_link->in_ef_nr;
 
 	// write count of so path, do not big than 3 Byte, tail Byte set null
-	elf_link->so_path_struct = (unsigned long)write_elf_file(elf_link, &count, sizeof(int)) - ((unsigned long)elf_link->out_ef.hdr);
+	elf_link->so_path_struct =
+		(unsigned long)write_elf_file(elf_link, &count, sizeof(int)) - ((unsigned long)elf_link->out_ef.hdr);
 	for (int i = 0; i < count; i++) {
 		ef = &elf_link->in_efs[i];
 		const char *filename = si_basename(ef->file_name);
@@ -762,7 +768,8 @@ static void write_first_LOAD_segment(elf_link_t *elf_link)
 		if (is_direct_call_optimize(elf_link) && (strcmp(name, ".rela.plt") == 0)) {
 			continue;
 		}
-		if (is_delete_symbol_version(elf_link) && ((strcmp(name, ".gnu.version")) == 0 || (strcmp(name, ".gnu.version_r")) == 0)) {
+		if (is_delete_symbol_version(elf_link) && ((strcmp(name, ".gnu.version")) == 0
+					|| (strcmp(name, ".gnu.version_r")) == 0)) {
 			continue;
 		}
 
@@ -1208,8 +1215,9 @@ static int sym_cmp_func(const void *src_sym_a_, const void *src_sym_b_)
 	const Elf64_Sym *src_sym_b = src_sym_b_;
 	const int is_local_b = ELF64_ST_BIND(src_sym_b->st_info) == STB_LOCAL;
 
-	if (is_local_a != is_local_b)
+	if (is_local_a != is_local_b) {
 		return is_local_b - is_local_a;
+	}
 	return src_sym_a->st_shndx - src_sym_b->st_shndx;
 }
 
@@ -1226,8 +1234,9 @@ static inline Elf64_Addr get_symbol_new_value(elf_link_t *elf_link, elf_file_t *
 	}
 
 	// STT_TLS symbol st_value is offset to TLS segment begin
-	if (ELF64_ST_TYPE(sym->st_info) == STT_TLS)
+	if (ELF64_ST_TYPE(sym->st_info) == STT_TLS) {
 		return elf_get_new_tls_offset(elf_link, ef, sym->st_value);
+	}
 
 	/*
 	 * __stop___libc_atexit is on the boundary of __libc_atexit and .bss,
@@ -1251,8 +1260,9 @@ static inline Elf32_Section get_symbol_new_section(elf_link_t *elf_link, elf_fil
 {
 	Elf64_Section shndx = sym->st_shndx;
 
-	if (shndx >= SHN_LORESERVE)
+	if (shndx >= SHN_LORESERVE) {
 		return shndx;
+	}
 	return get_new_section_index(elf_link, ef, shndx);
 }
 
@@ -1262,8 +1272,9 @@ static inline Elf64_Word get_symbol_new_name(elf_link_t *elf_link, elf_file_t *e
 	Elf64_Word name = sym->st_name;
 	Elf64_Shdr *strtab = &ef->sechdrs[sh_link];
 
-	if (!name)
+	if (!name) {
 		return 0;
+	}
 	return get_new_name_offset(elf_link, ef, strtab, name);
 }
 
@@ -1353,8 +1364,9 @@ static uint32_t elf_hash(char *str)
 {
 	uint32_t h = 5381;
 
-	for (; *str; str++)
+	for (; *str; str++) {
 		h = (h << 5) + h + *str;
+	}
 
 	return h;
 }
@@ -1366,22 +1378,25 @@ static void modify_hash(elf_file_t *elf_file, Elf64_Shdr *sec, Elf64_Shdr *dyn, 
 	Elf64_Sym *sym = dyn_start + dyn->sh_info;
 
 	unsigned count = dyn->sh_size / dyn->sh_entsize;
-	while (sym->st_shndx == STN_UNDEF)
+	while (sym->st_shndx == STN_UNDEF) {
 		++sym;
+	}
 
 	hash_t hash;
 	// put everything into one bucket
 	*sec_data++ = hash.nbuckets = 1;
 	*sec_data++ = hash.symbias = sym - dyn_start;
-	if (count == hash.symbias)
+	if (count == hash.symbias) {
 		return;
+	}
 	// skip bloom filter by setting bloom words to all ones
 	*sec_data++ = hash.bitmask_nwords = 1;
 	*sec_data++ = hash.shift = 0;
 	hash.bitmask = (uint64_t *)sec_data;
-	for (int i = 0; i < (int)hash.bitmask_nwords; ++i)
+	for (int i = 0; i < (int)hash.bitmask_nwords; ++i) {
 		hash.bitmask[i] = ~0;
-	sec_data += 2 * hash.bitmask_nwords;
+	}
+	sec_data += INDEX_TWO * hash.bitmask_nwords;
 	hash.buckets = sec_data;
 	hash.buckets[0] = hash.symbias;
 	sec_data += hash.nbuckets;
@@ -1474,7 +1489,8 @@ static void modify_section_name_index(elf_link_t *elf_link)
 			continue;
 		}
 		elf_obj_mapping_t *obj_mapping = elf_get_mapping_by_dst(elf_link, &secs[i]);
-		secs[i].sh_name = get_new_name_offset(elf_link, obj_mapping->src_ef, obj_mapping->src_ef->shstrtab_sec, secs[i].sh_name);
+		secs[i].sh_name = get_new_name_offset(elf_link, obj_mapping->src_ef,
+					obj_mapping->src_ef->shstrtab_sec, secs[i].sh_name);
 	}
 
 	elf_show_sections(ef);

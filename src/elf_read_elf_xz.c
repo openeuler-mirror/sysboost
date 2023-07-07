@@ -1,4 +1,15 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysboost is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 #include <errno.h>
 #include <lzma.h>
 #include <stdbool.h>
@@ -7,8 +18,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "elf_read_elf.h"
 #include <si_log.h>
+
+#include "elf_read_elf.h"
 
 static void xz_uncompress_log_err(lzma_ret ret)
 {
@@ -109,8 +121,9 @@ int elf_load_xz(elf_file_t *ef)
 
 void elf_unload_xz(elf_file_t *ef)
 {
-	if (!ef->hdr)
+	if (!ef->hdr) {
 		return;
+	}
 	free(ef->hdr);
 }
 
