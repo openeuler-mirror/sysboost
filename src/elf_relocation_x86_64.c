@@ -1,4 +1,15 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysboost is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -27,6 +38,8 @@
 #define MIN_INSN_OFFSET -2147483648L
 
 #define POKE_MAX_OPCODE_SIZE 10
+
+#define INDEX_FIVE 5
 
 union text_poke_insn {
 	unsigned char text[POKE_MAX_OPCODE_SIZE];
@@ -81,7 +94,7 @@ static int modify_insn_direct_jmp(elf_link_t *elf_link, elf_file_t *ef, Elf64_Re
 	}
 	insn->opcode = CALL_INSN_OPCODE;
 	insn->disp = disp;
-	insn->text[5] = BYTES_NOP1;
+	insn->text[INDEX_FIVE] = BYTES_NOP1;
 
 	return 0;
 }
@@ -294,8 +307,9 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		// call func use got, change to direct jump
 		// ff 15 00 00 00 00       callq  *0x00(%rip)
 		ret = modify_insn_direct_jmp(elf_link, ef, rela, sym);
-		if (ret == 0)
+		if (ret == 0) {
 			break;
+		}
 
 		// data var, just change offset
 		// 48 83 3d d2 fe 5f 00    cmpq   $0x0,0x5ffed2(%rip)
@@ -339,6 +353,8 @@ static void clear_rela(Elf64_Rela *dst_rela)
 	// TODO: bug, R_X86_64_NONE can not in .rela.plt
 }
 
+#define ADDRESS_OF_FOUR_BYTES  4
+#define ADDRESS_OF_SIX_BYTES   6
 void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 {
 	int len = arr->len;
@@ -383,13 +399,13 @@ void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 		// 68 00 00 00 00          pushq  $0x0
 		// e9 e0 ff ff ff          jmpq   200020 <.plt>
 		// change jmp insn offset to new
-		modify_insn_offset(elf_link, new_plt_addr - 4, (unsigned long)dst_rela->r_offset, -4);
+		modify_insn_offset(elf_link, new_plt_addr - ADDRESS_OF_FOUR_BYTES, (unsigned long)dst_rela->r_offset, -1 * ADDRESS_OF_FOUR_BYTES);
 		// change sym index, pushq has 1 Byte cmd
 		// index of .rela.plt
 		elf_write_value(out_ef, new_plt_addr + 1, &i, sizeof(unsigned int));
 		// relative jump to begin of .plt
 		// pushq has 5 Byte, jmpq has 1 Byte cmd
-		elf_write_jmp_addr(out_ef, new_plt_addr + 6, new_plt_start_addr);
+		elf_write_jmp_addr(out_ef, new_plt_addr + ADDRESS_OF_SIX_BYTES, new_plt_start_addr);
 	}
 
 	if (is_share_mode(elf_link) == false)
@@ -410,13 +426,14 @@ void modify_plt_got(elf_link_t *elf_link)
 
 	// ff 25 82 ff 5f 00       jmp    *0x5fff82(%rip)        # 7ffff8 <__cxa_finalize>
 	Elf64_Shdr *sec = elf_find_section_by_name(ef, ".plt.got");
-	if (!sec)
+	if (!sec) {
 		return;
+	}
 	unsigned long loc = sec->sh_offset;
 
 	// insn have 2 op code, direct value have 4 Byte
 	loc = loc + 2;
-	modify_insn_data_offset(elf_link, ef, loc, -4);
+	modify_insn_data_offset(elf_link, ef, loc, -1 * ADDRESS_OF_FOUR_BYTES);
 }
 
 void correct_stop_libc_atexit(elf_link_t *elf_link)

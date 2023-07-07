@@ -1,4 +1,15 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysboost is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 #include <dlfcn.h>
 #include <elf.h>
 #include <errno.h>
@@ -129,8 +140,9 @@ int create_elf_file(char *file_name, elf_file_t *elf_file)
 	elf_file->file_name = strdup(file_name);
 	lseek(fd, len - 1, SEEK_SET);
 	ret = write(fd, "", 1);
-	if (ret == -1UL)
+	if (ret == -1UL) {
 		si_panic("%s write fail\n", __func__);
+	}
 
 	elf_file->hdr = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (elf_file->hdr == MAP_FAILED) {
@@ -147,6 +159,7 @@ void truncate_elf_file(elf_link_t *elf_link)
 {
 	elf_file_t *out_ef = &elf_link->out_ef;
 	int ret = ftruncate(out_ef->fd, elf_link->next_file_offset);
-	if (ret == -1)
+	if (ret == -1) {
 		si_panic("%s ftruncate fail\n", __func__);
+	}
 }
