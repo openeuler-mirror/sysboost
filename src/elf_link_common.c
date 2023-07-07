@@ -1,6 +1,6 @@
 // Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
 //
-// sysMaster is licensed under Mulan PSL v2.
+// sysboost is licensed under Mulan PSL v2.
 // You can use this software according to the terms and conditions of the Mulan
 // PSL v2.
 // You may obtain a copy of Mulan PSL v2 at:
@@ -28,6 +28,15 @@
 #include <si_common.h>
 #include <si_debug.h>
 #include <si_log.h>
+
+#define INDEX_ZERO  0
+#define INDEX_ONE   1
+#define INDEX_TWO   2
+#define INDEX_THREE 3
+#define INDEX_FOUR  4
+#define INDEX_FIVE  5
+#define INDEX_SIX   6
+#define INDEX_SEVEN 7
 
 static char *special_dynsyms[] = {
     "__pointer_chk_guard",
@@ -618,17 +627,22 @@ static char *get_ifunc_nice_name(char *sym_name)
 
 	// ignore prefix of __memchr __strlen __GI_strlen __GI___strnlen __libc_memmove
 	// direct cmp char for performace, compile will optimize branch
-	if ((sym_name[0] == '_') && (sym_name[1] == '_') && (sym_name[2] == 'G') && (sym_name[3] == 'I') && (sym_name[4] == '_') && (sym_name[5] == '_') && (sym_name[6] == '_')) {
-		return sym_name + 7;
+	if ((sym_name[INDEX_ZERO] == '_') && (sym_name[INDEX_ONE] == '_') && (sym_name[INDEX_TWO] == 'G')
+		       	&& (sym_name[INDEX_THREE] == 'I') && (sym_name[INDEX_FOUR] == '_')
+			&& (sym_name[INDEX_FIVE] == '_') && (sym_name[INDEX_SIX] == '_')) {
+		return sym_name + INDEX_SEVEN;
 	}
-	if ((sym_name[0] == '_') && (sym_name[1] == '_') && (sym_name[2] == 'G') && (sym_name[3] == 'I') && (sym_name[4] == '_')) {
-		return sym_name + 5;
+	if ((sym_name[INDEX_ZERO] == '_') && (sym_name[INDEX_ONE] == '_') && (sym_name[INDEX_TWO] == 'G')
+			&& (sym_name[INDEX_THREE] == 'I') && (sym_name[INDEX_FOUR] == '_')) {
+		return sym_name + INDEX_FIVE;
 	}
-	if ((sym_name[0] == '_') && (sym_name[1] == '_') && (sym_name[2] == 'l') && (sym_name[3] == 'i') && (sym_name[4] == 'b') && (sym_name[5] == 'c') && (sym_name[6] == '_')) {
-		return sym_name + 7;
+	if ((sym_name[INDEX_ZERO] == '_') && (sym_name[INDEX_ONE] == '_') && (sym_name[INDEX_TWO] == 'l')
+			&& (sym_name[INDEX_THREE] == 'i') && (sym_name[INDEX_FOUR] == 'b')
+			&& (sym_name[INDEX_FIVE] == 'c') && (sym_name[INDEX_SIX] == '_')) {
+		return sym_name + INDEX_SEVEN;
 	}
-	if ((sym_name[0] == '_') && (sym_name[1] == '_')) {
-		return sym_name + 2;
+	if ((sym_name[INDEX_ZERO] == '_') && (sym_name[INDEX_ONE] == '_')) {
+		return sym_name + INDEX_TWO;
 	}
 	return sym_name;
 }

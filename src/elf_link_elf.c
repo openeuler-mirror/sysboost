@@ -1,4 +1,15 @@
-/* SPDX-License-Identifier: MulanPSL-2.0 */
+// Copyright (c) 2023 Huawei Technologies Co.,Ltd. All rights reserved.
+//
+// sysboost is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan
+// PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//         http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+// NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -10,14 +21,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <si_debug.h>
+#include <si_log.h>
+#include "si_array.h"
+
 #include "elf_check_elf.h"
 #include "elf_hugepage.h"
 #include "elf_link_elf.h"
 #include "elf_relocation.h"
 #include "elf_write_elf.h"
-#include "si_array.h"
-#include <si_debug.h>
-#include <si_log.h>
 
 #ifdef __aarch64__
 #define LD_SO_PATH "/lib/ld-linux-aarch64.so.1"
@@ -25,7 +37,7 @@
 #define LD_SO_PATH "/lib64/ld-linux-x86-64.so.2"
 #endif
 
-elf_link_t *elf_link_new()
+elf_link_t *elf_link_new(void)
 {
 	elf_link_t *elf_link = NULL;
 
