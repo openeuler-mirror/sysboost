@@ -128,5 +128,8 @@ void elf_set_hugepage(elf_link_t *elf_link)
 		phdr[i].p_flags |= PF_HUGEPAGE;
 	}
 
-	ef->hdr->e_flags |= OS_SPECIFIC_FLAG_HUGEPAGE | OS_SPECIFIC_FLAG_RTO;
+	ef->hdr->e_flags |= OS_SPECIFIC_FLAG_HUGEPAGE;
+	if (is_direct_vdso_optimize(elf_link)) {
+		ef->hdr->e_flags |= OS_SPECIFIC_FLAG_RTO;
+	}
 }
