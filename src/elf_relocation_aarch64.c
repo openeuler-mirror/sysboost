@@ -931,6 +931,7 @@ static void clear_plt_and_rela_plt(elf_link_t *elf_link)
 
 void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 {
+	unsigned long ret;
 	int len = arr->len;
 	elf_obj_mapping_t *obj_rels = arr->data;
 	Elf64_Sym *sym = NULL;
@@ -971,7 +972,11 @@ void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 		case R_AARCH64_JUMP_SLOT:
 			// 00000000003fffc8  0000000800000402 R_AARCH64_JUMP_SLOT    0000000000000000 puts@GLIBC_2.17 + 0
 			sym = elf_get_dynsym_by_rela(obj_rel->src_ef, src_rela);
-			dst_rela->r_addend = get_new_addr_by_dynsym(elf_link, obj_rel->src_ef, sym);
+			ret = get_new_addr_by_dynsym(elf_link, obj_rel->src_ef, sym);
+			if (ret == NOT_FOUND) {
+				ret = 0;
+			}
+			dst_rela->r_addend = ret;
 			break;
 		default:
 			si_panic("unsupported .rela.plt %ld\n", type);

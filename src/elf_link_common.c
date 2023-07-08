@@ -549,14 +549,14 @@ unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsign
 		return tmp;
 	}
 
-	return -1;
+	return NOT_FOUND;
 }
 
 unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr)
 {
 	unsigned long ret = _get_new_elf_addr(elf_link, src_ef, addr);
 	SI_LOG_DEBUG("get addr: %s %lx %lx\n", src_ef->file_name, addr, ret);
-	if (ret != (unsigned long)-1) {
+	if (ret != NOT_FOUND) {
 		return ret;
 	}
 
@@ -564,7 +564,7 @@ unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef,
 	si_log_set_global_level(SI_LOG_LEVEL_DEBUG);
 	show_sec_mapping(elf_link);
 	si_panic("get addr fail: %s addr %lx ret %lx\n", src_ef->file_name, addr, ret);
-	return -1;
+	return NOT_FOUND;
 }
 
 unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long offset)
@@ -760,11 +760,11 @@ static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
 
 	// WEAK func is used by GNU debug, libc do not have that func
 	if (is_gnu_weak_symbol(sym) == true) {
-		return 0;
+		return NOT_FOUND;
 	}
 
 	if (is_symbol_maybe_undefined(sym_name)) {
-		return 0;
+		return NOT_FOUND;
 	}
 
 	unsigned long ret = get_new_addr_by_symbol_mapping(elf_link, sym_name);
@@ -786,7 +786,11 @@ static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
 
 unsigned long get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
 {
-	return _get_new_addr_by_sym(elf_link, ef, sym, false);
+	unsigned long ret = _get_new_addr_by_sym(elf_link, ef, sym, false);
+	if (ret == NOT_FOUND) {
+		return 0;
+	}
+	return ret;
 }
 
 unsigned long get_new_addr_by_dynsym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)

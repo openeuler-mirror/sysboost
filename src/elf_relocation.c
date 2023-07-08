@@ -114,7 +114,18 @@ static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, El
 {
 	// some symbol do not export in .dynsym, change to R_AARCH64_RELATIVE
 	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
-	dst_rela->r_addend = get_new_addr_by_dynsym(elf_link, src_ef, sym);
+	unsigned long ret = get_new_addr_by_dynsym(elf_link, src_ef, sym);
+	if (ret == NOT_FOUND) {
+		// 1008:	48 8b 05 d9 2f 00 00 	mov    0x2fd9(%rip),%rax        # 3fe8 <__gmon_start__@Base>
+		// some addr need be 0, use by cmp jump
+		char *name = elf_get_dynsym_name(src_ef, sym);
+		if (!is_symbol_maybe_undefined(name)) {
+			si_panic("%s\n", name);
+		}
+		// do nothing
+		return;
+	}
+	dst_rela->r_addend = ret;
 
 #ifdef __aarch64__
 	dst_rela->r_info = ELF64_R_INFO(0, ELF64_R_TYPE(R_AARCH64_RELATIVE));

@@ -164,6 +164,126 @@ static void modify_tls_insn_data_offset(elf_link_t *elf_link, elf_file_t *ef, El
 	elf_write_u32(&elf_link->out_ef, loc, offset_in_insn);
 }
 
+#define TLS_INSN_OP0_INDEX (0)
+#define TLS_INSN_OP1_INDEX (1)
+#define TLS_INSN_OP2_INDEX (2)
+#define TLS_INSN_REG_SHIFT (3)
+#define TLS_INSN_REG_MASK (0x38U)
+#define TLS_INSN_OP_MASK (0xf8U)
+#define TLS_INSN_GOT_REG_OP (0x05U)
+#define TLS_INSN_REG_OP (0xc0U)
+
+static inline unsigned char get_reg_from_insn(unsigned char *insn)
+{
+	// Byte[2]  00 reg 101    rax=000 rbx=011
+	return (insn[TLS_INSN_OP2_INDEX] & TLS_INSN_REG_MASK) >> TLS_INSN_REG_SHIFT;
+}
+
+static inline void set_reg_to_insn(unsigned char *insn, unsigned char reg)
+{
+	// Byte[2]  11 000 reg    rax=000 rbx=011
+	insn[TLS_INSN_OP2_INDEX] = reg | TLS_INSN_REG_OP;
+}
+
+// 48 8b 05 c8 97 15 00 	mov    0x1597c8(%rip),%rax
+// 48 8b 1d f3 65 15 00 	mov    0x1565f3(%rip),%rbx
+// 48 8b 2d e4 a4 1b 00 	mov    0x1ba4e4(%rip),%rbp   rbp=101
+// 4c 8b 2d a7 e2 1a 00 	mov    0x1ae2a7(%rip),%r13   r13=101  op 4c reg r8-r15
+static inline bool is_tls_insn_got(unsigned char *insn)
+{
+	if ((insn[TLS_INSN_OP0_INDEX] != 0x48U) && (insn[TLS_INSN_OP0_INDEX] != 0x4cU)) {
+		return false;
+	}
+	if (insn[TLS_INSN_OP1_INDEX] != 0x8bU) {
+		return false;
+	}
+	// Byte[2]  00 reg 101    rax=000 rbx=011
+	unsigned char tmp = insn[TLS_INSN_OP2_INDEX];
+	tmp = tmp & (~TLS_INSN_REG_MASK);
+	if (tmp == TLS_INSN_GOT_REG_OP) {
+		return true;
+	}
+	return false;
+}
+
+// 48 c7 c0 88 ff ff ff 	mov    $0xffffffffffffff88,%rax
+// 48 c7 c3 88 ff ff ff 	mov    $0xffffffffffffff88,%rbx
+// 49 c7 c5 88 ff ff ff 	mov    $0xffffffffffffff88,%r13  op 49 reg r8-r15
+static inline bool is_tls_insn_imm_offset(unsigned char *insn)
+{
+	if ((insn[TLS_INSN_OP0_INDEX] != 0x48U) && (insn[TLS_INSN_OP0_INDEX] != 0x49U)) {
+		return false;
+	}
+	if (insn[TLS_INSN_OP1_INDEX] != 0xc7U) {
+		return false;
+	}
+	// Byte[2]  11 000 reg    rax=000 rbx=011
+	unsigned char tmp = insn[TLS_INSN_OP2_INDEX];
+	tmp = tmp & TLS_INSN_OP_MASK;
+	if (tmp == TLS_INSN_REG_OP) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline void tls_change_got_insn_to_offset_insn(unsigned char *insn)
+{
+	if (insn[TLS_INSN_OP0_INDEX] == 0x48U) {
+		// rax rbx OP0 is 0x48U
+	} else {
+		// reg r8-r15
+		insn[TLS_INSN_OP0_INDEX] = 0x49U;
+	}
+	insn[TLS_INSN_OP1_INDEX] = 0xc7U;
+	unsigned char reg = get_reg_from_insn(insn);
+	set_reg_to_insn(insn, reg);
+}
+
+static inline unsigned char *insn_offset_to_addr(elf_link_t *elf_link, unsigned long insn_begin)
+{
+	return (unsigned char *)((void *)elf_link->out_ef.hdr + insn_begin);
+}
+
+#define TLS_GOT_INSN_TO_OFFSET_LEN (3)
+
+static void modify_tls_insn_got(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *sym)
+{
+	// relative address points to .got, store thread variable offset
+	// may be use rbx or rax or rbp
+	// case 1:
+	// 9a796:	48 8b 1d f3 65 15 00 	mov    0x1565f3(%rip),%rbx        # 1f0d90 <_GLOBAL_OFFSET_TABLE_+0x1d0>
+	// 9a79d:	64 48 8b 13          	mov    %fs:(%rbx),%rdx
+	// 000000000009a799  0000051400000016 R_X86_64_GOTTPOFF      0000000000000048 tcache - 4
+	// 1300: 0000000000000048     8 TLS     LOCAL  DEFAULT   29 tcache
+	// [35] .got              PROGBITS        00000000001f0bc0 1efbc0 000428 08  WA  0   0  8
+	// case 2:
+	// 00000000000368f8  0000139e00000016 R_X86_64_GOTTPOFF      0000000000000028 __libc_tsd_CTYPE_B - 4
+	// 368f5:	48 8b 2d e4 a4 1b 00 	mov    0x1ba4e4(%rip),%rbp        # 1f0de0 <_GLOBAL_OFFSET_TABLE_+0x220>
+	// case 3:
+	// 975b9:	48 8b 05 c8 97 15 00 	mov    0x1597c8(%rip),%rax        # 1f0d88 <_GLOBAL_OFFSET_TABLE_+0x1c8>
+	// 975c7:	64 48 89 08          	mov    %rcx,%fs:(%rax)
+	// 00000000000975bc  000004f000000016 R_X86_64_GOTTPOFF      0000000000000058 thread_arena - 4
+	// 1264: 0000000000000058     8 TLS     LOCAL  DEFAULT   29 thread_arena
+	// this case, modify insn and then modify TLS offset
+	unsigned long new_offset = get_new_offset_by_old_offset(elf_link, ef, rela->r_offset);
+	unsigned long insn_begin = new_offset - TLS_GOT_INSN_TO_OFFSET_LEN;
+	unsigned char *insn = insn_offset_to_addr(elf_link, insn_begin);
+	if (is_tls_insn_got(insn)) {
+		tls_change_got_insn_to_offset_insn(insn);
+	} else if (is_tls_insn_imm_offset(insn) == false) {
+		si_panic("%s %lx\n", ef->file_name, rela->r_offset);
+	}
+
+	// 32 bit signed PC relative offset to GOT entry for IE symbol
+	// 20ee30:	48 c7 c0 88 ff ff ff 	mov    $0xffffffffffffff88,%rax
+	// 20ee37:	64 48 8b 00          	mov    %fs:(%rax),%rax
+	// 20ee3b:	48 8b 10             	mov    (%rax),%rdx
+	// 000000000020ee33  00000fe800000016 R_X86_64_GOTTPOFF      0000000000000050 _nl_current_LC_IDENTIFICATION - 4
+	// this case, just modify TLS offset
+	modify_tls_insn_data_offset(elf_link, ef, rela, sym);
+}
+
 // string symbol may have some name, change offset use insn direct value
 static void modify_insn_data_offset(elf_link_t *elf_link, elf_file_t *ef, unsigned long loc, int addend)
 {
@@ -179,6 +299,14 @@ static void modify_insn_data_offset(elf_link_t *elf_link, elf_file_t *ef, unsign
 
 static bool is_need_change_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
 {
+	// static mode do not have plt, so func need direct call
+	// 7753f:	e8 14 4e fb ff       	call   2c358 <malloc@plt>
+	// 0000000000077540  00002bc800000004 R_X86_64_PLT32         000000000009a760 malloc - 4
+	// 11208: 000000000009a760   604 FUNC    GLOBAL DEFAULT   15 malloc
+	if (is_direct_call_optimize(elf_link)) {
+		return true;
+	}
+
 	if (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC) {
 		return true;
 	}
@@ -280,11 +408,8 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		modify_insn_data_offset(elf_link, ef, rela->r_offset, rela->r_addend);
 		return SKIP_TWO_RELA;
 	case R_X86_64_GOTTPOFF:
-		// 32 bit signed PC relative offset to GOT entry for IE symbol
-		// 20ee30:	48 c7 c0 88 ff ff ff 	mov    $0xffffffffffffff88,%rax
-		// 20ee37:	64 48 8b 00          	mov    %fs:(%rax),%rax
-		// 20ee3b:	48 8b 10             	mov    (%rax),%rdx
-		// 000000000020ee33  00000fe800000016 R_X86_64_GOTTPOFF      0000000000000050 _nl_current_LC_IDENTIFICATION - 4
+		modify_tls_insn_got(elf_link, ef, rela, sym);
+		break;
 	case R_X86_64_TPOFF32:
 		// Offset in initial TLS block
 		// 22cb1b:	64 48 8b 04 25 d0 ff 	mov    %fs:0xffffffffffffffd0,%rax
