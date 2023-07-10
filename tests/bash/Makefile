@@ -1,39 +1,47 @@
 # SPDX-License-Identifier: MulanPSL-2.0
 ROOT_DIR=../../
-BUILD_DIR=$(ROOT_DIR)build/
-SYSBOOST=$(BUILD_DIR)src/sysboost
-BASH=/usr/bin/bash
+BUILD_DIR=$(ROOT_DIR)build
+SYSBOOST=$(BUILD_DIR)/src/sysboost
+RELOCATION_DIR=/usr/lib/relocation
 
-TEMPLATE_FILE=$(BUILD_DIR)src/static_template/sysboost_static_template
-TEMPLATE_FILE_PUB_PATH=/usr/lib/relocation/sysboost_static_template.relocation
+TEMPLATE_FILE=$(BUILD_DIR)/src/static_template/sysboost_static_template
+TEMPLATE_FILE_PUB_PATH=$(RELOCATION_DIR)/sysboost_static_template.relocation
+
+BASH=/usr/bin/bash
+BASH_R=$(RELOCATION_DIR)/usr/bin/bash
 
 LIBC=/usr/lib64/libc.so.6
-LIBC_R=/usr/lib/relocation$(LIBC).relocation
+LIBC_R=$(RELOCATION_DIR)$(LIBC).relocation
 
 LIBTINFO=/usr/lib64/libtinfo.so.7
-LIBTINFO_R=/usr/lib/relocation$(LIBTINFO).relocation
+LIBTINFO_R=$(RELOCATION_DIR)$(LIBTINFO).relocation
 
+MODE?=--static-nold
+#MODE=--static-nolibc
 
 .PHONY: all
 
 all: bash
 
+ifeq ($(MODE), --static-nold)
+# --static-nold
 bash:
 	clear
 	make -C $(ROOT_DIR)
-	xz $(TEMPLATE_FILE)
-	mv -f $(TEMPLATE_FILE).xz $(TEMPLATE_FILE_PUB_PATH)
 	@echo ===rto===
-	$(SYSBOOST) --static $(BASH) $(LIBTINFO) $(LIBC)
-	readelf -W -a bash.rto > bash.rto.elf
-	objdump -d bash.rto > bash.rto.asm
+	$(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO) $(LIBC)
+	readelf -W -a $(BASH).rto > bash.rto.elf
+	objdump -d $(BASH).rto > bash.rto.asm
 	@echo ===run===
-	./bash.rto -c "echo 1"
+	$(BASH).rto -c "echo 1"
 
 rto:
-	gdb --args $(SYSBOOST) --static $(BASH) $(LIBTINFO) $(LIBC)
+	gdb --args $(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO) $(LIBC)
 
-nolibc:
+else
+
+# static-nolibc
+bash:
 	clear
 	readelf -W -a $(TEMPLATE_FILE) > sysboost_static_template.elf
 	objdump -d $(TEMPLATE_FILE) > sysboost_static_template.asm
@@ -41,24 +49,26 @@ nolibc:
 	xz $(TEMPLATE_FILE)
 	mv -f $(TEMPLATE_FILE).xz $(TEMPLATE_FILE_PUB_PATH)
 	@echo ===rto2===
-	$(SYSBOOST) --static-nolibc $(BASH) $(LIBTINFO)
-	readelf -W -a bash.rto > bash.rto.elf
-	objdump -d bash.rto > bash.rto.asm
+	$(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO)
+	readelf -W -a $(BASH).rto > bash.rto.elf
+	objdump -d $(BASH).rto > bash.rto.asm
 	@echo ===run===
-	./bash.rto -c "echo 1"
+	$(BASH).rto -c "echo 1"
 
-rto2:
-	gdb --args $(SYSBOOST) --static-nolibc $(BASH) $(LIBTINFO)
+rto:
+	gdb --args $(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO)
+
+endif
 
 run:
-	gdb --args ./bash.rto -c "echo 1"
+	gdb --args $(BASH).rto -c "echo 1"
 
 env:
 	echo 0 > /proc/sys/kernel/randomize_va_space
 	cat /proc/sys/kernel/randomize_va_space
-	readelf -W -a $(BASH) > bash.elf
-	objdump -d $(BASH) > bash.asm
+	readelf -W -a $(BASH_R) > bash.elf
+	objdump -d $(BASH_R) > bash.asm
 	readelf -W -a $(LIBC_R) > libc.so.elf
 	objdump -d $(LIBC_R) > libc.so.asm
-	readelf -W -a $(LIBTINFO) > libtinfo.so.elf
-	objdump -d $(LIBTINFO) > libtinfo.so.asm
+	readelf -W -a $(LIBTINFO_R) > libtinfo.so.elf
+	objdump -d $(LIBTINFO_R) > libtinfo.so.asm

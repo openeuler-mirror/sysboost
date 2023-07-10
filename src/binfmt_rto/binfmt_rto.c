@@ -83,7 +83,10 @@ static struct global_symbols {
 	proc_symbol(arch_elf_adjust_prot);
 #else
 	proc_symbol(elf_hwcap2);
+/* 22.03 LTS not have get_sigframe_size */
+#ifdef get_sigframe_size
 	proc_symbol(get_sigframe_size);
+#endif
 	proc_symbol(set_personality_64bit);
 	proc_symbol(vdso64_enabled);
 	proc_symbol(map_vdso);
@@ -110,7 +113,9 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(arch_elf_adjust_prot),
 #else
 	proc_symbol_char(elf_hwcap2),
+#ifdef get_sigframe_size
 	proc_symbol_char(get_sigframe_size),
+#endif
 	proc_symbol_char(set_personality_64bit),
 	proc_symbol_char(vdso64_enabled),
 	proc_symbol_char(map_vdso),
@@ -246,6 +251,7 @@ do {									\
 
 #else
 // x86
+#ifdef get_sigframe_size
 #define ARCH_DLINFO							\
 do {									\
 	if (*(unsigned int *)g_sym.vdso64_enabled)			\
@@ -253,6 +259,14 @@ do {									\
 			    (unsigned long __force)current->mm->context.vdso); \
 	NEW_AUX_ENT(AT_MINSIGSTKSZ, g_sym.get_sigframe_size());		\
 } while (0)
+#else
+#define ARCH_DLINFO							\
+do {									\
+	if (*(unsigned int *)g_sym.vdso64_enabled)			\
+		NEW_AUX_ENT(AT_SYSINFO_EHDR,				\
+			    (unsigned long __force)current->mm->context.vdso); \
+} while (0)
+#endif
 
 int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, unsigned long load_bias, bool is_rto_format)
 {
