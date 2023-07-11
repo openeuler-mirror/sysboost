@@ -8,12 +8,17 @@ TEMPLATE_FILE=$(BUILD_DIR)/src/static_template/sysboost_static_template
 TEMPLATE_FILE_PUB_PATH=$(RELOCATION_DIR)/sysboost_static_template.relocation
 
 BASH=/usr/bin/bash
-BASH_R=$(RELOCATION_DIR)/usr/bin/bash
+BASH_R=$(RELOCATION_DIR)$(BASH).relocation
 
 LIBC=/usr/lib64/libc.so.6
 LIBC_R=$(RELOCATION_DIR)$(LIBC).relocation
 
+VERSION_ID=$(shell cat /etc/os-release | grep VERSION_ID)
+ifeq ($(VERSION_ID), VERSION_ID="22.03")
+LIBTINFO=/usr/lib64/libtinfo.so.6
+else
 LIBTINFO=/usr/lib64/libtinfo.so.7
+endif
 LIBTINFO_R=$(RELOCATION_DIR)$(LIBTINFO).relocation
 
 MODE?=--static-nold
@@ -48,7 +53,7 @@ bash:
 	make -C $(ROOT_DIR)
 	xz $(TEMPLATE_FILE)
 	mv -f $(TEMPLATE_FILE).xz $(TEMPLATE_FILE_PUB_PATH)
-	@echo ===rto2===
+	@echo ===rto===
 	$(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO)
 	readelf -W -a $(BASH).rto > bash.rto.elf
 	objdump -d $(BASH).rto > bash.rto.asm
