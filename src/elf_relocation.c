@@ -203,6 +203,12 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		// [36] .data             PROGBITS        00000000001f1000 1f0000 0016a8 00  WA  0   0 32
 		dst_rela->r_addend = elf_get_new_tls_offset(elf_link, src_ef, src_rela->r_addend);
 		break;
+	case R_X86_64_COPY:
+		// 000000000012dd60  000001b900000005 R_X86_64_COPY          000000000012dd60 stdout@GLIBC_2.2.5 + 0
+		// 441: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5 (2)
+		// copy addr of sym to bss var, dyn sym need fix sym.value, see modify_symbol()
+		// nothing need to do here
+		break;
 	case R_AARCH64_COPY:
 		// Variables in the bss section, some from glibc, some declared by the application
 		// Redefined in the template file temporarily, so skip here

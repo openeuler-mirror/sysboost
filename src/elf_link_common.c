@@ -573,7 +573,7 @@ unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src
 	return get_new_addr_by_old_addr(elf_link, src_ef, offset);
 }
 
-static unsigned long _get_ifunc_new_addr(elf_link_t *elf_link, char *sym_name);
+static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, char *sym_name);
 
 static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_name)
 {
@@ -614,7 +614,7 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 
 out:
 	if (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC) {
-		return _get_ifunc_new_addr(elf_link, sym_name);
+		return get_ifunc_new_addr(elf_link, ef, sym, sym_name);
 	}
 
 	return get_new_addr_by_old_addr(elf_link, ef, sym->st_value);
@@ -710,19 +710,36 @@ static unsigned long _get_ifunc_new_addr(elf_link_t *elf_link, char *sym_name)
 	return 0;
 }
 
+static void elf_gen_nice_name(char *sym_name)
+{
+	if (sym_name == NULL) {
+		return;
+	}
+
+	char *c = index(sym_name, '@');
+	if (c) {
+		*c = '\0';
+	}
+}
+
 // ifunc is in ELFs, so it can not init when start
 // Assume that ifunc function name is unique
-static unsigned long append_ifunc_symbol(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, char *sym_name)
+static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, char *sym_name)
 {
+	// sym name may have version, strpbrk@GLIBC_2.2.5
+	char nice_sym_name[ELF_MAX_SYMBOL_NAME_LEN] = { 0 };
+	(void)strncpy(nice_sym_name, sym_name, ELF_MAX_SYMBOL_NAME_LEN - 1);
+	elf_gen_nice_name(nice_sym_name);
+
 	unsigned long ret;
 	if (is_static_nolibc_mode(elf_link)) {
-		ret = _get_ifunc_new_addr(elf_link, sym_name);
+		ret = _get_ifunc_new_addr(elf_link, nice_sym_name);
 	} else {
 		// use ifunc return value
-		ret = _get_ifunc_new_addr_by_dl(elf_link, ef, sym, sym_name);
+		ret = _get_ifunc_new_addr_by_dl(elf_link, ef, sym, nice_sym_name);
 	}
-	append_symbol_mapping(elf_link, sym_name, ret);
-	SI_LOG_DEBUG("ifunc %s %16lx\n", sym_name, ret);
+	append_symbol_mapping(elf_link, nice_sym_name, ret);
+	SI_LOG_DEBUG("ifunc %s %16lx\n", nice_sym_name, ret);
 
 	return ret;
 }
@@ -772,7 +789,7 @@ static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
 		return ret;
 	}
 	if (is_direct_call_optimize(elf_link) && (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC)) {
-		return append_ifunc_symbol(elf_link, ef, sym, sym_name);
+		return get_ifunc_new_addr(elf_link, ef, sym, sym_name);
 	}
 
 	// When the shndx != SHN_UNDEF, the symbol in this ELF.

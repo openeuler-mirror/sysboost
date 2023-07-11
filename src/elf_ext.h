@@ -73,4 +73,7 @@
 
 #define ELF_VVAR_AND_VDSO_LEN (ELF_VVAR_LEN + ELF_VDSO_LEN)
 
+// ELF not define max len, but sometime we need
+#define ELF_MAX_SYMBOL_NAME_LEN (128)
+
 #endif /* _ELF_EXT_H */
