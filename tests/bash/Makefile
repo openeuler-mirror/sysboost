@@ -16,10 +16,18 @@ LIBC_R=$(RELOCATION_DIR)$(LIBC).relocation
 VERSION_ID=$(shell cat /etc/os-release | grep VERSION_ID)
 ifeq ($(VERSION_ID), VERSION_ID="22.03")
 LIBTINFO=/usr/lib64/libtinfo.so.6
+LIBTINFO_R=$(RELOCATION_DIR)$(LIBTINFO).3.relocation
 else
 LIBTINFO=/usr/lib64/libtinfo.so.7
-endif
 LIBTINFO_R=$(RELOCATION_DIR)$(LIBTINFO).relocation
+endif
+
+ARCH=$(shell uname -m)
+ifeq ($(ARCH), aarch64)
+	LIBLD=/lib/ld-linux-aarch64.so.1
+else
+	LIBLD=/lib64/ld-linux-x86-64.so.2
+endif
 
 MODE?=--static-nold
 #MODE=--static-nolibc
@@ -77,3 +85,5 @@ env:
 	objdump -d $(LIBC_R) > libc.so.asm
 	readelf -W -a $(LIBTINFO_R) > libtinfo.so.elf
 	objdump -d $(LIBTINFO_R) > libtinfo.so.asm
+	readelf -W -a $(LIBLD) > ld.so.elf
+	objdump -d $(LIBLD) > ld.so.asm
