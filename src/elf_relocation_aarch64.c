@@ -694,13 +694,13 @@ static void modify_branch_insn(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela 
 
 	// For static ELF, the symbol that type is IFUNC need special treatment
 	if (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC) {
-		new_sym_addr = get_new_addr_by_sym(elf_link, ef, sym);
+		new_sym_addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
 		goto out;
 	} else if (sym->st_value) {
 		old_sym_addr = sym->st_value + rela->r_addend;
 		new_sym_addr = get_new_addr_by_old_addr(elf_link, ef, old_sym_addr);
 	} else {
-		new_sym_addr = get_new_addr_by_sym(elf_link, ef, sym);
+		new_sym_addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
 	}
 
 	// WEAK func is used by GNU debug, libc do not have that func
