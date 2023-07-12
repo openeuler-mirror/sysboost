@@ -1024,8 +1024,9 @@ static int dynamic_merge_lib_one(elf_link_t *elf_link, elf_file_t *ef, Elf64_Dyn
 			continue;
 		}
 		// In static-pic mode, all DT_NEEDED should be deleted.
-		if (!is_share_mode(elf_link))
+		if (!is_share_mode(elf_link)) {
 			continue;
+		}
 		*dst_dyn = *dyn;
 		// fix name index
 		dst_dyn->d_un.d_val = get_new_name_offset(elf_link, ef, ef->dynstr_sec, dyn->d_un.d_val);
@@ -1229,8 +1230,9 @@ static inline Elf64_Addr get_symbol_new_value(elf_link_t *elf_link, elf_file_t *
 	// _DYNAMIC is the the start of .dynamic
 	// _GLOBAL_OFFSET_TABLE_ is ok if compiled with -znow
 	if (sym->st_shndx == SHN_ABS) {
-		if (elf_is_same_symbol_name("_DYNAMIC", name))
+		if (elf_is_same_symbol_name("_DYNAMIC", name)) {
 			return elf_link->out_ef.dynamic_Phdr->p_vaddr;
+		}
 	}
 
 	// STT_TLS symbol st_value is offset to TLS segment begin

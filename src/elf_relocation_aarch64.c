@@ -1053,8 +1053,9 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 		}
 		old_adrp_addr = addr;
 	}
-	if (!old_adrp_addr)
+	if (!old_adrp_addr) {
 		si_panic("%s, didn't find matched adrp in __run_exit_handlers()\n", __func__);
+	}
 
 	/* compute got addr from ldr and adrp in out_ef */
 	unsigned long new_adrp_addr = get_new_addr_by_old_addr(elf_link, template_ef, old_adrp_addr);
