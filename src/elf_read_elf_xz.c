@@ -67,8 +67,9 @@ static int xz_uncompress(lzma_stream *strm, elf_file_t *ef)
 			}
 			strm->next_in = in_buf;
 			strm->avail_in = rdret;
-			if (rdret == 0)
+			if (rdret == 0) {
 				action = LZMA_FINISH;
+			}
 		}
 		ret = lzma_code(strm, action);
 		if (strm->avail_out == 0 || ret != LZMA_OK) {
@@ -84,8 +85,9 @@ static int xz_uncompress(lzma_stream *strm, elf_file_t *ef)
 			strm->next_out = out_buf;
 			strm->avail_out = BUFSIZ;
 		}
-		if (ret == LZMA_STREAM_END)
+		if (ret == LZMA_STREAM_END) {
 			break;
+		}
 		if (ret != LZMA_OK) {
 			xz_uncompress_log_err(ret);
 			ret = -EINVAL;
