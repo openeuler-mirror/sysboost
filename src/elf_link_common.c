@@ -801,13 +801,18 @@ static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
 	return _get_new_addr_by_sym_name(elf_link, sym_name);
 }
 
-unsigned long get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
+unsigned long get_new_addr_by_sym_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
 {
 	unsigned long ret = _get_new_addr_by_sym(elf_link, ef, sym, false);
 	if (ret == NOT_FOUND) {
 		return 0;
 	}
 	return ret;
+}
+
+unsigned long get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
+{
+	return _get_new_addr_by_sym(elf_link, ef, sym, false);
 }
 
 unsigned long get_new_addr_by_dynsym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)

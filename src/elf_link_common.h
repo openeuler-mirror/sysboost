@@ -101,6 +101,7 @@ typedef struct {
 	bool delete_symbol_version;
 	bool direct_call_optimize;
 	bool direct_vdso_optimize;
+	bool direct_point_var_optimize;
 
 	// use libhook func to hook libc
 	bool hook_func;
@@ -170,6 +171,11 @@ static inline bool is_direct_call_optimize(elf_link_t *elf_link)
 static inline bool is_direct_vdso_optimize(elf_link_t *elf_link)
 {
 	return elf_link->direct_vdso_optimize;
+}
+
+static inline bool is_direct_point_var_optimize(elf_link_t *elf_link)
+{
+	return elf_link->direct_point_var_optimize;
 }
 
 static inline bool is_delete_symbol_version(elf_link_t *elf_link)
@@ -271,6 +277,7 @@ Elf64_Shdr *find_tmp_section_by_src(elf_link_t *elf_link, Elf64_Shdr *shdr);
 
 unsigned long find_sym_old_addr(elf_file_t *ef, char *sym_name);
 unsigned long find_sym_new_addr(elf_link_t *elf_link, elf_file_t *ef, char *sym_name);
+unsigned long get_new_addr_by_sym_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
 unsigned long get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
 unsigned long get_new_addr_by_dynsym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
 

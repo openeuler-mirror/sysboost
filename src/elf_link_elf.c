@@ -1545,7 +1545,7 @@ static void modify_init_and_fini(elf_link_t *elf_link)
 	elf_file_t *ef = get_main_ef(elf_link);
 	for (unsigned j = 0; j < DISABLED_FUNCS_LEN; j++) {
 		Elf64_Sym *sym = elf_find_symbol_by_name(ef, disabled_funcs[j]);
-		unsigned long addr = get_new_addr_by_sym(elf_link, ef, sym);
+		unsigned long addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
 		if (hdr->e_machine == EM_AARCH64) {
 			elf_write_u32(out_ef, addr, AARCH64_INSN_RET);
 		} else {

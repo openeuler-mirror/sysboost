@@ -20,9 +20,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "elf_link_common.h"
 #include <si_debug.h>
 #include <si_log.h>
+
+#include "elf_link_common.h"
+#include "elf_instruction.h"
 
 #define BYTES_NOP1 0x90
 
@@ -77,7 +79,7 @@ static void elf_write_jmp_addr(elf_file_t *ef, unsigned long addr_, unsigned lon
 static int modify_insn_direct_jmp(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *sym)
 {
 	unsigned long loc = get_new_addr_by_old_addr(elf_link, ef, rela->r_offset);
-	unsigned long sym_addr = get_new_addr_by_sym(elf_link, ef, sym);
+	unsigned long sym_addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
 	if (sym_addr == 0) {
 		return -1;
 	}
@@ -164,88 +166,12 @@ static void modify_tls_insn_data_offset(elf_link_t *elf_link, elf_file_t *ef, El
 	elf_write_u32(&elf_link->out_ef, loc, offset_in_insn);
 }
 
-#define TLS_INSN_OP0_INDEX (0)
-#define TLS_INSN_OP1_INDEX (1)
-#define TLS_INSN_OP2_INDEX (2)
-#define TLS_INSN_REG_SHIFT (3)
-#define TLS_INSN_REG_MASK (0x38U)
-#define TLS_INSN_OP_MASK (0xf8U)
-#define TLS_INSN_GOT_REG_OP (0x05U)
-#define TLS_INSN_REG_OP (0xc0U)
-
-static inline unsigned char get_reg_from_insn(unsigned char *insn)
+static unsigned char *get_insn_begin_by_offset(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela)
 {
-	// Byte[2]  00 reg 101    rax=000 rbx=011
-	return (insn[TLS_INSN_OP2_INDEX] & TLS_INSN_REG_MASK) >> TLS_INSN_REG_SHIFT;
+	unsigned long new_offset = get_new_offset_by_old_offset(elf_link, ef, rela->r_offset);
+	unsigned long insn_begin = new_offset - ELF_INSN_OP_LEN;
+	return elf_insn_offset_to_addr(&elf_link->out_ef, insn_begin);
 }
-
-static inline void set_reg_to_insn(unsigned char *insn, unsigned char reg)
-{
-	// Byte[2]  11 000 reg    rax=000 rbx=011
-	insn[TLS_INSN_OP2_INDEX] = reg | TLS_INSN_REG_OP;
-}
-
-// 48 8b 05 c8 97 15 00 	mov    0x1597c8(%rip),%rax
-// 48 8b 1d f3 65 15 00 	mov    0x1565f3(%rip),%rbx
-// 48 8b 2d e4 a4 1b 00 	mov    0x1ba4e4(%rip),%rbp   rbp=101
-// 4c 8b 2d a7 e2 1a 00 	mov    0x1ae2a7(%rip),%r13   r13=101  op 4c reg r8-r15
-static inline bool is_tls_insn_got(unsigned char *insn)
-{
-	if ((insn[TLS_INSN_OP0_INDEX] != 0x48U) && (insn[TLS_INSN_OP0_INDEX] != 0x4cU)) {
-		return false;
-	}
-	if (insn[TLS_INSN_OP1_INDEX] != 0x8bU) {
-		return false;
-	}
-	// Byte[2]  00 reg 101    rax=000 rbx=011
-	unsigned char tmp = insn[TLS_INSN_OP2_INDEX];
-	tmp = tmp & (~TLS_INSN_REG_MASK);
-	if (tmp == TLS_INSN_GOT_REG_OP) {
-		return true;
-	}
-	return false;
-}
-
-// 48 c7 c0 88 ff ff ff 	mov    $0xffffffffffffff88,%rax
-// 48 c7 c3 88 ff ff ff 	mov    $0xffffffffffffff88,%rbx
-// 49 c7 c5 88 ff ff ff 	mov    $0xffffffffffffff88,%r13  op 49 reg r8-r15
-static inline bool is_tls_insn_imm_offset(unsigned char *insn)
-{
-	if ((insn[TLS_INSN_OP0_INDEX] != 0x48U) && (insn[TLS_INSN_OP0_INDEX] != 0x49U)) {
-		return false;
-	}
-	if (insn[TLS_INSN_OP1_INDEX] != 0xc7U) {
-		return false;
-	}
-	// Byte[2]  11 000 reg    rax=000 rbx=011
-	unsigned char tmp = insn[TLS_INSN_OP2_INDEX];
-	tmp = tmp & TLS_INSN_OP_MASK;
-	if (tmp == TLS_INSN_REG_OP) {
-		return true;
-	}
-
-	return false;
-}
-
-static inline void tls_change_got_insn_to_offset_insn(unsigned char *insn)
-{
-	if (insn[TLS_INSN_OP0_INDEX] == 0x48U) {
-		// rax rbx OP0 is 0x48U
-	} else {
-		// reg r8-r15
-		insn[TLS_INSN_OP0_INDEX] = 0x49U;
-	}
-	insn[TLS_INSN_OP1_INDEX] = 0xc7U;
-	unsigned char reg = get_reg_from_insn(insn);
-	set_reg_to_insn(insn, reg);
-}
-
-static inline unsigned char *insn_offset_to_addr(elf_link_t *elf_link, unsigned long insn_begin)
-{
-	return (unsigned char *)((void *)elf_link->out_ef.hdr + insn_begin);
-}
-
-#define TLS_GOT_INSN_TO_OFFSET_LEN (3)
 
 static void modify_tls_insn_got(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *sym)
 {
@@ -266,11 +192,9 @@ static void modify_tls_insn_got(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela
 	// 00000000000975bc  000004f000000016 R_X86_64_GOTTPOFF      0000000000000058 thread_arena - 4
 	// 1264: 0000000000000058     8 TLS     LOCAL  DEFAULT   29 thread_arena
 	// this case, modify insn and then modify TLS offset
-	unsigned long new_offset = get_new_offset_by_old_offset(elf_link, ef, rela->r_offset);
-	unsigned long insn_begin = new_offset - TLS_GOT_INSN_TO_OFFSET_LEN;
-	unsigned char *insn = insn_offset_to_addr(elf_link, insn_begin);
-	if (is_tls_insn_got(insn)) {
-		tls_change_got_insn_to_offset_insn(insn);
+	unsigned char *insn = get_insn_begin_by_offset(elf_link, ef, rela);
+	if (elf_insn_is_reg_addr_mov(insn)) {
+		elf_insn_change_got_to_imm(insn);
 	} else if (is_tls_insn_imm_offset(insn) == false) {
 		si_panic("%s %lx\n", ef->file_name, rela->r_offset);
 	}
@@ -340,7 +264,7 @@ static void modify_insn_func_offset(elf_link_t *elf_link, elf_file_t *ef, Elf64_
 
 	// This is where to make the change
 	unsigned long loc = get_new_addr_by_old_addr(elf_link, ef, rela->r_offset);
-	unsigned long sym_addr = get_new_addr_by_sym(elf_link, ef, sym);
+	unsigned long sym_addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
 	if (sym_addr == 0) {
 		// share mode libc func is use plt, no need change
 		if (is_share_mode(elf_link)) {
@@ -374,6 +298,56 @@ static void fix_main_for_static_mode(elf_link_t *elf_link, elf_file_t *ef, Elf64
 	if (elf_is_same_symbol_name(name, "main")) {
 		modify_insn_func_offset(elf_link, ef, rela, sym);
 	}
+}
+
+static bool is_indirect_point_to_symbol(elf_file_t *ef, Elf64_Sym *sym)
+{
+	char *sym_name = elf_get_symbol_name(ef, sym);
+	char *c = index(sym_name, '@');
+	if (c) {
+		return true;
+	}
+
+	return false;
+}
+
+static void modify_insn_for_pc32(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *sym)
+{
+	// STT_FUNC no need reloc
+	if (ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
+		fix_main_for_static_mode(elf_link, ef, rela, sym);
+		return;
+	}
+
+	// stdout symbol is in libc, point addr in bash bss
+	// 000000000012dd60  000001b900000005 R_X86_64_COPY          000000000012dd60 stdout@GLIBC_2.2.5 + 0
+	// 441: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5 (2)
+	// 000000000004758e  0000066a00000002 R_X86_64_PC32          000000000012dd60 stdout@GLIBC_2.2.5 - 4
+	// 1642: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5
+	// 4758b:	48 8b 3d ce 67 0e 00 	mov    0xe67ce(%rip),%rdi        # 12dd60 <stdout@@GLIBC_2.2.5>
+	// libc environ is weak, so other ELF have the some var
+	// feature: 48 89 05 96 f8 0d 00 	mov    %rax,0xdf896(%rip)
+	// 952: 00000000001f4ce0     8 OBJECT  WEAK   DEFAULT   44 environ@@GLIBC_2.2.5
+	if (is_direct_point_var_optimize(elf_link) && is_indirect_point_to_symbol(ef, sym)) {
+		unsigned long sym_addr = get_new_addr_by_sym(elf_link, ef, sym);
+		if (sym_addr != NOT_FOUND) {
+			unsigned char *insn = get_insn_begin_by_offset(elf_link, ef, rela);
+			int ret = elf_insn_change_mov_to_lea(insn);
+			if (ret != 0) {
+				si_panic("%s %lx\n", ef->file_name, rela->r_offset);
+			}
+			unsigned long loc = get_new_addr_by_old_addr(elf_link, ef, rela->r_offset);
+			modify_insn_offset(elf_link, loc, sym_addr, rela->r_addend);
+			return;
+		}
+	}
+
+	// feature: if layout not random, use imm value, do not use lea
+
+	// data is use offset, STT_OBJECT
+	// global var, change insn offset
+	// lea    0x5fff75(%rip),%rax
+	modify_insn_data_offset(elf_link, ef, rela->r_offset, rela->r_addend);
 }
 
 // retrun value tell skip num
@@ -441,17 +415,8 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		modify_insn_data_offset(elf_link, ef, rela->r_offset, rela->r_addend);
 		break;
 	case R_X86_64_PC32:
-		// STT_FUNC no need reloc
-		if (ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
-			fix_main_for_static_mode(elf_link, ef, rela, sym);
-			break;
-		}
-
-		// data is use offset, STT_OBJECT
-		// global var, change insn offset
-		// lea    0x5fff75(%rip),%rax
-		// TODO: feature, direct mov, do not use lea
-		fallthrough;
+		modify_insn_for_pc32(elf_link, ef, rela, sym);
+		break;
 	case R_X86_64_GOTPCREL:
 	case R_X86_64_REX_GOTPCRELX:
 		// TODO: feature, sym may not exist, change data offset
