@@ -68,7 +68,7 @@ fn is_symlink(path: &PathBuf) -> bool {
 }
 
 fn db_add_link(path: &String) -> i32 {
-	// symlink app.link to app
+	// symlink app.link to app, different modes correspond to different directories
 	let file_name = Path::new(path).file_name().unwrap().to_str().unwrap();
 	let link_path = format!("{}{}.link", SYSBOOST_DB_PATH, file_name);
 	let ret_e = UnixFs::symlink(&path, &link_path);
@@ -166,8 +166,11 @@ fn gen_app_rto(conf: &RtoConfig) -> i32 {
 
 fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
 	let mut args: Vec<String> = Vec::new();
+	// TODO: support profile
 	let mut ret = 1;
+	// change layout of basic blocks in a function
 	args.push("-reorder-blocks=ext-tsp".to_string());
+	// Sorting functions by using hfsort+ a Hash-based function sorting algorithm
 	args.push("-reorder-functions=hfsort+".to_string());
 	args.push("-split-functions=true".to_string());
 	args.push("-split-all-cold".to_string());
@@ -359,6 +362,46 @@ fn find_libs(conf: &RtoConfig, elf: &Elf) -> Vec<String> {
 	}
 }
 
+//TODO: Supports hybrid mode, for example, use bolt to optimize dynamic library and then use static to merge them
+fn sysboost_core_process(conf: &RtoConfig) -> i32 {
+	match conf.mode.as_str() {
+		"bolt" => {
+			let ret = bolt_optimize_so(&conf);
+			if ret != 0 {
+				log::error!("Error: bolt mode start fault.");
+				return ret;
+			}
+		},
+		"static" | "static-nolibc" | "share" => {
+			let ret = gen_app_rto(&conf);
+			if ret != 0 {
+				log::error!("Error: generate rto start fault.");
+				return ret;
+			}
+		},
+		_ => {
+			log::info!("Warning: read elf file fault, please check config.");
+			// handle other cases
+		}
+	}
+
+	let ret = db_add_link(&conf.elf_path);
+	if ret != 0 {
+		log::error!("Error: db add link fault.");
+		return ret;
+	}
+
+	let ret = set_app_aot_flag(&conf.elf_path, true);
+	if ret != 0 {
+		log::error!("Error: set app aot flag fault.");
+		return ret;
+	}
+	return ret;
+}
+
+// TODO: exit() abnormal
+// TODO: exit() normal
+
 fn process_config(path: PathBuf) -> Option<RtoConfig> {
 	let conf_e = read_config(&path);
 	let mut conf = match conf_e {
@@ -394,25 +437,9 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 	let path_str = path.clone().into_os_string().into_string().unwrap();
 	conf.watch_paths.push(path_str);
 
-	if conf.mode == "bolt" {
-		let ret = bolt_optimize_so(&conf);
-		if ret != 0 {
-			return None;
-		}
-	}
-
-	let ret = gen_app_rto(&conf);
+	let ret = sysboost_core_process(&conf);
 	if ret != 0 {
-		return None;
-	}
-
-	let ret = db_add_link(&conf.elf_path);
-	if ret != 0 {
-		return None;
-	}
-
-	let ret = set_app_aot_flag(&conf.elf_path, true);
-	if ret != 0 {
+		log::error!("Error: db add link fault.");
 		return None;
 	}
 
@@ -561,6 +588,7 @@ fn insmod_ko(path: &String) {
 pub fn daemon_loop() {
 	insmod_ko(&KO_PATH.to_string());
 
+	// TODO: clean env
 	loop {
 		start_service();
 	}

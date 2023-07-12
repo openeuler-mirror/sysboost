@@ -9,6 +9,8 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-5-17
 
+
+// test all sysboostd modes and features
 #[cfg(test)]
 mod tests {
 	use std::fs;
@@ -17,6 +19,8 @@ mod tests {
 	use std::io::Write;
 	use std::process::Command;
 
+	// Normal Scenarios
+	// 1. try to start sysboostd, if sysboostd
 	fn is_sysboostd_running() -> bool {
 		// Start sysboostd service if it's not running
 		let output = Command::new("systemctl").args(&["is-active", "sysboost.service"]).output().expect("Failed to execute command");
@@ -143,4 +147,7 @@ mod tests {
 			stderr.trim()
 		);
 	}
+
+	// Unnormal Scenarios
+	// 1、When sysboostd break
 }
