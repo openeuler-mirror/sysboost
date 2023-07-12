@@ -18,6 +18,11 @@ mod tests {
 	use std::io::Read;
 	use std::io::Write;
 	use std::process::Command;
+	use std::path::Path;
+	use std::io::{BufRead, BufReader};
+	use std::fs::OpenOptions;
+	use std::{thread, time};
+
 
 	// Normal Scenarios
 	// 1. try to start sysboostd, if sysboostd
@@ -148,6 +153,74 @@ mod tests {
 		);
 	}
 
+	fn is_contain_log_message(message : &str) -> bool {
+		let file_name = "/var/log/messages";
+		let file = File::open(file_name).unwrap();
+		let lines = BufReader::new(file).lines();
+
+		for line in lines{
+			if let Ok(data) = line {
+				if (data.contains(message)) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	fn clear_log_message() {
+		let cmd_string = "> /var/log/messages".to_string();
+		let output =  Command::new("bash").arg("-c").arg(cmd_string).output().expect("Failed to execute command");
+		if !output.status.success() {
+			panic!("Failed to clear file");
+		}
+	}
+
+	#[test]
+	fn test_print_log_messages() {
+		// clear /var/log/message
+		let file_path = "/var/log/messages";
+		clear_log_message();
+		// stop sysboost
+		let output = Command::new("systemctl").args(&["is-active", "sysboost.service"]).output().expect("Failed to execute command");
+		if output.status.success() {
+			let output = Command::new("systemctl").args(&["stop", "sysboost.service"]).output().expect("Failed to execute command");
+			if !output.status.success() {
+				panic!("Failed to stop sysboostd service: {}", String::from_utf8_lossy(&output.stderr));
+			}
+		}
+
+		let output = Command::new("systemctl").args(&["is-active", "sysboost.service"]).output().expect("Failed to execute command");
+		if output.status.success() {
+			let stdout = String::from_utf8_lossy(&output.stdout);
+			let status = stdout.trim();
+			assert!(status == "inactive", "sysboostd is running");
+		}
+
+		// start sysboost
+		let output = Command::new("systemctl").args(&["start", "sysboost.service"]).output().expect("Failed to execute command");
+		if !output.status.success() {
+			panic!("Failed to start sysboostd service: {}", String::from_utf8_lossy(&output.stderr));
+		}
+
+		let output = Command::new("systemctl").args(&["is-active", "sysboost.service"]).output().expect("Failed to execute command");
+
+		if output.status.success() {
+			let stdout = String::from_utf8_lossy(&output.stdout);
+			let status = stdout.trim();
+			assert!(status == "active", "sysboostd is running");
+		}
+		// check log message
+		let sleep_millis = time::Duration::from_millis(1000);
+		thread::sleep(sleep_millis);
+		let has_message =  is_contain_log_message("Started Run sysboost for Kunpeng CPU");
+		assert!(has_message, "log info is not print in message!");
+                let has_Daemon_message =  is_contain_log_message("On Daemon");
+                assert!(has_Daemon_message, "log info is not print in message!");
+	}
+
 	// Unnormal Scenarios
 	// 1、When sysboostd break
 }
+
