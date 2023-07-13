@@ -23,3 +23,5 @@ goblin = "0.7"
 
 [dev-dependencies.tempfile]
 version = "3.2.0"
+cnproc = "0.2.1"
+lazy_static = "1.4.0"
