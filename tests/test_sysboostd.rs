@@ -222,5 +222,34 @@ mod tests {
 
 	// Unnormal Scenarios
 	// 1、When sysboostd break
+	fn test_restore_sysboostd_env() {
+// Create libtinfo.toml file in /etc/sysboost.d directory
+		let toml_path = "/etc/sysboost.d/libtinfo.toml";
+		let toml_content = "elf_path = '/usr/lib64/libtinfo.so' mode = 'bolt'";
+		fs::write(toml_path, toml_content).unwrap();
+
+		// Sleep for 3 seconds
+		sleep(Duration::from_secs(3));
+
+		// Delete libtinfo.toml file
+		fs::remove_file(toml_path).unwrap();
+
+		// Restart sysboostd service using systemctl
+		let output = Command::new("systemctl")
+			.arg("restart")
+			.arg("sysboostd")
+			.output()
+			.unwrap();
+		assert!(output.status.success());
+
+		// Check if /var/lib/sysboost directory exists and has files
+		let sysboost_dir = "/var/lib/sysboost";
+		assert!(fs::metadata(sysboost_dir).unwrap().is_dir());
+		assert!(fs::read_dir(sysboost_dir).unwrap().next().is_some());
+
+		// Check if /usr/lib64/libtinfo.so.bak file exists
+		let bak_path = "/usr/lib64/libtinfo.so.bak";
+		assert!(fs::metadata(bak_path).unwrap().is_file());
+	}
 }
 
