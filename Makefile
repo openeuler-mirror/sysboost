@@ -18,14 +18,17 @@ binfmt_rto:
 	make -C src/binfmt_rto
 
 release:
+	rm -rf Cargo.lock
 	rm -rf build
 	meson build
 
 debug:
+	rm -rf Cargo.lock
 	rm -rf build
 	meson build --buildtype=debug
 
 clean:
+	rm -rf Cargo.lock
 	ninja -C build clean
 	cargo clean
 

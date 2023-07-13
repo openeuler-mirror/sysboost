@@ -163,12 +163,9 @@ elf_file_t *elf_link_add_infile(elf_link_t *elf_link, char *path)
 	}
 	elf_link->in_ef_nr++;
 
-	// TODO: clean code, do not use libc_ef
 	if (strncmp("libc.so", si_basename(path), sizeof("libc.so") - 1) == 0) {
 		elf_link->libc_ef = ef;
 	}
-
-	// TODO: feature, zk--- recursion add dep lib
 
 	return ef;
 }
@@ -696,7 +693,7 @@ static void write_sysboost_section(elf_link_t *elf_link)
 	}
 
 	elf_file_t *main_ef = get_main_ef(elf_link);
-	unsigned long old_sym_addr = find_sym_old_addr(main_ef, "main");
+	unsigned long old_sym_addr = elf_find_symbol_addr_by_name(main_ef, "main");
 	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, main_ef, old_sym_addr);
 	elf_link->sysboost_data->entry_addr = new_sym_addr;
 }*/

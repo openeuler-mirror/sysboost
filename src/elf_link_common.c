@@ -125,7 +125,7 @@ void show_symbol_mapping(elf_link_t *elf_link)
 
 static void append_symbol_mapping_by_name(elf_link_t *elf_link, char *key, elf_file_t *ef, char *sym_name)
 {
-	unsigned long old_sym_addr = find_sym_old_addr(ef, sym_name);
+	unsigned long old_sym_addr = elf_find_symbol_addr_by_name(ef, sym_name);
 	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, ef, old_sym_addr);
 	append_symbol_mapping(elf_link, key, new_sym_addr);
 }
@@ -582,6 +582,7 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 	Elf64_Sym *sym = NULL;
 	int sym_count;
 
+	// find in all ELF symtab
 	for (int i = 1; i < count; i++) {
 		ef = &elf_link->in_efs[i];
 		sym_count = ef->symtab_sec->sh_size / sizeof(Elf64_Sym);
@@ -595,6 +596,7 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 		}
 	}
 
+	// find in template elf
 	ef = get_template_ef(elf_link);
 	sym_count = ef->symtab_sec->sh_size / sizeof(Elf64_Sym);
 	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->symtab_sec->sh_offset);
@@ -606,6 +608,7 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 		}
 	}
 
+	// static mode need find symbol
 	if (is_share_mode(elf_link) == false) {
 		si_log_set_global_level(SI_LOG_LEVEL_DEBUG);
 		show_symbol_mapping(elf_link);
@@ -742,27 +745,6 @@ static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, El
 	SI_LOG_DEBUG("ifunc %s %16lx\n", nice_sym_name, ret);
 
 	return ret;
-}
-
-unsigned long find_sym_old_addr(elf_file_t *ef, char *sym_name)
-{
-	int sym_count = ef->symtab_sec->sh_size / sizeof(Elf64_Sym);
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->symtab_sec->sh_offset);
-	for (int j = 0; j < sym_count; j++) {
-		Elf64_Sym *sym = &syms[j];
-		char *name = elf_get_symbol_name(ef, sym);
-		if (elf_is_same_symbol_name(sym_name, name) && sym->st_shndx != SHN_UNDEF) {
-			return sym->st_value;
-		}
-	}
-	si_panic("can not find sym, %s %s\n", ef->file_name, sym_name);
-	return 0;
-}
-
-unsigned long find_sym_new_addr(elf_link_t *elf_link, elf_file_t *ef, char *sym_name)
-{
-	unsigned long old_addr = find_sym_old_addr(ef, sym_name);
-	return get_new_addr_by_old_addr(elf_link, ef, old_addr);
 }
 
 static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
