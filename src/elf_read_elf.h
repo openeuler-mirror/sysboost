@@ -49,6 +49,12 @@ typedef struct {
 	char *build_id;
 } elf_file_t;
 
+static inline unsigned int elf_get_dynsym_index(elf_file_t *ef, Elf64_Sym *sym)
+{
+	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->dynsym_sec->sh_offset);
+	return sym - syms;
+}
+
 static inline char *elf_get_section_name(const elf_file_t *ef, const Elf64_Shdr *sec)
 {
 	return ef->shstrtab_data + sec->sh_name;

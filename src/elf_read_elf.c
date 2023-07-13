@@ -38,6 +38,65 @@
 #define DEBUG_SEC_PRE_NAME ".debug_"
 #define BUILD_ID_LEN 40
 
+#define ELF_VERSION_NR_LOCAL 0
+#define ELF_VERSION_NR_GLOBAL 1
+
+static inline char *elf_get_version_name(elf_file_t *ef, Elf64_Vernaux *vernaux)
+{
+	return ef->dynstr_data + vernaux->vna_name;
+}
+
+static inline void *elf_get_section_data(elf_file_t *ef, Elf64_Shdr *sec)
+{
+	return (((void *)ef->hdr) + sec->sh_offset);
+}
+
+static inline Elf64_Shdr *elf_get_version_section(elf_file_t *ef)
+{
+	return elf_find_section_by_name(ef, ".gnu.version");
+}
+
+static inline Elf64_Shdr *elf_get_version_r_section(elf_file_t *ef)
+{
+	return elf_find_section_by_name(ef, ".gnu.version_r");
+}
+
+Elf64_Vernaux *elf_get_dynsym_vernaux(elf_file_t *ef, Elf64_Sym *sym)
+{
+	unsigned int index = elf_get_dynsym_index(ef, sym);
+	Elf64_Shdr *version_sec = elf_get_version_section(ef);
+	Elf64_Half *version_nr_arr = (Elf64_Half *)elf_get_section_data(ef, version_sec);
+	Elf64_Half version_nr = version_nr_arr[index];
+
+	// local or global not have Elf64_Vernaux
+	if ((version_nr == ELF_VERSION_NR_LOCAL) || (version_nr == ELF_VERSION_NR_GLOBAL)) {
+		return NULL;
+	}
+
+	Elf64_Vernaux *vernaux = NULL;
+	Elf64_Shdr *version_r_sec = elf_get_version_r_section(ef);
+	Elf64_Vernaux *vernaux_arr = (Elf64_Vernaux *)elf_get_section_data(ef, version_r_sec);
+	int count = version_r_sec->sh_size / sizeof(Elf64_Vernaux);
+	for (int i = 0; i < count; i++) {
+		vernaux = &vernaux_arr[i];
+		if (version_nr == vernaux->vna_other) {
+			return vernaux;
+		}
+	}
+
+	si_panic("vernaux_arr %lx\n", vernaux_arr);
+	return NULL;
+}
+
+char *elf_get_dynsym_version_name(elf_file_t *ef, Elf64_Sym *sym)
+{
+	Elf64_Vernaux *vernaux = elf_get_dynsym_vernaux(ef, sym);
+	if (vernaux == NULL) {
+		return NULL;
+	}
+	return elf_get_version_name(ef, vernaux);
+}
+
 bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym, bool is_dynsym)
 {
 	char *sym_name = NULL;
@@ -45,8 +104,12 @@ bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym, bool is_dynsym)
 		sym_name = elf_get_dynsym_name(ef, sym);
 		// stdout@GLIBC_2.2.5 (2)
 		// TODO:
-
-
+		char *version_name = elf_get_dynsym_version_name(ef, sym);
+		if (version_name == NULL) {
+			return false;
+		}
+		printf("zk--- %s %s\n", sym_name, version_name);
+		return true;
 	} else {
 		sym_name = elf_get_symbol_name(ef, sym);
 		// symtab name have @LIBC
