@@ -48,7 +48,19 @@ pub struct RtoConfig {
 	watch_paths: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct LinkInfo {
+	pub elf_path: String,
+}
+
 impl FromStr for RtoConfig {
+	type Err = toml::de::Error;
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		toml::from_str(s)
+	}
+}
+
+impl FromStr for LinkInfo {
 	type Err = toml::de::Error;
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		toml::from_str(s)
@@ -585,10 +597,91 @@ fn insmod_ko(path: &String) {
 	run_child("/usr/sbin/insmod", &args);
 }
 
+fn clean_env() {
+	// There may be multiple directories in /var/lib/sysboost, corresponding to different sysboost modes
+	let mut elf_files = Vec::new();
+	let dir_e = fs::read_dir(&Path::new(SYSBOOST_DB_PATH));
+	let dir = match dir_e {
+		Ok(dir) => dir,
+		Err(e) => {
+			log::error!("{}", e);
+			return;
+		}
+	};
+
+	for entry in dir {
+		let entry = entry.ok().unwrap();
+		let path = entry.path();
+
+		if path.is_file() {
+			continue;
+		}
+
+		let link_dir = match fs::read_dir(&path) {
+			Ok(link_dir) => link_dir,
+			Err(e) => {
+				log::error!("{}", e);
+				return;
+			}
+		};
+
+		for link_entry in link_dir {
+			let link_entry = link_entry.ok().unwrap();
+			let path = link_entry.path();
+			if path.is_dir() {
+				continue;
+			}
+			if path.file_name() == None {
+				continue;
+			}
+			let contents = match fs::read_to_string(path) {
+				Ok(c) => c,
+				Err(e) => {
+					log::error!("reading file fail {}", e);
+					return;
+				}
+			};
+			let info_e = contents.parse::<LinkInfo>();
+			match info_e {
+				Ok(ref c) => c,
+				Err(_) => {
+					log::error!("parse config fail");
+					return;
+				}
+			};
+
+			let info = info_e.unwrap();
+			elf_files.push(info.elf_path);
+			// Clear all files in sysboost_dir.
+			match fs::remove_file(entry.path()) {
+				Ok(c) => c,
+				Err(e) => {
+					log::error!("remove file fail {}", e);
+					return;
+				}
+			};
+		}
+	}
+
+	// Restore the original file pointed to by elf_file.
+	for file_path in elf_files {
+		let file_path_buf = PathBuf::from(file_path);
+		let bak_file_path = file_path_buf.clone().with_extension("link");
+		match fs::rename(&bak_file_path, &file_path_buf) {
+			Ok(c) => c,
+			Err(e) => {
+				log::error!("rename file fail {}", e);
+				return;
+			}
+		};
+	}
+}
+
 pub fn daemon_loop() {
 	insmod_ko(&KO_PATH.to_string());
 
-	// TODO: clean env
+	// When rebooting, you should clean up the backup environment
+	// clean_env();
 	loop {
 		start_service();
 	}
