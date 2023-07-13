@@ -204,6 +204,11 @@ static inline elf_file_t *get_out_ef(elf_link_t *elf_link)
 	return &elf_link->out_ef;
 }
 
+static inline elf_file_t *get_libc_ef(elf_link_t *elf_link)
+{
+	return elf_link->libc_ef;
+}
+
 static inline int elf_read_s32(elf_file_t *ef, unsigned long offset)
 {
 	void *addr = ((void *)ef->hdr + (unsigned long)offset);
@@ -226,10 +231,15 @@ static inline unsigned elf_read_u32_va(elf_file_t *ef, unsigned long va)
 	return elf_read_u32(ef, elf_va_to_offset(ef, va));
 }
 
-static inline unsigned long elf_read_u64(elf_file_t *ef, unsigned long addr_)
+static inline unsigned long elf_read_u64(elf_file_t *ef, unsigned long offset)
 {
-	void *addr = ((void *)ef->hdr + (unsigned long)addr_);
+	void *addr = ((void *)ef->hdr + (unsigned long)offset);
 	return *(unsigned long *)addr;
+}
+
+static inline unsigned elf_read_u64_va(elf_file_t *ef, unsigned long va)
+{
+	return elf_read_u64(ef, elf_va_to_offset(ef, va));
 }
 
 static inline void elf_write_u64(elf_file_t *ef, unsigned long addr_, unsigned long value)
@@ -275,8 +285,6 @@ char *elf_get_tmp_section_name(elf_link_t *elf_link, Elf64_Shdr *shdr);
 Elf64_Shdr *find_tmp_section_by_name(elf_link_t *elf_link, const char *sec_name);
 Elf64_Shdr *find_tmp_section_by_src(elf_link_t *elf_link, Elf64_Shdr *shdr);
 
-unsigned long find_sym_old_addr(elf_file_t *ef, char *sym_name);
-unsigned long find_sym_new_addr(elf_link_t *elf_link, elf_file_t *ef, char *sym_name);
 unsigned long get_new_addr_by_sym_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
 unsigned long get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
 unsigned long get_new_addr_by_dynsym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);

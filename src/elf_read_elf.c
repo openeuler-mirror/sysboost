@@ -38,6 +38,27 @@
 #define DEBUG_SEC_PRE_NAME ".debug_"
 #define BUILD_ID_LEN 40
 
+bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym, bool is_dynsym)
+{
+	char *sym_name = NULL;
+	if (is_dynsym) {
+		sym_name = elf_get_dynsym_name(ef, sym);
+		// stdout@GLIBC_2.2.5 (2)
+		// TODO:
+
+
+	} else {
+		sym_name = elf_get_symbol_name(ef, sym);
+		// symtab name have @LIBC
+		char *c = index(sym_name, '@');
+		if (c) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 // cmp symbol name without sym version
 bool elf_is_same_symbol_name(const char *a, const char *b)
 {
@@ -151,6 +172,14 @@ Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name)
 	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + sec->sh_offset);
 	unsigned i = elf_find_symbol_index_by_name(ef, sym_name);
 	return &syms[i];
+}
+
+unsigned long elf_find_symbol_addr_by_name(elf_file_t *ef, char *sym_name)
+{
+	Elf64_Sym *sym = elf_find_symbol_by_name(ef, sym_name);
+	return sym->st_value;
+	si_panic("can not find sym, %s %s\n", ef->file_name, sym_name);
+	return 0;
 }
 
 unsigned long elf_va_to_offset(elf_file_t *ef, unsigned long va)

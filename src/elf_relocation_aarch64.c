@@ -711,7 +711,7 @@ static void modify_branch_insn(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela 
 	char *name = elf_get_symbol_name(ef, sym);
 	if (unlikely(elf_is_same_symbol_name(name, "main"))) {
 		elf_file_t *main_ef = get_main_ef(elf_link);
-		old_sym_addr = find_sym_old_addr(main_ef, "main");
+		old_sym_addr = elf_find_symbol_addr_by_name(main_ef, "main");
 		new_sym_addr = get_new_addr_by_old_addr(elf_link, main_ef, old_sym_addr);
 		goto out;
 	}
@@ -720,7 +720,7 @@ static void modify_branch_insn(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela 
 	// exit process, and directly calls the _Exit function to end the process.
 	if (!is_share_mode(elf_link) && unlikely(elf_is_same_symbol_name(name, "exit"))) {
 		elf_file_t *template_ef = get_template_ef(elf_link);
-		old_sym_addr = find_sym_old_addr(template_ef, "_exit");
+		old_sym_addr = elf_find_symbol_addr_by_name(template_ef, "_exit");
 		new_sym_addr = get_new_addr_by_old_addr(elf_link, template_ef, old_sym_addr);
 		goto out;
 	}

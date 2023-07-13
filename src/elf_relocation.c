@@ -108,6 +108,19 @@ void modify_local_call(elf_link_t *elf_link)
 	}
 }
 
+static void rela_change_to_relative(Elf64_Rela *dst_rela, unsigned long addend)
+{
+	dst_rela->r_addend = addend;
+
+#ifdef __aarch64__
+	dst_rela->r_info = ELF64_R_INFO(0, ELF64_R_TYPE(R_AARCH64_RELATIVE));
+#else
+	dst_rela->r_info = ELF64_R_INFO(0, ELF64_R_TYPE(R_X86_64_RELATIVE));
+#endif
+
+	// offset modify by caller
+}
+
 // The __stack_chk_guard and __stack_chk_fail symbols are normally supplied by a GCC library called libssp
 // we can not change code to direct access the symbol, some code use 2 insn to point symbol, the adrp insn may be shared
 static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
@@ -125,15 +138,36 @@ static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, El
 		// do nothing
 		return;
 	}
-	dst_rela->r_addend = ret;
 
-#ifdef __aarch64__
-	dst_rela->r_info = ELF64_R_INFO(0, ELF64_R_TYPE(R_AARCH64_RELATIVE));
-#else
-	dst_rela->r_info = ELF64_R_INFO(0, ELF64_R_TYPE(R_X86_64_RELATIVE));
-#endif
+	rela_change_to_relative(dst_rela, ret);
+}
 
-	// offset modify by caller
+static void rela_use_relative(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
+{
+	// 000000000012dd60  000001b900000005 R_X86_64_COPY          000000000012dd60 stdout@GLIBC_2.2.5 + 0
+	// 441: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5 (2)
+	// libc: 1407: 00000000001ed688     8 OBJECT  GLOBAL DEFAULT   36 stdout@@GLIBC_2.2.5
+	// copy symbol data to bss area
+
+	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
+	if (elf_is_copy_symbol(src_ef, sym, true) == false) {
+		si_panic("%s %lx\n", src_ef->file_name, src_rela->r_offset);
+		return;
+	}
+
+	char *sym_name = elf_get_dynsym_name(src_ef, sym);
+	elf_file_t *libc_ef = get_libc_ef(elf_link);
+	unsigned long old_sym_addr = elf_find_symbol_addr_by_name(libc_ef, sym_name);
+	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, libc_ef, old_sym_addr);
+	if (new_sym_addr == NOT_FOUND) {
+		si_panic("%s %lx\n", src_ef->file_name, src_rela->r_offset);
+		return;
+	}
+
+	// TODO: check copy size
+
+	unsigned long data = elf_read_u64_va(libc_ef, new_sym_addr);
+	rela_change_to_relative(dst_rela, data);
 }
 
 void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
@@ -204,10 +238,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		dst_rela->r_addend = elf_get_new_tls_offset(elf_link, src_ef, src_rela->r_addend);
 		break;
 	case R_X86_64_COPY:
-		// 000000000012dd60  000001b900000005 R_X86_64_COPY          000000000012dd60 stdout@GLIBC_2.2.5 + 0
-		// 441: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5 (2)
-		// copy addr of sym to bss var, dyn sym need fix sym.value, see modify_symbol()
-		// nothing need to do here
+		rela_use_relative(elf_link, src_ef, src_rela, dst_rela);
 		break;
 	case R_AARCH64_COPY:
 		// Variables in the bss section, some from glibc, some declared by the application

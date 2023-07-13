@@ -300,17 +300,6 @@ static void fix_main_for_static_mode(elf_link_t *elf_link, elf_file_t *ef, Elf64
 	}
 }
 
-static bool is_indirect_point_to_symbol(elf_file_t *ef, Elf64_Sym *sym)
-{
-	char *sym_name = elf_get_symbol_name(ef, sym);
-	char *c = index(sym_name, '@');
-	if (c) {
-		return true;
-	}
-
-	return false;
-}
-
 static void modify_insn_for_pc32(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *sym)
 {
 	// STT_FUNC no need reloc
@@ -328,7 +317,7 @@ static void modify_insn_for_pc32(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rel
 	// libc environ is weak, so other ELF have the some var
 	// feature: 48 89 05 96 f8 0d 00 	mov    %rax,0xdf896(%rip)
 	// 952: 00000000001f4ce0     8 OBJECT  WEAK   DEFAULT   44 environ@@GLIBC_2.2.5
-	if (is_direct_point_var_optimize(elf_link) && is_indirect_point_to_symbol(ef, sym)) {
+	if (is_direct_point_var_optimize(elf_link) && elf_is_copy_symbol(ef, sym, false)) {
 		unsigned long sym_addr = get_new_addr_by_sym(elf_link, ef, sym);
 		if (sym_addr != NOT_FOUND) {
 			unsigned char *insn = get_insn_begin_by_offset(elf_link, ef, rela);

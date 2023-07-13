@@ -86,9 +86,11 @@ int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
 // symbol
 unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name);
 Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name);
+unsigned long elf_find_symbol_addr_by_name(elf_file_t *ef, char *sym_name);
 bool elf_is_same_symbol_name(const char *a, const char *b);
 char *get_sym_name_dynsym(elf_file_t *ef, unsigned int index);
 int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear);
+bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym, bool is_dynsym);
 
 // section
 Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls_offset);
