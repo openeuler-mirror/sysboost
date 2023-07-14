@@ -18,11 +18,10 @@ mod tests {
 	use std::io::Read;
 	use std::io::Write;
 	use std::process::Command;
-	use std::path::Path;
 	use std::io::{BufRead, BufReader};
-	use std::fs::OpenOptions;
 	use std::{thread, time};
-
+	use std::thread::sleep;
+	use std::time::Duration;
 
 	// Normal Scenarios
 	// 1. try to start sysboostd, if sysboostd
@@ -160,7 +159,7 @@ mod tests {
 
 		for line in lines{
 			if let Ok(data) = line {
-				if (data.contains(message)) {
+				if data.contains(message) {
 					return true;
 				}
 			}
@@ -180,7 +179,6 @@ mod tests {
 	#[test]
 	fn test_print_log_messages() {
 		// clear /var/log/message
-		let file_path = "/var/log/messages";
 		clear_log_message();
 		// stop sysboost
 		let output = Command::new("systemctl").args(&["is-active", "sysboost.service"]).output().expect("Failed to execute command");
@@ -216,14 +214,15 @@ mod tests {
 		thread::sleep(sleep_millis);
 		let has_message =  is_contain_log_message("Started Run sysboost for Kunpeng CPU");
 		assert!(has_message, "log info is not print in message!");
-                let has_Daemon_message =  is_contain_log_message("On Daemon");
-                assert!(has_Daemon_message, "log info is not print in message!");
+                let has_daemon_message =  is_contain_log_message("On Daemon");
+                assert!(has_daemon_message, "log info is not print in message!");
 	}
 
 	// Unnormal Scenarios
 	// 1、When sysboostd break
+	#[test]
 	fn test_restore_sysboostd_env() {
-// Create libtinfo.toml file in /etc/sysboost.d directory
+		// Create libtinfo.toml file in /etc/sysboost.d directory
 		let toml_path = "/etc/sysboost.d/libtinfo.toml";
 		let toml_content = "elf_path = '/usr/lib64/libtinfo.so' mode = 'bolt'";
 		fs::write(toml_path, toml_content).unwrap();
