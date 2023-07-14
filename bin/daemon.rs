@@ -67,11 +67,11 @@ fn is_symlink(path: &PathBuf) -> bool {
 	return file_type.is_symlink();
 }
 
-fn db_add_link(path: &String) -> i32 {
+fn db_add_link(conf: &RtoConfig) -> i32 {
 	// symlink app.link to app, different modes correspond to different directories
-	let file_name = Path::new(path).file_name().unwrap().to_str().unwrap();
+	let file_name = Path::new(&conf.elf_path).file_name().unwrap().to_str().unwrap();
 	let link_path = format!("{}{}.link", SYSBOOST_DB_PATH, file_name);
-	let ret_e = UnixFs::symlink(&path, &link_path);
+	let ret_e = UnixFs::symlink(&conf.elf_path, &link_path);
 	match ret_e {
 		Ok(_) => {}
 		Err(_) => {
@@ -385,7 +385,7 @@ fn sysboost_core_process(conf: &RtoConfig) -> i32 {
 		}
 	}
 
-	let ret = db_add_link(&conf.elf_path);
+	let ret = db_add_link(&conf);
 	if ret != 0 {
 		log::error!("Error: db add link fault.");
 		return ret;
@@ -398,9 +398,6 @@ fn sysboost_core_process(conf: &RtoConfig) -> i32 {
 	}
 	return ret;
 }
-
-// TODO: exit() abnormal
-// TODO: exit() normal
 
 fn process_config(path: PathBuf) -> Option<RtoConfig> {
 	let conf_e = read_config(&path);
@@ -588,7 +585,7 @@ fn insmod_ko(path: &String) {
 pub fn daemon_loop() {
 	insmod_ko(&KO_PATH.to_string());
 
-	// TODO: clean env
+	// When rebooting, you should clean up the backup environment
 	loop {
 		start_service();
 	}
