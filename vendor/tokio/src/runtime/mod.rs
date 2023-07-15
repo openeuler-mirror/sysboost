@@ -230,8 +230,10 @@ cfg_rt! {
         pub use crate::util::rand::RngSeed;
     }
 
-    mod defer;
-    pub(crate) use defer::Defer;
+    cfg_taskdump! {
+        pub mod dump;
+        pub use dump::Dump;
+    }
 
     mod handle;
     pub use handle::{EnterGuard, Handle, TryCurrentError};
@@ -244,9 +246,9 @@ cfg_rt! {
 
     cfg_metrics! {
         mod metrics;
-        pub use metrics::RuntimeMetrics;
+        pub use metrics::{RuntimeMetrics, HistogramScale};
 
-        pub(crate) use metrics::{MetricsBatch, SchedulerMetrics, WorkerMetrics};
+        pub(crate) use metrics::{MetricsBatch, SchedulerMetrics, WorkerMetrics, HistogramBuilder};
 
         cfg_net! {
         pub(crate) use metrics::IoDriverMetrics;
@@ -255,7 +257,7 @@ cfg_rt! {
 
     cfg_not_metrics! {
         pub(crate) mod metrics;
-        pub(crate) use metrics::{SchedulerMetrics, WorkerMetrics, MetricsBatch};
+        pub(crate) use metrics::{SchedulerMetrics, WorkerMetrics, MetricsBatch, HistogramBuilder};
     }
 
     /// After thread starts / before thread stops

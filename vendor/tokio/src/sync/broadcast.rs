@@ -1194,6 +1194,33 @@ impl<T: Clone> Receiver<T> {
         let guard = self.recv_ref(None)?;
         guard.clone_value().ok_or(TryRecvError::Closed)
     }
+
+    /// Blocking receive to call outside of asynchronous contexts.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if called within an asynchronous execution
+    /// context.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::thread;
+    /// use tokio::sync::broadcast;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let (tx, mut rx) = broadcast::channel(16);
+    ///
+    ///     let sync_code = thread::spawn(move || {
+    ///         assert_eq!(rx.blocking_recv(), Ok(10));
+    ///     });
+    ///
+    ///     let _ = tx.send(10);
+    ///     sync_code.join().unwrap();
+    /// }
+    pub fn blocking_recv(&mut self) -> Result<T, RecvError> {
+        crate::future::block_on(self.recv())
+    }
 }
 
 impl<T> Drop for Receiver<T> {
@@ -1252,6 +1279,8 @@ where
     type Output = Result<T, RecvError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<T, RecvError>> {
+        ready!(crate::trace::trace_leaf(cx));
+
         let (receiver, waiter) = self.project();
 
         let guard = match receiver.recv_ref(Some((waiter, cx.waker()))) {
