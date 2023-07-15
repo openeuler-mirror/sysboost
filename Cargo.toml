@@ -6,7 +6,6 @@ default-run = "sysboostd"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-
 [[bin]]
 name ="sysboostd"
 path = "bin/main.rs"
@@ -14,6 +13,9 @@ path = "bin/main.rs"
 [target.'cfg(not(windows))'.dependencies]
 basic = { path = "libs/basic" }
 daemonize = "0.x"
+lazy_static = "1.4.0"
+procfs = "0.6.0"
+cnproc = "0.2.1"
 
 serde = { version = "1.0.143", features = ["serde_derive"] }
 toml = "0.5.9"
@@ -23,5 +25,4 @@ goblin = "0.7"
 
 [dev-dependencies.tempfile]
 version = "3.2.0"
-cnproc = "0.2.1"
-lazy_static = "1.4.0"
+

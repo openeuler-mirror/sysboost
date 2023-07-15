@@ -10,13 +10,16 @@
 // Create: 2023-4-20
 
 mod daemon;
+mod coredump_monitor;
 
 use crate::daemon::daemon_loop;
+use crate::coredump_monitor::coredump_monitor_loop;
 
 use basic::logger::{self};
 use daemonize::Daemonize;
 use log::{self};
 use std::env;
+use std::thread;
 
 const APP_NAME: &str = "sysboostd";
 
@@ -53,6 +56,10 @@ fn main() {
 			}
 		}
 	}
+        // start up coredump monitor
+        let coredump_monitor_handle = thread::spawn(||{
+                coredump_monitor_loop();
+        });
 
 	// daemon service gen rto ELF with config
 	daemon_loop();
