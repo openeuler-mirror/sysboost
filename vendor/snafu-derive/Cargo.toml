@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "snafu-derive"
-version = "0.7.4"
+version = "0.7.5"
 authors = ["Jake Goulding <jake.goulding@gmail.com>"]
 description = "An ergonomic error handling library"
 documentation = "https://docs.rs/snafu"

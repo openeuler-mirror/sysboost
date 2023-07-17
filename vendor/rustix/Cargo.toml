@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.48"
 name = "rustix"
-version = "0.37.20"
+version = "0.37.23"
 authors = [
     "Dan Gohman <dev@sunfishcode.online>",
     "Jakub Konka <kubkon@jakubkonka.com>",

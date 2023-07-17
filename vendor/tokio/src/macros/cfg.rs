@@ -373,6 +373,44 @@ macro_rules! cfg_not_rt_multi_thread {
     }
 }
 
+macro_rules! cfg_taskdump {
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(
+                tokio_unstable,
+                tokio_taskdump,
+                feature = "rt",
+                target_os = "linux",
+                any(
+                    target_arch = "aarch64",
+                    target_arch = "x86",
+                    target_arch = "x86_64"
+                )
+            ))]
+            $item
+        )*
+    };
+}
+
+macro_rules! cfg_not_taskdump {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(all(
+                tokio_unstable,
+                tokio_taskdump,
+                feature = "rt",
+                target_os = "linux",
+                any(
+                    target_arch = "aarch64",
+                    target_arch = "x86",
+                    target_arch = "x86_64"
+                )
+            )))]
+            $item
+        )*
+    };
+}
+
 macro_rules! cfg_test_util {
     ($($item:item)*) => {
         $(

@@ -487,6 +487,21 @@ compile_error!("Tokio's build script has incorrectly detected wasm.");
 ))]
 compile_error!("Only features sync,macros,io-util,rt,time are supported on wasm.");
 
+#[cfg(all(not(tokio_unstable), tokio_taskdump))]
+compile_error!("The `tokio_taskdump` feature requires `--cfg tokio_unstable`.");
+
+#[cfg(all(
+    tokio_taskdump,
+    not(all(
+        target_os = "linux",
+        any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
+    ))
+))]
+compile_error!(
+    "The `tokio_taskdump` feature is only currently supported on \
+linux, on `aarch64`, `x86` and `x86_64`."
+);
+
 // Includes re-exports used by macros.
 //
 // This module is not intended to be part of the public API. In general, any
@@ -550,6 +565,40 @@ cfg_rt! {
 
 cfg_time! {
     pub mod time;
+}
+
+mod trace {
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    cfg_taskdump! {
+        pub(crate) use crate::runtime::task::trace::trace_leaf;
+    }
+
+    cfg_not_taskdump! {
+        #[inline(always)]
+        #[allow(dead_code)]
+        pub(crate) fn trace_leaf(_: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+            std::task::Poll::Ready(())
+        }
+    }
+
+    #[cfg_attr(not(feature = "sync"), allow(dead_code))]
+    pub(crate) fn async_trace_leaf() -> impl Future<Output = ()> {
+        struct Trace;
+
+        impl Future for Trace {
+            type Output = ();
+
+            #[inline(always)]
+            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+                trace_leaf(cx)
+            }
+        }
+
+        Trace
+    }
 }
 
 mod util;

@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "snafu"
-version = "0.7.4"
+version = "0.7.5"
 authors = ["Jake Goulding <jake.goulding@gmail.com>"]
 exclude = [
     "/.cirrus.yml",
@@ -69,7 +69,7 @@ optional = true
 default-features = false
 
 [dependencies.snafu-derive]
-version = "0.7.4"
+version = "0.7.5"
 
 [features]
 backtraces = [

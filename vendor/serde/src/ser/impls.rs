@@ -257,6 +257,23 @@ where
 
 ////////////////////////////////////////////////////////////////////////////////
 
+impl<Idx> Serialize for RangeFrom<Idx>
+where
+    Idx: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use super::SerializeStruct;
+        let mut state = try!(serializer.serialize_struct("RangeFrom", 1));
+        try!(state.serialize_field("start", &self.start));
+        state.end()
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 #[cfg(not(no_range_inclusive))]
 impl<Idx> Serialize for RangeInclusive<Idx>
 where
@@ -270,6 +287,23 @@ where
         let mut state = try!(serializer.serialize_struct("RangeInclusive", 2));
         try!(state.serialize_field("start", &self.start()));
         try!(state.serialize_field("end", &self.end()));
+        state.end()
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+impl<Idx> Serialize for RangeTo<Idx>
+where
+    Idx: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use super::SerializeStruct;
+        let mut state = try!(serializer.serialize_struct("RangeTo", 1));
+        try!(state.serialize_field("end", &self.end));
         state.end()
     }
 }
@@ -713,7 +747,7 @@ impl Serialize for net::IpAddr {
 }
 
 #[cfg(feature = "std")]
-const DEC_DIGITS_LUT: &'static [u8] = b"\
+const DEC_DIGITS_LUT: &[u8] = b"\
       0001020304050607080910111213141516171819\
       2021222324252627282930313233343536373839\
       4041424344454647484950515253545556575859\
