@@ -1,24 +1,12 @@
-# native-turbo
+# sysboost
 
 #### 介绍
 
-Native-Turbo 是操作系统原生性能加速框架; 通过微架构优化和软硬件协同等技术, 提升大型应用性能;
-
-
+通过sysboost代码重排技术对可执行文件和动态库文件在线重排操作，优化代码与运行环境的CPU微架构的适应性, 提升程序性能。该技术在保证程序语义和意图不变的情况下, 优化汇编指令, 代码布局, 数据布局, 内存大页, 系统调用等。
 
 #### 软件架构
 
-![](doc/img/Native-Turbo-stack.svg)
-
-A-tune作为智能中心管理OS性能策略;
-wisdom接收A-tune策略, 执行调度算法;
-Native-Turbo提供操作系统各层级软件的性能优化机制, A-tune进行智能管理;
-
-
-
-Native-Turbo包含微架构优化技术, 基础库优化, 系统调用优化, 中断聚合, 软硬件协同等技术;
-
-
+![](doc/img/sysBoost-stack.png)
 
 微架构优化技术
 
@@ -38,18 +26,17 @@ exec原生大页
 
 #### 构建/安装教程
 
-请参考doc目录下各特性说明文档;
+请参考openEuler/docs下sysBoost章节;
 
 
 
 #### 使用说明
 
-请参考doc目录下各特性说明文档;
+请参考openEuler/docs下sysBoost章节;
 
 
 
 #### 参与贡献
 
-1.  发现BUG或者有新需求请提issue;  https://gitee.com/openeuler/native-turbo/issues
+1.  发现BUG或者有新需求请提issue;  https://gitee.com/openeuler/sysboost/issues
 2.  修复BUG或者新特性的补丁请通过Pull Request提交; 
-
