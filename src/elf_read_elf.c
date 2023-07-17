@@ -46,11 +46,6 @@ static inline char *elf_get_version_name(elf_file_t *ef, Elf64_Vernaux *vernaux)
 	return ef->dynstr_data + vernaux->vna_name;
 }
 
-static inline void *elf_get_section_data(elf_file_t *ef, Elf64_Shdr *sec)
-{
-	return (((void *)ef->hdr) + sec->sh_offset);
-}
-
 static inline Elf64_Shdr *elf_get_version_section(elf_file_t *ef)
 {
 	return elf_find_section_by_name(ef, ".gnu.version");
@@ -97,21 +92,18 @@ char *elf_get_dynsym_version_name(elf_file_t *ef, Elf64_Sym *sym)
 	return elf_get_version_name(ef, vernaux);
 }
 
-bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym, bool is_dynsym)
+bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym)
 {
-	char *sym_name = NULL;
+	char *sym_name = elf_get_sym_name(ef, sym);
+	bool is_dynsym = elf_is_dynsym(ef, sym);
 	if (is_dynsym) {
-		sym_name = elf_get_dynsym_name(ef, sym);
 		// stdout@GLIBC_2.2.5 (2)
-		// TODO:
 		char *version_name = elf_get_dynsym_version_name(ef, sym);
 		if (version_name == NULL) {
 			return false;
 		}
-		printf("zk--- %s %s\n", sym_name, version_name);
 		return true;
 	} else {
-		sym_name = elf_get_symbol_name(ef, sym);
 		// symtab name have @LIBC
 		char *c = index(sym_name, '@');
 		if (c) {
@@ -150,15 +142,15 @@ bool elf_is_same_symbol_name(const char *a, const char *b)
 
 int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear)
 {
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->dynsym_sec->sh_offset);
-	int count = ef->dynsym_sec->sh_size / sizeof(Elf64_Sym);
+	Elf64_Sym *syms = elf_get_dynsym_array(ef);
+	int count = elf_get_dynsym_count(ef);
 	int found_index = -1;
 
 	Elf64_Sym *sym = NULL;
 	char *sym_name = NULL;
 	for (int i = 0; i < count; i++) {
 		sym = &syms[i];
-		sym_name = elf_get_dynsym_name(ef, sym);
+		sym_name = elf_get_sym_name(ef, sym);
 		if (elf_is_same_symbol_name(sym_name, name)) {
 			if (clear && sym->st_shndx != 0) {
 				return NEED_CLEAR_RELA;
@@ -173,12 +165,6 @@ int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear)
 	}
 
 	return found_index;
-}
-
-char *get_sym_name_dynsym(elf_file_t *ef, unsigned int index)
-{
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->dynsym_sec->sh_offset);
-	return elf_get_dynsym_name(ef, &syms[index]);
 }
 
 int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
@@ -218,7 +204,7 @@ unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name)
 
 	for (int i = 0; i < count; i++) {
 		Elf64_Sym *sym = &syms[i];
-		char *sym_name = elf_get_symbol_name(ef, sym);
+		char *sym_name = elf_get_sym_name(ef, sym);
 		SI_LOG_DEBUG("%s %s\n", name, sym_name);
 		if (elf_is_same_symbol_name(sym_name, name)) {
 			return i;
@@ -274,6 +260,7 @@ Elf64_Shdr *elf_find_section_by_addr(elf_file_t *ef, unsigned long addr)
 
 	for (int i = 1; i < shnum; i++) {
 		sec = &sechdrs[i];
+		// sh_addr is zero when not SHF_ALLOC
 		if (!(sec->sh_flags & SHF_ALLOC)) {
 			continue;
 		}
@@ -291,7 +278,7 @@ Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls
 	unsigned long addr = obj_tls_offset + ef->tls_Phdr->p_paddr;
 
 	Elf64_Shdr *sec = elf_find_section_by_addr(ef, addr);
-	if (!(sec->sh_flags & SHF_TLS)) {
+	if ((sec == NULL) || !(sec->sh_flags & SHF_TLS)) {
 		si_panic("elf_find_section_by_tls_offset fail\n");
 		return NULL;
 	}
@@ -749,11 +736,11 @@ void elf_show_dynsym(elf_file_t *ef)
 
 	SI_LOG_DEBUG("  [Nr] Name\n");
 
-	int sym_count = ef->dynsym_sec->sh_size / sizeof(Elf64_Sym);
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->dynsym_sec->sh_offset);
+	int sym_count = elf_get_dynsym_count(ef);
+	Elf64_Sym *syms = elf_get_dynsym_array(ef);
 	for (int j = 0; j < sym_count; j++) {
 		Elf64_Sym *sym = &syms[j];
-		char *name = elf_get_dynsym_name(ef, sym);
+		char *name = elf_get_sym_name(ef, sym);
 		SI_LOG_DEBUG("  [%2d] %-32s %016lx\n", j, name, sym->st_value);
 	}
 }

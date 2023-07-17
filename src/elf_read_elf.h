@@ -49,10 +49,9 @@ typedef struct {
 	char *build_id;
 } elf_file_t;
 
-static inline unsigned int elf_get_dynsym_index(elf_file_t *ef, Elf64_Sym *sym)
+static inline void *elf_get_section_data(elf_file_t *ef, Elf64_Shdr *sec)
 {
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->dynsym_sec->sh_offset);
-	return sym - syms;
+	return (((void *)ef->hdr) + sec->sh_offset);
 }
 
 static inline char *elf_get_section_name(const elf_file_t *ef, const Elf64_Shdr *sec)
@@ -65,14 +64,69 @@ static inline char *elf_get_dynsym_name(elf_file_t *ef, Elf64_Sym *sym)
 	return ef->dynstr_data + sym->st_name;
 }
 
-static inline char *elf_get_symbol_name(elf_file_t *ef, Elf64_Sym *sym)
+static inline bool elf_is_symbol_type_section(Elf64_Sym *sym)
 {
 	if (ELF64_ST_TYPE(sym->st_info) == STT_SECTION) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline char *elf_get_symbol_name(elf_file_t *ef, Elf64_Sym *sym)
+{
+	if (elf_is_symbol_type_section(sym)) {
 		Elf64_Shdr *sec = &ef->sechdrs[sym->st_shndx];
 		return elf_get_section_name(ef, sec);
 	}
 
 	return ef->strtab_data + sym->st_name;
+}
+
+static inline Elf64_Sym *elf_get_dynsym_array(elf_file_t *ef)
+{
+	return (Elf64_Sym *)elf_get_section_data(ef, ef->dynsym_sec);
+}
+
+static inline int elf_get_dynsym_count(elf_file_t *ef)
+{
+	return ef->dynsym_sec->sh_size / sizeof(Elf64_Sym);
+}
+
+static inline unsigned int elf_get_dynsym_index(elf_file_t *ef, Elf64_Sym *sym)
+{
+	Elf64_Sym *syms = elf_get_dynsym_array(ef);
+	return sym - syms;
+}
+
+static inline char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int index)
+{
+	Elf64_Sym *syms = elf_get_dynsym_array(ef);
+	return elf_get_dynsym_name(ef, &syms[index]);
+}
+
+static inline bool elf_is_dynsym(elf_file_t *ef, Elf64_Sym *sym)
+{
+	unsigned long begin = (unsigned long)elf_get_dynsym_array(ef);
+	unsigned long end = begin + ef->dynsym_sec->sh_size;
+	unsigned long addr = (unsigned long)sym;
+	if ((addr >= begin) && (addr < end)) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline char *elf_get_sym_name(elf_file_t *ef, Elf64_Sym *sym)
+{
+	char *sym_name = NULL;
+	bool is_dynsym = elf_is_dynsym(ef, sym);
+	if (is_dynsym == true) {
+		sym_name = elf_get_dynsym_name(ef, sym);
+	} else {
+		sym_name = elf_get_symbol_name(ef, sym);
+	}
+	return sym_name;
 }
 
 static inline Elf64_Sym *elf_get_symtab_by_rela(elf_file_t *ef, Elf64_Rela *rela)
@@ -82,7 +136,7 @@ static inline Elf64_Sym *elf_get_symtab_by_rela(elf_file_t *ef, Elf64_Rela *rela
 
 static inline Elf64_Sym *elf_get_dynsym_by_rela(elf_file_t *ef, Elf64_Rela *rela)
 {
-	return (Elf64_Sym *)((void *)ef->hdr + ef->dynsym_sec->sh_offset) + ELF64_R_SYM(rela->r_info);
+	return elf_get_dynsym_array(ef) + ELF64_R_SYM(rela->r_info);
 }
 
 unsigned long elf_va_to_offset(elf_file_t *ef, unsigned long va);
@@ -94,9 +148,9 @@ unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name);
 Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name);
 unsigned long elf_find_symbol_addr_by_name(elf_file_t *ef, char *sym_name);
 bool elf_is_same_symbol_name(const char *a, const char *b);
-char *get_sym_name_dynsym(elf_file_t *ef, unsigned int index);
+char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int index);
 int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear);
-bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym, bool is_dynsym);
+bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym);
 
 // section
 Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls_offset);

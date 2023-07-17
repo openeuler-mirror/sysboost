@@ -78,7 +78,7 @@ static void check_rela_dyn(elf_link_t *elf_link)
 			continue;
 		}
 		Elf64_Sym *sym = elf_get_dynsym_by_rela(out_ef, rela);
-		const char *sym_name = elf_get_dynsym_name(out_ef, sym);
+		const char *sym_name = elf_get_sym_name(out_ef, sym);
 		if (is_dynsym_valid(sym, sym_name) == false) {
 			SI_LOG_EMERG("%s is UND\n", sym_name);
 		}

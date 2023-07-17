@@ -178,78 +178,6 @@ void copy_elf_file(elf_file_t *in, off_t in_offset, elf_file_t *out, off_t out_o
 	(void)memcpy(dest, src, len);
 }
 
-// .interp is needed by dyn-mode, staitc-mode template do not have
-static char *needed_sections[] = {
-    ".interp",
-    ".note.gnu.build-id",
-    ".note.ABI-tag",
-    ".gnu.hash",
-    ".dynsym",
-    ".dynstr",
-    ".rela.dyn",
-    ".rela.plt",
-    ".text",
-    ".rodata",
-    ".eh_frame_hdr", // this section's header is not modified, is it really needed?
-    ".tdata",
-    ".tbss",
-    ".init_array",
-    ".fini_array",
-    ".data.rel.ro",
-    ".dynamic",
-    ".got",
-    ".data",
-    ".bss",
-    ".symtab",
-    ".strtab",
-    ".shstrtab",
-};
-#define NEEDED_SECTIONS_LEN (sizeof(needed_sections) / sizeof(needed_sections[0]))
-
-static bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
-{
-	char *name = elf_get_section_name(ef, sec);
-
-	// first section name is empty
-	if (name == NULL || *name == '\0') {
-		return true;
-	}
-
-	// no use .plt, so delete .rela.plt
-	if (is_direct_call_optimize(elf_link) == true) {
-		if (!strcmp(name, ".rela.plt")) {
-			return false;
-		}
-	}
-
-	for (unsigned i = 0; i < NEEDED_SECTIONS_LEN; i++) {
-		if (!strcmp(name, needed_sections[i])) {
-			return true;
-		}
-	}
-
-	if (is_delete_symbol_version(elf_link) == false) {
-		if (!strcmp(name, ".gnu.version") || !strcmp(name, ".gnu.version_r")) {
-			return true;
-		}
-	}
-
-	return false;
-
-	/*
-	TODO: clean code, below is original implementation, don't have any effect now
-	if ((sec->sh_type == SHT_RELA) && (!(sec->sh_flags & SHF_ALLOC)))
-		return false;
-	if (sec->sh_type == SHT_GNU_versym || sec->sh_type == SHT_GNU_verdef ||
-	    sec->sh_type == SHT_GNU_verneed)
-		return false;
-	if (elf_is_debug_section(ef, sec))
-		return false;
-
-	return true;
-	*/
-}
-
 static Elf64_Shdr *add_tmp_section(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *src_sec)
 {
 	if (is_section_needed(elf_link, ef, src_sec) == false) {
@@ -1222,6 +1150,11 @@ static int sym_cmp_func(const void *src_sym_a_, const void *src_sym_b_)
 static inline Elf64_Addr get_symbol_new_value(elf_link_t *elf_link, elf_file_t *ef,
 					      Elf64_Sym *sym, char *name)
 {
+	if (elf_is_symbol_type_section(sym)) {
+		// section may be delete in out ef, so section symbol can not get new value
+		return get_new_addr_by_old_addr_ok(elf_link, ef, sym->st_value);
+	}
+
 	// _get_new_elf_addr will be unable to find symbol addr if
 	// it is the boundary of two sections and no shndx is available.
 	// _DYNAMIC is the the start of .dynamic
@@ -1247,11 +1180,11 @@ static inline Elf64_Addr get_symbol_new_value(elf_link_t *elf_link, elf_file_t *
 			si_panic("elf_find_section_by_name fail: __libc_atexit\n");
 		}
 		unsigned long old_start_addr = sec->sh_addr;
-		unsigned long new_start_addr = _get_new_elf_addr(elf_link, ef, old_start_addr);
+		unsigned long new_start_addr = get_new_addr_by_old_addr(elf_link, ef, old_start_addr);
 		return new_start_addr + sec->sh_size;
 	}
 
-	return _get_new_elf_addr(elf_link, ef, sym->st_value);
+	return get_new_addr_by_old_addr(elf_link, ef, sym->st_value);
 }
 
 static inline Elf32_Section get_symbol_new_section(elf_link_t *elf_link, elf_file_t *ef,
@@ -1277,8 +1210,15 @@ static inline Elf64_Word get_symbol_new_name(elf_link_t *elf_link, elf_file_t *e
 	return get_new_name_offset(elf_link, ef, strtab, name);
 }
 
-// after dst_sym->st_name modify, then elf_get_symbol_name for the out_ef can use
-static void modify_symbol(elf_link_t *elf_link, Elf64_Shdr *sec, bool is_dynsym)
+static inline Elf64_Sym *get_src_sym_by_dst(elf_link_t *elf_link, Elf64_Sym *dst_sym, elf_sec_mapping_t *m)
+{
+	unsigned long out_ef_sec_begin = ((unsigned long)elf_link->out_ef.hdr) + m->dst_file_offset;
+	unsigned long offset_to_sec = (unsigned long)dst_sym - out_ef_sec_begin;
+	void *sec_data = elf_get_section_data(m->src_ef, m->src_sec);
+	return (Elf64_Sym *)(sec_data + offset_to_sec);
+}
+
+static void modify_symbol(elf_link_t *elf_link, Elf64_Shdr *sec)
 {
 	int len = sec->sh_size / sizeof(Elf64_Sym);
 	Elf64_Sym *base = ((void *)elf_link->out_ef.hdr) + sec->sh_offset;
@@ -1286,20 +1226,15 @@ static void modify_symbol(elf_link_t *elf_link, Elf64_Shdr *sec, bool is_dynsym)
 	for (int i = 0; i < len; i++) {
 		Elf64_Sym *dst_sym = &base[i];
 		elf_sec_mapping_t *m = elf_find_sec_mapping_by_dst(elf_link, dst_sym);
+		Elf64_Sym *src_sym = get_src_sym_by_dst(elf_link, dst_sym, m);
 
-		dst_sym->st_shndx = get_symbol_new_section(elf_link, m->src_ef, dst_sym);
-		dst_sym->st_name = get_symbol_new_name(elf_link, m->src_ef, dst_sym, m->src_sec->sh_link);
+		dst_sym->st_shndx = get_symbol_new_section(elf_link, m->src_ef, src_sym);
+		dst_sym->st_name = get_symbol_new_name(elf_link, m->src_ef, src_sym, m->src_sec->sh_link);
 
-		// after dst_sym->st_name modify, then elf_get_symbol_name for the out_ef can use
-		char *name = NULL;
-		if (is_dynsym == true) {
-			name = elf_get_dynsym_name(&elf_link->out_ef, dst_sym);
-		} else {
-			name = elf_get_symbol_name(&elf_link->out_ef, dst_sym);
-		}
-		SI_LOG_DEBUG("modify_symbol: %s\n", name);
+		char *name = elf_get_sym_name(m->src_ef, src_sym);
+		SI_LOG_DEBUG("sym name: %s %s\n", m->src_ef->file_name, name);
 
-		dst_sym->st_value = get_symbol_new_value(elf_link, m->src_ef, dst_sym, name);
+		dst_sym->st_value = get_symbol_new_value(elf_link, m->src_ef, src_sym, name);
 	}
 }
 
@@ -1313,7 +1248,7 @@ static Elf64_Sym *find_defined_symbol(elf_file_t *ef, Elf64_Shdr *sec, char *sym
 		if (dst_sym->st_shndx == SHN_UNDEF || dst_sym->st_name == 0) {
 			continue;
 		}
-		char *name = elf_get_dynsym_name(ef, dst_sym);
+		char *name = elf_get_sym_name(ef, dst_sym);
 		if (elf_is_same_symbol_name(sym_name, name)) {
 			return dst_sym;
 		}
@@ -1332,7 +1267,7 @@ static void delete_undefined_symbol(elf_file_t *ef, Elf64_Shdr *sec)
 		if (dst_sym->st_shndx != SHN_UNDEF || dst_sym->st_name == 0) {
 			continue;
 		}
-		char *name = elf_get_dynsym_name(ef, dst_sym);
+		char *name = elf_get_sym_name(ef, dst_sym);
 		Elf64_Sym *find = find_defined_symbol(ef, sec, name);
 		if (find != NULL) {
 			(void)memset(dst_sym, 0, sizeof(Elf64_Sym));
@@ -1410,9 +1345,9 @@ static void modify_hash(elf_file_t *elf_file, Elf64_Shdr *sec, Elf64_Shdr *dyn, 
 
 static void modify_dynsym(elf_link_t *elf_link)
 {
-	SI_LOG_DEBUG("modify_dynsym: \n");
+	SI_LOG_DEBUG("modify dynsym: \n");
 	Elf64_Shdr *sec = find_tmp_section_by_name(elf_link, ".dynsym");
-	modify_symbol(elf_link, sec, true);
+	modify_symbol(elf_link, sec);
 
 	// delete undefined symbol, so dlsym can find the addr
 	delete_undefined_symbol(&elf_link->out_ef, sec);
@@ -1429,9 +1364,9 @@ static void modify_dynsym(elf_link_t *elf_link)
 
 static void modify_symtab(elf_link_t *elf_link)
 {
-	SI_LOG_DEBUG("modify_symtab: \n");
+	SI_LOG_DEBUG("modify symtab: \n");
 	Elf64_Shdr *sec = find_tmp_section_by_name(elf_link, ".symtab");
-	modify_symbol(elf_link, sec, false);
+	modify_symbol(elf_link, sec);
 
 	sort_symbol_table(&elf_link->out_ef, sec);
 
@@ -1542,7 +1477,7 @@ static void modify_init_and_fini(elf_link_t *elf_link)
 	elf_file_t *ef = get_main_ef(elf_link);
 	for (unsigned j = 0; j < DISABLED_FUNCS_LEN; j++) {
 		Elf64_Sym *sym = elf_find_symbol_by_name(ef, disabled_funcs[j]);
-		unsigned long addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
+		unsigned long addr = get_new_addr_by_symobj_ok(elf_link, ef, sym);
 		if (hdr->e_machine == EM_AARCH64) {
 			elf_write_u32(out_ef, addr, AARCH64_INSN_RET);
 		} else {

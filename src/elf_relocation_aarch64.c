@@ -394,7 +394,7 @@ static void fix_special_symbol_new_addr(elf_link_t *elf_link, elf_file_t *ef, El
 	// template ELF .init_array is merge last one
 	// __init_array_start need set begin of .init_array addr
 	// __init_array_end need set end of .init_array addr
-	char *name = elf_get_symbol_name(ef, sym);
+	char *name = elf_get_sym_name(ef, sym);
 	if (elf_is_same_symbol_name(name, "__init_array_start")) {
 		Elf64_Shdr *sec = find_tmp_section_by_name(elf_link, ".init_array");
 		*new_addr = sec->sh_addr;
@@ -554,7 +554,7 @@ bool is_gmon_start_symbol(elf_file_t *ef, Elf64_Sym *sym)
 		return false;
 	}
 
-	char *name = elf_get_symbol_name(ef, sym);
+	char *name = elf_get_sym_name(ef, sym);
 	if (elf_is_same_symbol_name(name, "__gmon_start__")) {
 		return true;
 	}
@@ -564,7 +564,7 @@ bool is_gmon_start_symbol(elf_file_t *ef, Elf64_Sym *sym)
 bool is_ehdr_start_symbol(elf_file_t *ef, Elf64_Sym *sym)
 {
 	// 1689: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT    1 __ehdr_start
-	char *name = elf_get_symbol_name(ef, sym);
+	char *name = elf_get_sym_name(ef, sym);
 	if (elf_is_same_symbol_name(name, "__ehdr_start")) {
 		return true;
 	}
@@ -694,13 +694,13 @@ static void modify_branch_insn(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela 
 
 	// For static ELF, the symbol that type is IFUNC need special treatment
 	if (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC) {
-		new_sym_addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
+		new_sym_addr = get_new_addr_by_symobj_ok(elf_link, ef, sym);
 		goto out;
 	} else if (sym->st_value) {
 		old_sym_addr = sym->st_value + rela->r_addend;
 		new_sym_addr = get_new_addr_by_old_addr(elf_link, ef, old_sym_addr);
 	} else {
-		new_sym_addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
+		new_sym_addr = get_new_addr_by_symobj_ok(elf_link, ef, sym);
 	}
 
 	// WEAK func is used by GNU debug, libc do not have that func
@@ -708,7 +708,7 @@ static void modify_branch_insn(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela 
 		goto out;
 	}
 
-	char *name = elf_get_symbol_name(ef, sym);
+	char *name = elf_get_sym_name(ef, sym);
 	if (unlikely(elf_is_same_symbol_name(name, "main"))) {
 		elf_file_t *main_ef = get_main_ef(elf_link);
 		old_sym_addr = elf_find_symbol_addr_by_name(main_ef, "main");
@@ -972,7 +972,7 @@ void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 		case R_AARCH64_JUMP_SLOT:
 			// 00000000003fffc8  0000000800000402 R_AARCH64_JUMP_SLOT    0000000000000000 puts@GLIBC_2.17 + 0
 			sym = elf_get_dynsym_by_rela(obj_rel->src_ef, src_rela);
-			ret = get_new_addr_by_dynsym(elf_link, obj_rel->src_ef, sym);
+			ret = get_new_addr_by_symobj(elf_link, obj_rel->src_ef, sym);
 			if (ret == NOT_FOUND) {
 				ret = 0;
 			}

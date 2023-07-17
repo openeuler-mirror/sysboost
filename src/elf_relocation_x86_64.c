@@ -79,7 +79,7 @@ static void elf_write_jmp_addr(elf_file_t *ef, unsigned long addr_, unsigned lon
 static int modify_insn_direct_jmp(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *sym)
 {
 	unsigned long loc = get_new_addr_by_old_addr(elf_link, ef, rela->r_offset);
-	unsigned long sym_addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
+	unsigned long sym_addr = get_new_addr_by_symobj_ok(elf_link, ef, sym);
 	if (sym_addr == 0) {
 		return -1;
 	}
@@ -212,13 +212,11 @@ static void modify_tls_insn_got(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela
 static void modify_insn_data_offset(elf_link_t *elf_link, elf_file_t *ef, unsigned long loc, int addend)
 {
 	int offset_in_insn = elf_read_s32_va(ef, loc);
-	// obj old addr
-	unsigned long obj_addr = offset_in_insn + loc - addend;
-	// new addr
-	obj_addr = get_new_addr_by_old_addr(elf_link, ef, obj_addr);
-	loc = get_new_addr_by_old_addr(elf_link, ef, loc);
+	unsigned long old_obj_addr = offset_in_insn + loc - addend;
+	unsigned long new_obj_addr = get_new_addr_by_old_addr(elf_link, ef, old_obj_addr);
+	unsigned long new_loc = get_new_addr_by_old_addr(elf_link, ef, loc);
 
-	modify_insn_offset(elf_link, loc, obj_addr, addend);
+	modify_insn_offset(elf_link, new_loc, new_obj_addr, addend);
 }
 
 static bool is_need_change_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
@@ -235,7 +233,7 @@ static bool is_need_change_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym 
 		return true;
 	}
 
-	char *sym_name = elf_get_symbol_name(ef, sym);
+	char *sym_name = elf_get_sym_name(ef, sym);
 	unsigned long ret = get_new_addr_by_symbol_mapping(elf_link, sym_name);
 	if (ret != NOT_FOUND) {
 		return true;
@@ -264,14 +262,14 @@ static void modify_insn_func_offset(elf_link_t *elf_link, elf_file_t *ef, Elf64_
 
 	// This is where to make the change
 	unsigned long loc = get_new_addr_by_old_addr(elf_link, ef, rela->r_offset);
-	unsigned long sym_addr = get_new_addr_by_sym_ok(elf_link, ef, sym);
+	unsigned long sym_addr = get_new_addr_by_symobj_ok(elf_link, ef, sym);
 	if (sym_addr == 0) {
 		// share mode libc func is use plt, no need change
 		if (is_share_mode(elf_link)) {
 			return;
 		}
 
-		const char *sym_name = elf_get_symbol_name(ef, sym);
+		const char *sym_name = elf_get_sym_name(ef, sym);
 		if (is_symbol_maybe_undefined(sym_name)) {
 			goto out;
 		}
@@ -294,7 +292,7 @@ static void fix_main_for_static_mode(elf_link_t *elf_link, elf_file_t *ef, Elf64
 	// 00000000002011fb  00000dd500000002 R_X86_64_PC32          0000000000200af0 main - 4
 	// 3541: 0000000000200af0  1763 FUNC    GLOBAL DEFAULT   13 main
 	// 2011f8:	48 8d 3d f1 f8 ff ff 	lea    -0x70f(%rip),%rdi        # 200af0 <main>
-	char *name = elf_get_symbol_name(ef, sym);
+	char *name = elf_get_sym_name(ef, sym);
 	if (elf_is_same_symbol_name(name, "main")) {
 		modify_insn_func_offset(elf_link, ef, rela, sym);
 	}
@@ -317,8 +315,8 @@ static void modify_insn_for_pc32(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rel
 	// libc environ is weak, so other ELF have the some var
 	// feature: 48 89 05 96 f8 0d 00 	mov    %rax,0xdf896(%rip)
 	// 952: 00000000001f4ce0     8 OBJECT  WEAK   DEFAULT   44 environ@@GLIBC_2.2.5
-	if (is_direct_point_var_optimize(elf_link) && elf_is_copy_symbol(ef, sym, false)) {
-		unsigned long sym_addr = get_new_addr_by_sym(elf_link, ef, sym);
+	if (is_direct_point_var_optimize(elf_link) && elf_is_copy_symbol(ef, sym)) {
+		unsigned long sym_addr = get_new_addr_by_symobj(elf_link, ef, sym);
 		if (sym_addr != NOT_FOUND) {
 			unsigned char *insn = get_insn_begin_by_offset(elf_link, ef, rela);
 			int ret = elf_insn_change_mov_to_lea(insn);
@@ -336,6 +334,17 @@ static void modify_insn_for_pc32(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rel
 	// data is use offset, STT_OBJECT
 	// global var, change insn offset
 	// lea    0x5fff75(%rip),%rax
+	modify_insn_data_offset(elf_link, ef, rela->r_offset, rela->r_addend);
+}
+
+// rela r_addend not have offset to symbol, so get offset form insn imm value
+// 00000000000398fb  000024440000002a R_X86_64_REX_GOTPCRELX 00000000001ec648 __ctype_b@GLIBC_2.2.5 - 4
+// 9284: 00000000001ec648     8 OBJECT  GLOBAL DEFAULT   36 __ctype_b@GLIBC_2.2.5
+// 398f8:	48 8b 0d 81 25 1b 00 	mov    0x1b2581(%rip),%rcx        # 1ebe80 <__ctype_b@GLIBC_2.2.5-0x7c8>
+// 0x1ec648 - 0x7c8 = 1ebe80
+static void modify_insn_imm_offset(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela, Elf64_Sym *sym)
+{
+	(void)sym;
 	modify_insn_data_offset(elf_link, ef, rela->r_offset, rela->r_addend);
 }
 
@@ -408,8 +417,7 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		break;
 	case R_X86_64_GOTPCREL:
 	case R_X86_64_REX_GOTPCRELX:
-		// TODO: feature, sym may not exist, change data offset
-		modify_insn_data_offset(elf_link, ef, rela->r_offset, rela->r_addend);
+		modify_insn_imm_offset(elf_link, ef, rela, sym);
 		break;
 	case R_X86_64_64:
 	case R_X86_64_32S:

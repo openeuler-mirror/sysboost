@@ -11,6 +11,7 @@ BASH=/usr/bin/bash
 BASH_R=$(RELOCATION_DIR)$(BASH).relocation
 
 LIBC=/usr/lib64/libc.so.6
+# relocation is xz
 LIBC_R=$(RELOCATION_DIR)$(LIBC).relocation
 
 VERSION_ID=$(shell cat /etc/os-release | grep VERSION_ID)
@@ -79,8 +80,8 @@ run:
 env:
 	echo 0 > /proc/sys/kernel/randomize_va_space
 	cat /proc/sys/kernel/randomize_va_space
-	readelf -W -a $(BASH_R) > bash.elf
-	objdump -d $(BASH_R) > bash.asm
+	readelf -W -a $(BASH) > bash.elf
+	objdump -d $(BASH) > bash.asm
 	readelf -W -a $(LIBC_R) > libc.so.elf
 	objdump -d $(LIBC_R) > libc.so.asm
 	readelf -W -a $(LIBTINFO_R) > libtinfo.so.elf
