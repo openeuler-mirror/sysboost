@@ -83,7 +83,7 @@ fn db_add_link(conf: &RtoConfig) -> i32 {
 	return 0;
 }
 
-fn db_remove_link(path: &String) {
+pub fn db_remove_link(path: &String) {
 	let ret = fs::remove_file(&path);
 	match ret {
 		Ok(_) => return,
@@ -202,7 +202,7 @@ fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
 	return ret;
 }
 
-fn set_app_aot_flag(old_path: &String, is_set: bool) -> i32 {
+pub fn set_app_aot_flag(old_path: &String, is_set: bool) -> i32 {
 	let mut args: Vec<String> = Vec::new();
 	if is_set {
 		args.push("-set".to_string());

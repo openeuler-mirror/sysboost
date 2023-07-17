@@ -57,7 +57,7 @@ fn main() {
 		}
 	}
         // start up coredump monitor
-        let coredump_monitor_handle = thread::spawn(||{
+        let _coredump_monitor_handle = thread::spawn(||{
                 coredump_monitor_loop();
         });
 
