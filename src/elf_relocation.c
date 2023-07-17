@@ -127,11 +127,11 @@ static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, El
 {
 	// some symbol do not export in .dynsym, change to R_AARCH64_RELATIVE
 	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
-	unsigned long ret = get_new_addr_by_dynsym(elf_link, src_ef, sym);
+	unsigned long ret = get_new_addr_by_symobj(elf_link, src_ef, sym);
 	if (ret == NOT_FOUND) {
 		// 1008:	48 8b 05 d9 2f 00 00 	mov    0x2fd9(%rip),%rax        # 3fe8 <__gmon_start__@Base>
 		// some addr need be 0, use by cmp jump
-		char *name = elf_get_dynsym_name(src_ef, sym);
+		char *name = elf_get_sym_name(src_ef, sym);
 		if (!is_symbol_maybe_undefined(name)) {
 			si_panic("%s\n", name);
 		}
@@ -151,12 +151,12 @@ static void rela_use_relative(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Re
 
 	elf_file_t *ef = get_libc_ef(elf_link);
 	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
-	if (elf_is_copy_symbol(src_ef, sym, true) == false) {
+	if (elf_is_copy_symbol(src_ef, sym) == false) {
 		// use local symbol addr
 		ef = src_ef;
 	}
 
-	char *sym_name = elf_get_dynsym_name(src_ef, sym);
+	char *sym_name = elf_get_sym_name(src_ef, sym);
 	unsigned long old_sym_addr = elf_find_symbol_addr_by_name(ef, sym_name);
 	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, ef, old_sym_addr);
 	if (new_sym_addr == NOT_FOUND) {
@@ -205,7 +205,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 			// 129a:	4c 8b 2d 4f 2d 00 00 	mov    0x2d4f(%rip),%r13        # 3ff0 <___g_so_path_list@@Base-0x10>
 			// 48: 0000000000004000  4096 OBJECT  GLOBAL DEFAULT   27 ___g_so_path_list
 			new_index = ELF64_R_SYM(dst_rela->r_info);
-			const char *sym_name = get_sym_name_dynsym(&elf_link->out_ef, new_index);
+			const char *sym_name = elf_get_dynsym_name_by_index(&elf_link->out_ef, new_index);
 			if (elf_is_same_symbol_name(sym_name, "___g_so_path_list")) {
 				// when ELF load, real addr will set
 				dst_rela->r_info = ELF64_R_INFO(new_index, ELF64_R_TYPE(R_X86_64_RELATIVE));

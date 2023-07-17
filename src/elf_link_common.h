@@ -274,23 +274,23 @@ static inline void modify_elf_file(elf_link_t *elf_link, unsigned long loc, void
 
 bool is_symbol_maybe_undefined(const char *name);
 bool is_gnu_weak_symbol(Elf64_Sym *sym);
+bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec);
 
-unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long offset);
 unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr);
-unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr);
+unsigned long get_new_addr_by_old_addr_ok(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr);
+unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long offset);
+unsigned long get_new_addr_by_symobj_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
+unsigned long get_new_addr_by_symobj(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
+
 int get_new_section_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int sec_index);
 unsigned long get_new_name_offset(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Shdr *src_sec, unsigned long offset);
+int get_new_sym_index_no_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
+int get_new_sym_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
 
+// for temp sections
 char *elf_get_tmp_section_name(elf_link_t *elf_link, Elf64_Shdr *shdr);
 Elf64_Shdr *find_tmp_section_by_name(elf_link_t *elf_link, const char *sec_name);
 Elf64_Shdr *find_tmp_section_by_src(elf_link_t *elf_link, Elf64_Shdr *shdr);
-
-unsigned long get_new_addr_by_sym_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
-unsigned long get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
-unsigned long get_new_addr_by_dynsym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
-
-int get_new_sym_index_no_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
-int get_new_sym_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
 
 void show_sec_mapping(elf_link_t *elf_link);
 void append_sec_mapping(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec, Elf64_Shdr *dst_sec);

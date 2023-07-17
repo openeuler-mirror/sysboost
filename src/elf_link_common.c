@@ -83,6 +83,78 @@ bool is_gnu_weak_symbol(Elf64_Sym *sym)
 	return false;
 }
 
+// .interp is needed by dyn-mode, staitc-mode template do not have
+static char *needed_sections[] = {
+    ".interp",
+    ".note.gnu.build-id",
+    ".note.ABI-tag",
+    ".gnu.hash",
+    ".dynsym",
+    ".dynstr",
+    ".rela.dyn",
+    ".rela.plt",
+    ".text",
+    ".rodata",
+    ".eh_frame_hdr", // this section's header is not modified, is it really needed?
+    ".tdata",
+    ".tbss",
+    ".init_array",
+    ".fini_array",
+    ".data.rel.ro",
+    ".dynamic",
+    ".got",
+    ".data",
+    ".bss",
+    ".symtab",
+    ".strtab",
+    ".shstrtab",
+};
+#define NEEDED_SECTIONS_LEN (sizeof(needed_sections) / sizeof(needed_sections[0]))
+
+bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+
+	// first section name is empty
+	if (name == NULL || *name == '\0') {
+		return true;
+	}
+
+	// no use .plt, so delete .rela.plt
+	if (is_direct_call_optimize(elf_link) == true) {
+		if (!strcmp(name, ".rela.plt")) {
+			return false;
+		}
+	}
+
+	for (unsigned i = 0; i < NEEDED_SECTIONS_LEN; i++) {
+		if (!strcmp(name, needed_sections[i])) {
+			return true;
+		}
+	}
+
+	if (is_delete_symbol_version(elf_link) == false) {
+		if (!strcmp(name, ".gnu.version") || !strcmp(name, ".gnu.version_r")) {
+			return true;
+		}
+	}
+
+	return false;
+
+	/*
+	TODO: clean code, below is original implementation, don't have any effect now
+	if ((sec->sh_type == SHT_RELA) && (!(sec->sh_flags & SHF_ALLOC)))
+		return false;
+	if (sec->sh_type == SHT_GNU_versym || sec->sh_type == SHT_GNU_verdef ||
+	    sec->sh_type == SHT_GNU_verneed)
+		return false;
+	if (elf_is_debug_section(ef, sec))
+		return false;
+
+	return true;
+	*/
+}
+
 // symbol_name string can not change
 void append_symbol_mapping(elf_link_t *elf_link, char *symbol_name, unsigned long symbol_addr)
 {
@@ -234,11 +306,11 @@ void init_vdso_symbol_addr(elf_link_t *elf_link)
 
 	elf_show_dynsym(vdso_ef);
 
-	int sym_count = vdso_ef->dynsym_sec->sh_size / sizeof(Elf64_Sym);
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)vdso_ef->hdr) + vdso_ef->dynsym_sec->sh_offset);
+	int sym_count = elf_get_dynsym_count(vdso_ef);
+	Elf64_Sym *syms = elf_get_dynsym_array(vdso_ef);
 	for (int j = 0; j < sym_count; j++) {
 		Elf64_Sym *sym = &syms[j];
-		char *name = elf_get_dynsym_name(vdso_ef, sym);
+		char *name = elf_get_sym_name(vdso_ef, sym);
 		// vdso func __kernel_clock_getres
 		if (name == NULL || name[0] != '_') {
 			continue;
@@ -264,11 +336,11 @@ void init_ld_symbol_addr(elf_link_t *elf_link)
 	// addr relative to main ELF
 	unsigned long hdr_addr = ld_hdr_addr_to_main_elf(ef);
 
-	int sym_count = ef->dynsym_sec->sh_size / sizeof(Elf64_Sym);
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->dynsym_sec->sh_offset);
+	int sym_count = elf_get_dynsym_count(ef);
+	Elf64_Sym *syms = elf_get_dynsym_array(ef);
 	for (int j = 0; j < sym_count; j++) {
 		Elf64_Sym *sym = &syms[j];
-		char *name = elf_get_dynsym_name(ef, sym);
+		char *name = elf_get_sym_name(ef, sym);
 		if (name == NULL || name[0] == '\0') {
 			continue;
 		}
@@ -300,15 +372,16 @@ void show_sec_mapping(elf_link_t *elf_link)
 	elf_sec_mapping_t *sec_rels = elf_link->sec_mapping_arr->data;
 	elf_sec_mapping_t *sec_rel = NULL;
 
+	SI_LOG_INFO("dst_addr  dst_off   dst_sec_addr         src_sec_addr         src_sec_name         src_file\n");
 	for (int i = 0; i < len; i++) {
 		sec_rel = &sec_rels[i];
 		char *name = elf_get_section_name(sec_rel->src_ef, sec_rel->src_sec);
 		const char *fname = si_basename(sec_rel->src_ef->file_name);
-		SI_LOG_INFO("%08lx  %08lx  %08lx - %08lx  %08lx - %08lx  %-20s %-20s %016lx  %016lx\n",
+		SI_LOG_INFO("%08lx  %08lx  %08lx - %08lx  %08lx - %08lx  %-20s %-20s\n",
 			    sec_rel->dst_mem_addr, sec_rel->dst_file_offset,
 			    sec_rel->dst_sec->sh_addr, sec_rel->dst_sec->sh_addr + sec_rel->dst_sec->sh_size,
 			    sec_rel->src_sec->sh_addr, sec_rel->src_sec->sh_addr + sec_rel->src_sec->sh_size,
-			    name, fname, (unsigned long)sec_rel->src_sec, (unsigned long)sec_rel->dst_sec);
+			    name, fname);
 	}
 }
 
@@ -487,7 +560,7 @@ Elf64_Shdr *find_tmp_section_by_name(elf_link_t *elf_link, const char *sec_name)
 }
 
 // addr != offset from RELRO segment
-unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr)
+static unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr)
 {
 	int len = elf_link->sec_mapping_arr->len;
 	elf_sec_mapping_t *sec_rels = elf_link->sec_mapping_arr->data;
@@ -552,6 +625,25 @@ unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsign
 	return NOT_FOUND;
 }
 
+static bool is_in_sec_mapping(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Shdr *src_sec)
+{
+	int len = elf_link->sec_mapping_arr->len;
+	elf_sec_mapping_t *sec_rels = elf_link->sec_mapping_arr->data;
+	elf_sec_mapping_t *sec_rel = NULL;
+
+	for (int i = 0; i < len; i++) {
+		sec_rel = &sec_rels[i];
+		if (sec_rel->src_ef != src_ef) {
+			continue;
+		}
+		if (sec_rel->src_sec == src_sec) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// .note.gnu.property section is delete, so can not find
 unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr)
 {
 	unsigned long ret = _get_new_elf_addr(elf_link, src_ef, addr);
@@ -560,6 +652,18 @@ unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef,
 		return ret;
 	}
 
+	// if section delete, ignore error
+	Elf64_Shdr *sec = elf_find_section_by_addr(src_ef, addr);
+	if (sec == NULL) {
+		goto out;
+	}
+	char *sec_name = elf_get_section_name(src_ef, sec);
+	SI_LOG_DEBUG("sec name: %s\n", sec_name);
+	if (is_in_sec_mapping(elf_link, src_ef, sec) == false) {
+		return 0UL;
+	}
+
+out:
 	// something wrong had happen
 	si_log_set_global_level(SI_LOG_LEVEL_DEBUG);
 	show_sec_mapping(elf_link);
@@ -567,9 +671,25 @@ unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef,
 	return NOT_FOUND;
 }
 
+unsigned long get_new_addr_by_old_addr_ok(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr)
+{
+	unsigned long ret = _get_new_elf_addr(elf_link, src_ef, addr);
+	SI_LOG_DEBUG("get addr: %s %lx %lx\n", src_ef->file_name, addr, ret);
+	if (ret != NOT_FOUND) {
+		return ret;
+	}
+	// ignore NOT_FOUND
+	return 0;
+}
+
 unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long offset)
 {
-	// addr != offset after RELRO segment
+	// addr != offset after .rodata segment, .tdata is not eq
+	Elf64_Phdr *p = src_ef->data_Phdr;
+	if (offset >= p->p_offset) {
+		si_panic("error: %s offset %lx\n", src_ef->file_name, offset);
+	}
+
 	return get_new_addr_by_old_addr(elf_link, src_ef, offset);
 }
 
@@ -589,7 +709,7 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 		Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->symtab_sec->sh_offset);
 		for (int j = 0; j < sym_count; j++) {
 			sym = &syms[j];
-			char *name = elf_get_symbol_name(ef, sym);
+			char *name = elf_get_sym_name(ef, sym);
 			if (elf_is_same_symbol_name(sym_name, name) && sym->st_shndx != SHN_UNDEF) {
 				goto out;
 			}
@@ -602,7 +722,7 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->symtab_sec->sh_offset);
 	for (int j = 0; j < sym_count; j++) {
 		sym = &syms[j];
-		char *name = elf_get_symbol_name(ef, sym);
+		char *name = elf_get_sym_name(ef, sym);
 		if (elf_is_same_symbol_name(sym_name, name) && sym->st_shndx != SHN_UNDEF) {
 			goto out;
 		}
@@ -748,14 +868,9 @@ static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, El
 }
 
 static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
-					  Elf64_Sym *sym, bool is_dynsym)
+					  Elf64_Sym *sym)
 {
-	char *sym_name = NULL;
-	if (is_dynsym) {
-		sym_name = elf_get_dynsym_name(ef, sym);
-	} else {
-		sym_name = elf_get_symbol_name(ef, sym);
-	}
+	char *sym_name = elf_get_sym_name(ef, sym);
 
 	// WEAK func is used by GNU debug, libc do not have that func
 	if (is_gnu_weak_symbol(sym) == true) {
@@ -783,23 +898,18 @@ static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
 	return _get_new_addr_by_sym_name(elf_link, sym_name);
 }
 
-unsigned long get_new_addr_by_sym_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
+unsigned long get_new_addr_by_symobj_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
 {
-	unsigned long ret = _get_new_addr_by_sym(elf_link, ef, sym, false);
+	unsigned long ret = _get_new_addr_by_sym(elf_link, ef, sym);
 	if (ret == NOT_FOUND) {
 		return 0;
 	}
 	return ret;
 }
 
-unsigned long get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
+unsigned long get_new_addr_by_symobj(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
 {
-	return _get_new_addr_by_sym(elf_link, ef, sym, false);
-}
-
-unsigned long get_new_addr_by_dynsym(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
-{
-	return _get_new_addr_by_sym(elf_link, ef, sym, true);
+	return _get_new_addr_by_sym(elf_link, ef, sym);
 }
 
 unsigned long elf_get_new_tls_offset(elf_link_t *elf_link, elf_file_t *ef, unsigned long obj_tls_offset)
@@ -847,7 +957,7 @@ int get_new_sym_index_no_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigne
 		return 0;
 	}
 
-	const char *name = get_sym_name_dynsym(src_ef, old_index);
+	const char *name = elf_get_dynsym_name_by_index(src_ef, old_index);
 
 	return find_dynsym_index_by_name(&elf_link->out_ef, name, false);
 }
@@ -858,7 +968,7 @@ int get_new_sym_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old
 		return 0;
 	}
 
-	const char *name = get_sym_name_dynsym(src_ef, old_index);
+	const char *name = elf_get_dynsym_name_by_index(src_ef, old_index);
 
 	return find_dynsym_index_by_name(&elf_link->out_ef, name, true);
 }
