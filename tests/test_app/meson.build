@@ -4,6 +4,7 @@ sources = files(['common_func.c',
 
 cflags += ['-fpic', '-pthread', '-ldl']
 ldflags += ['-pie', '-ldl']
+lk_args += ['-Wl,--emit-relocs', '-Wl,-z,relro,-z,now']
 
 # Add a target for libutil2.so shared library
 util1 = shared_library('util1', 'util1.c',
