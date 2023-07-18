@@ -812,8 +812,9 @@ static void modify_segment(elf_link_t *elf_link, Elf64_Phdr *p, char *begin, cha
 		p->p_memsz = begin_sec->sh_size;
 		return;
 	}
-	p->p_filesz = end_sec->sh_offset - begin_sec->sh_offset;
-	p->p_memsz = p->p_filesz + end_sec->sh_size;
+	// .tbss is set type Alloc when merge secion
+	p->p_filesz = begin_sec->sh_size + end_sec->sh_size;
+	p->p_memsz = p->p_filesz;
 }
 
 static void modify_tls_segment(elf_link_t *elf_link)
