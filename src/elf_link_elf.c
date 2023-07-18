@@ -841,7 +841,12 @@ static void modify_tls_segment(elf_link_t *elf_link)
 		p->p_paddr = 0;
 		p->p_filesz = 0;
 		p->p_memsz = 0;
-		p->p_align = SI_CACHE_LINE_SIZE;
+		p->p_align = begin_sec->sh_addralign;
+
+		// align will impact tls len
+		if (p->p_align != sizeof(unsigned long)) {
+			si_panic("tls align must be 8\n");
+		}
 
 		out_ef->hdr->e_phnum += 1;
 		out_ef->tls_Phdr = p;
@@ -1178,7 +1183,7 @@ static inline Elf64_Addr get_symbol_new_value(elf_link_t *elf_link, elf_file_t *
 	if (elf_is_same_symbol_name(name, "__stop___libc_atexit")) {
 		Elf64_Shdr *sec = elf_find_section_by_name(ef, "__libc_atexit");
 		if (sec == NULL) {
-			si_panic("elf_find_section_by_name fail: __libc_atexit\n");
+			si_panic("fail: __libc_atexit\n");
 		}
 		unsigned long old_start_addr = sec->sh_addr;
 		unsigned long new_start_addr = get_new_addr_by_old_addr(elf_link, ef, old_start_addr);
