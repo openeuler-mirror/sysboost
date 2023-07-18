@@ -60,8 +60,8 @@ env:
 	cat /proc/sys/kernel/randomize_va_space
 	readelf -W -a $(LIBC_R) > libc.so.elf
 	objdump -d $(LIBC_R) > libc.so.asm
-	readelf -W -a $(LIBLD_R) > ld.so.elf
-	objdump -d $(LIBLD_R) > ld.so.asm
+	readelf -W -a $(LIBLD) > ld.so.elf
+	objdump -d $(LIBLD) > ld.so.asm
 
 clean:
 	$(RM) *.o *.ro *.old *.so *.asm *.elf *.rto *.out simple_app

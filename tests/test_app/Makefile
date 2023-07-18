@@ -12,6 +12,8 @@ LIBHOOK_R=/usr/lib/relocation/libhook.so.relocation
 LIBC=/usr/lib64/libc.so.6
 LIBC_R=/usr/lib/relocation$(LIBC).relocation
 
+MODE?=--static-nold
+#MODE=--static-nolibc
 
 .PHONY: all
 
@@ -51,22 +53,25 @@ run1:
 test-s: prepare
 	clear
 	@echo ===rto===
-	$(SYSBOOST) --static $(TEST_APP) $(LIB1) $(LIB2) $(LIBC)
+	$(SYSBOOST) $(MODE) $(TEST_APP) $(LIB1) $(LIB2) $(LIBC)
 	readelf -W -a $(TEST_APP).rto > test_app.rto.elf
 	objdump -d $(TEST_APP).rto > test_app.rto.asm
-	@echo ===run-ori===
+	@echo ===old===
 	$(TEST_APP)
 	@echo ===run===
-	./test_app.rto
+	$(TEST_APP).rto
 
 rto:
-	gdb --args $(SYSBOOST) --static $(TEST_APP) $(LIB1) $(LIB2) $(LIBC)
+	gdb --args $(SYSBOOST) $(MODE) $(TEST_APP) $(LIB1) $(LIB2) $(LIBC)
 
 run:
-	gdb --args ./test_app.rto
+	gdb --args $(TEST_APP).rto
 
 env:
 	echo 0 > /proc/sys/kernel/randomize_va_space
 	cat /proc/sys/kernel/randomize_va_space
 	readelf -W -a $(LIBC) > libc.so.elf
 	objdump -d $(LIBC) > libc.so.asm
+
+clean:
+	$(RM) *.o *.ro *.old *.so *.asm *.elf *.rto *.out test_app

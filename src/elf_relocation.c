@@ -244,7 +244,6 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 	case R_X86_64_TPOFF32:
 		// Offset in initial TLS block
 		// 00000000001f0d78  0000000000000012 R_X86_64_TPOFF64                          38
-		// [36] .data             PROGBITS        00000000001f1000 1f0000 0016a8 00  WA  0   0 32
 		dst_rela->r_addend = elf_get_new_tls_offset(elf_link, src_ef, src_rela->r_addend);
 		break;
 	case R_X86_64_COPY:
