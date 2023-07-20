@@ -205,9 +205,9 @@ fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
 pub fn set_app_aot_flag(old_path: &String, is_set: bool) -> i32 {
 	let mut args: Vec<String> = Vec::new();
 	if is_set {
-		args.push("-set".to_string());
+		args.push("--set".to_string());
 	} else {
-		args.push("-unset".to_string());
+		args.push("--unset".to_string());
 	}
 	let old_path = Path::new(old_path);
 	let old_path = match fs::canonicalize(old_path) {
