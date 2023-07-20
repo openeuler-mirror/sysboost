@@ -24,7 +24,7 @@ use std::path::Path;
 const BASH_RTO_PATH: &str = "/usr/bin/bash.rto";
 const BASH_PATH: &str = "/usr/bin/bash";
 const BASH_TOML_PATH: &str = "/etc/sysboost.d/bash.toml";
-const BASH_LINK_PATH: &str = "/var/lib/bash";
+const BASH_LINK_PATH: &str = "/var/lib/sysboost/bash";
 
 lazy_static! {
     static ref MERGE_FILES: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -75,10 +75,11 @@ fn do_bash_rollback() -> i32 {
             return -1;
         }
     }
+
     // rename bash.toml
     let bash_toml = Path::new(BASH_TOML_PATH);
     let bash_toml_err = bash_toml.with_extension("toml.err");
-    match fs::rename(&bash_toml_err, &bash_toml) {
+    match fs::rename(&bash_toml, &bash_toml_err) {
         Ok(_) => {}
         Err(e) => {
             log::error!("Mv failed: {}", e);
@@ -105,15 +106,13 @@ fn do_common_rollback(file_path: &String) -> i32 {
 
 fn process_coredump_event(pid: i32) {
     // get file path by pid
-    println!("process_coredump_event called ,pid is {}", pid);
     if PID_INFOS.lock().unwrap().contains_key(&pid) == false {
         log::info!("{} is not exist in PID_INFOS!", pid);
         return;
     }
-    
+   
     if let Some(file_path) = PID_INFOS.lock().unwrap().get(&pid) {
         log::info!("{} has create a coredump!", file_path);
-        println!("{} has create a coredump!", file_path);
         if MERGE_FILES.lock().unwrap().contains(&file_path) == false {
             return;
         }
@@ -162,8 +161,9 @@ pub fn coredump_monitor_loop() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
     use std::process::Command;
+    use std::fs::File;
+    use std::{thread, time};
 
     const COREDUMP_TEST_PATH: &str = "tests/test_coredump/test.c";
     const EXCUTE_TEST_PATH: &str = "tests/test_coredump/test";
@@ -202,11 +202,11 @@ mod tests {
         assert!(excute_file_exist == true, "excute file is not exist!");
         
         add_merge_file(real_excute_file.to_str().unwrap().to_string());
-        println!("merge file list is {:?}", MERGE_FILES.lock().unwrap());
         // do coredump monitor
         let _coredump_monitor = thread::spawn(|| {
             coredump_monitor_loop();                
         });
+
 
         // excute a coredump action
         let excute_command = String::from("./") + excute_file.to_str().unwrap();
@@ -219,4 +219,134 @@ mod tests {
         let excute_file_exist = excute_file.exists();
         assert!(excute_file_exist == false, "excute file is not deleted!");
     }
+
+    fn create_or_backup_file(src_path: &str, dest_path: &str) {
+        let file = Path::new(src_path);
+        let file_exist = file.exists();
+        if file_exist {
+            match fs::copy(src_path, dest_path) {
+                Ok(_p) => {},
+                Err(e) => {
+                    panic!("Failed to rename file: {}", e);
+                }
+            }
+        } else {
+            match File::create(&src_path) {
+                Ok(_p) => (),
+                Err(e) => {
+                    panic!("Failed to create file: {}", e);
+                }
+            }
+        }
+    }
+
+    fn reset_file(bak_path: &str, src_path: &str) {
+        let file = Path::new(bak_path);
+        let file_exist = file.exists();
+        if file_exist {
+            match fs::rename(bak_path, src_path) {
+                Ok(_p) => {},
+                Err(e) => {
+                     panic!("Failed to rename file: {}", e);
+                }
+            }
+        }
+    }
+
+    fn reset_env() {
+        let bash_link_backup: &str = "/var/lib/sysboost/bash.bak";
+        let bash_link_path: &str = "/var/lib/sysboost/bash";
+        reset_file(bash_link_backup, bash_link_path);
+        let bash_toml_backup: &str = "/etc/sysboost.d/bash.tomlbak";
+        let bash_toml_path: &str = "/etc/sysboost.d/bash.toml";
+        reset_file(bash_toml_backup, bash_toml_path);
+        let bash_rto_backup: &str = "/usr/bin/bash.rtobak";
+        let bash_rto_path: &str = "/usr/bin/bash.rto";
+        reset_file(bash_rto_backup, bash_rto_path);
+    }
+
+    #[test]
+    fn test_bash_coredump() {
+        // create link file
+        let bash_link_path: &str = "/var/lib/sysboost/bash";
+        let bash_link_backup: &str = "/var/lib/sysboost/bash.bak";
+        create_or_backup_file(bash_link_path, bash_link_backup);
+        // create toml file
+        let bash_toml_path: &str = "/etc/sysboost.d/bash.toml";
+        let bash_toml_err_path: &str = "/etc/sysboost.d/bash.toml.err";
+        let bash_toml_backup: &str = "/etc/sysboost.d/bash.tomlbak";
+        create_or_backup_file(bash_toml_path, bash_toml_backup);
+        // create bash rto file
+        let bash_rto_path: &str = "/usr/bin/bash.rto";
+        let bash_rto_backup: &str = "/usr/bin/bash.rtobak";
+        create_or_backup_file(bash_rto_path, bash_rto_backup);
+        let coredump_test_path: &str = "tests/test_coredump/test.c";
+        let excute_test_path: &str = "tests/test_coredump/test";
+
+        let source_file = Path::new(coredump_test_path);
+        let source_file = match fs::canonicalize(source_file) {
+            Ok(p) => p,
+            Err(e) => {
+                panic!("Failed to get realpath: {}", e);
+            }
+        };
+        let source_file_exist = source_file.exists();
+        assert!(source_file_exist == true, "coredump source file does not exist!");
+        let excute_file = Path::new(excute_test_path);
+        
+        let output = Command::new("gcc").args(&["-o", &excute_file.to_str().unwrap(), &source_file.to_str().unwrap()])
+                .output().expect("Faild to execute command!");
+        if !output.status.success() {
+            panic!("Failed to create excute file!");
+        }
+        let real_excute_file = match fs::canonicalize(excute_file) {
+            Ok(p) => p,
+            Err(e) => {
+                panic!("Failed to get realpath: {}", e);
+            }
+        };
+        
+        let excute_file_exist = real_excute_file.exists();
+        assert!(excute_file_exist == true, "excute file is not exist!");
+        
+        // do coredump monitor
+        let _coredump_monitor = thread::spawn(|| {
+            coredump_monitor_loop();
+        });
+
+        let sleep_millis = time::Duration::from_millis(1000);
+        thread::sleep(sleep_millis);
+
+        // create a coredump for bash
+        let excute_command = String::from("./") + excute_file.to_str().unwrap();
+        println!("excute_command is {}", excute_command);
+        let output = Command::new("/usr/bin/bash")
+            .arg("-c")
+            .arg(&excute_command)
+            .output()
+            .expect("Failed to excute command!");
+
+        if output.status.success() {
+            panic!("Coredump has not created!");
+        }
+        
+        let bash_link_file = Path::new(bash_link_path);
+        let bash_link_exist = bash_link_file.exists();
+        assert_eq!(bash_link_exist, false);
+
+        let bash_toml_file = Path::new(bash_toml_path);
+        let bash_toml_exist = bash_toml_file.exists();
+        assert_eq!(bash_toml_exist, false);
+
+        let bash_toml_err_file = Path::new(bash_toml_err_path);
+        let bash_toml_err_exist = bash_toml_err_file.exists();
+        assert_eq!(bash_toml_err_exist, true);
+
+        let bash_rto_file = Path::new(bash_rto_path);
+        let bash_rto_exist = bash_rto_file.exists();
+        assert_eq!(bash_rto_exist, false);
+
+        reset_env();
+    }
+
 }
