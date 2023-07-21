@@ -280,34 +280,6 @@ mod tests {
         let bash_rto_path: &str = "/usr/bin/bash.rto";
         let bash_rto_backup: &str = "/usr/bin/bash.rtobak";
         create_or_backup_file(bash_rto_path, bash_rto_backup);
-        let coredump_test_path: &str = "tests/test_coredump/test.c";
-        let excute_test_path: &str = "tests/test_coredump/test";
-
-        let source_file = Path::new(coredump_test_path);
-        let source_file = match fs::canonicalize(source_file) {
-            Ok(p) => p,
-            Err(e) => {
-                panic!("Failed to get realpath: {}", e);
-            }
-        };
-        let source_file_exist = source_file.exists();
-        assert!(source_file_exist == true, "coredump source file does not exist!");
-        let excute_file = Path::new(excute_test_path);
-        
-        let output = Command::new("gcc").args(&["-o", &excute_file.to_str().unwrap(), &source_file.to_str().unwrap()])
-                .output().expect("Faild to execute command!");
-        if !output.status.success() {
-            panic!("Failed to create excute file!");
-        }
-        let real_excute_file = match fs::canonicalize(excute_file) {
-            Ok(p) => p,
-            Err(e) => {
-                panic!("Failed to get realpath: {}", e);
-            }
-        };
-        
-        let excute_file_exist = real_excute_file.exists();
-        assert!(excute_file_exist == true, "excute file is not exist!");
         
         // do coredump monitor
         let _coredump_monitor = thread::spawn(|| {
@@ -318,11 +290,9 @@ mod tests {
         thread::sleep(sleep_millis);
 
         // create a coredump for bash
-        let excute_command = String::from("./") + excute_file.to_str().unwrap();
-        println!("excute_command is {}", excute_command);
-        let output = Command::new("/usr/bin/bash")
+        let output = Command::new("bash")
             .arg("-c")
-            .arg(&excute_command)
+            .arg("kill -s SIGSEGV $$")
             .output()
             .expect("Failed to excute command!");
 
@@ -348,5 +318,6 @@ mod tests {
 
         reset_env();
     }
+
 
 }
