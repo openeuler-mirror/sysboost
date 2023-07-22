@@ -272,26 +272,35 @@ static inline void modify_elf_file(elf_link_t *elf_link, unsigned long loc, void
 	memcpy(dst, val, len);
 }
 
+
+// symbol
 bool is_symbol_maybe_undefined(const char *name);
 bool is_gnu_weak_symbol(Elf64_Sym *sym);
-bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec);
-
-unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr);
-unsigned long get_new_addr_by_old_addr_ok(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr);
-unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long offset);
-unsigned long get_new_addr_by_symobj_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
-unsigned long get_new_addr_by_symobj(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
-
-int get_new_section_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int sec_index);
-unsigned long get_new_name_offset(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Shdr *src_sec, unsigned long offset);
 int get_new_sym_index_no_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
 int get_new_sym_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
+Elf64_Sym *elf_lookup_symbol_by_rela(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, elf_file_t **lookup_ef);
 
-// for temp sections
+// addr
+unsigned long get_new_addr_by_old_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr);
+unsigned long get_new_addr_by_old_addr_ok(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr);
+unsigned long get_new_addr_by_symobj_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
+unsigned long get_new_addr_by_symobj(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym);
+unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long offset);
+
+// tls
+unsigned long elf_get_new_tls_offset(elf_link_t *elf_link, elf_file_t *ef, unsigned long obj_tls_offset);
+
+// section
+bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec);
+int get_new_section_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int sec_index);
+unsigned long get_new_name_offset(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Shdr *src_sec, unsigned long offset);
+
+// temp sections
 char *elf_get_tmp_section_name(elf_link_t *elf_link, Elf64_Shdr *shdr);
 Elf64_Shdr *find_tmp_section_by_name(elf_link_t *elf_link, const char *sec_name);
 Elf64_Shdr *find_tmp_section_by_src(elf_link_t *elf_link, Elf64_Shdr *shdr);
 
+// section map
 void show_sec_mapping(elf_link_t *elf_link);
 void append_sec_mapping(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec, Elf64_Shdr *dst_sec);
 void append_obj_mapping(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec, void *src_obj, void *dst_obj);
@@ -299,10 +308,9 @@ elf_obj_mapping_t *elf_get_mapping_by_dst(elf_link_t *elf_link, void *dst_obj);
 elf_sec_mapping_t *elf_find_sec_mapping_by_dst(elf_link_t *elf_link, void *_dst_offset);
 elf_sec_mapping_t *elf_find_sec_mapping_by_srcsec(elf_link_t *elf_link, Elf64_Shdr *src_sec);
 
+// symbol map
 void append_symbol_mapping(elf_link_t *elf_link, char *symbol_name, unsigned long symbol_addr);
 unsigned long get_new_addr_by_symbol_mapping(elf_link_t *elf_link, char *symbol_name);
 void init_symbol_mapping(elf_link_t *elf_link);
-
-unsigned long elf_get_new_tls_offset(elf_link_t *elf_link, elf_file_t *ef, unsigned long obj_tls_offset);
 
 #endif /* _ELF_LINK_COMMON_H */

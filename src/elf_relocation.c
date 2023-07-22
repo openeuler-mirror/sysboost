@@ -25,6 +25,7 @@
 
 #include "elf_link_common.h"
 #include "elf_relocation.h"
+#include "elf_write_elf.h"
 
 #define BYTES_NOP1 0x90
 
@@ -142,42 +143,81 @@ static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, El
 	rela_change_to_relative(dst_rela, ret);
 }
 
-static void rela_use_relative(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
+// data not add base
+static unsigned long get_data_after_relocation(elf_file_t *ef, unsigned long addr)
 {
-	// 000000000012dd60  000001b900000005 R_X86_64_COPY          000000000012dd60 stdout@GLIBC_2.2.5 + 0
-	// 441: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5 (2)
-	// libc: 1407: 00000000001ed688     8 OBJECT  GLOBAL DEFAULT   36 stdout@@GLIBC_2.2.5
-	// copy symbol data to bss area
+	// data may be modify by .rela.dyn, so get data from sym.value
 
-	elf_file_t *ef = get_libc_ef(elf_link);
-	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
-	if (elf_is_copy_symbol(src_ef, sym) == false) {
-		// use local symbol addr
-		ef = src_ef;
+	Elf64_Rela *rela = elf_get_rela_by_addr(ef, addr);
+	if (rela == NULL) {
+		// var in bss is set to zero, no rela
+		// 718: 00000000001f4ce0     8 OBJECT  GLOBAL DEFAULT   44 __environ@@GLIBC_2.2.5
+		return NOT_FOUND;
 	}
 
-	char *sym_name = elf_get_sym_name(src_ef, sym);
-	unsigned long old_sym_addr = elf_find_symbol_addr_by_name(ef, sym_name);
-	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, ef, old_sym_addr);
-	if (new_sym_addr == NOT_FOUND) {
-		si_panic("%s %lx\n", src_ef->file_name, src_rela->r_offset);
+	Elf64_Sym *sym = elf_get_dynsym_by_rela(ef, rela);
+	if (sym->st_value == 0UL) {
+		si_panic("%s %lx\n", ef->file_name, addr);
+	}
+	// (sym->st_value + base) will set in addr rela->r_offset
+	return sym->st_value;
+}
+
+// relocation bash, R_X86_64_COPY type lookup from deps lib
+// 56775:     symbol=stdout;  lookup in file=/usr/lib64/libtinfo.so.6 [0]
+// 56775:     symbol=stdout;  lookup in file=/usr/lib64/libc.so.6 [0]
+// 56775:     binding file /usr/bin/bash [0] to /usr/lib64/libc.so.6 [0]: normal symbol `stdout' [GLIBC_2.2.5]
+// 56775:     symbol=stdin;  lookup in file=/usr/lib64/libtinfo.so.6 [0]
+// 56775:     symbol=stdin;  lookup in file=/usr/lib64/libc.so.6 [0]
+// 56775:     binding file /usr/bin/bash [0] to /usr/lib64/libc.so.6 [0]: normal symbol `stdin' [GLIBC_2.2.5]
+// 56775:     symbol=UP;  lookup in file=/usr/lib64/libtinfo.so.6 [0]
+// 56775:     binding file /usr/bin/bash [0] to /usr/lib64/libtinfo.so.6 [0]: normal symbol `UP'
+// 56775:     symbol=__environ;  lookup in file=/usr/lib64/libtinfo.so.6 [0]
+// 56775:     symbol=__environ;  lookup in file=/usr/lib64/libc.so.6 [0]
+// 56775:     binding file /usr/bin/bash [0] to /usr/lib64/libc.so.6 [0]: normal symbol `__environ' [GLIBC_2.2.5]
+// 56775:     symbol=PC;  lookup in file=/usr/lib64/libtinfo.so.6 [0]
+// 56775:     binding file /usr/bin/bash [0] to /usr/lib64/libtinfo.so.6 [0]: normal symbol `PC'
+// 56775:     symbol=BC;  lookup in file=/usr/lib64/libtinfo.so.6 [0]
+// 56775:     binding file /usr/bin/bash [0] to /usr/lib64/libtinfo.so.6 [0]: normal symbol `BC'
+// 56775:     symbol=stderr;  lookup in file=/usr/lib64/libtinfo.so.6 [0]
+// 56775:     symbol=stderr;  lookup in file=/usr/lib64/libc.so.6 [0]
+// 56775:     binding file /usr/bin/bash [0] to /usr/lib64/libc.so.6 [0]: normal symbol `stderr' [GLIBC_2.2.5]
+
+// timeline
+// relocation libc, (00000000001ed688 libc.stdout) <= _IO_2_1_stdout_ addr
+// relocation bash, (000000000012dd60 bash.stdout) <= (00000000001ed688 libc.stdout) data COPY
+// bash:
+// 000000000012dd60  000001b900000005 R_X86_64_COPY          000000000012dd60 stdout@GLIBC_2.2.5 + 0
+// 441: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5 (2)
+// libc:
+// 00000000001ed688  0000026600000001 R_X86_64_64            00000000001ed5a0 _IO_2_1_stdout_@@GLIBC_2.2.5 + 0
+// 1407: 00000000001ed688     8 OBJECT  GLOBAL DEFAULT   36 stdout@@GLIBC_2.2.5
+// 614: 00000000001ed5a0   224 OBJECT  GLOBAL DEFAULT   36 _IO_2_1_stdout_@@GLIBC_2.2.5
+static void rela_use_relative(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
+{
+	// copy symbol data to app bss area
+
+	elf_file_t *lookup_ef = NULL;
+	Elf64_Sym *lookup_sym = elf_lookup_symbol_by_rela(elf_link, src_ef, src_rela, &lookup_ef);
+
+	// data will be modify by .rela.dyn, really data need add base
+	unsigned long old_addr_in_data = get_data_after_relocation(lookup_ef, lookup_sym->st_value);
+	if (old_addr_in_data == NOT_FOUND) {
+		// 511: 000000000012dd80     8 OBJECT  GLOBAL DEFAULT   36 __environ@GLIBC_2.2.5 (2)
+		// var is allready 0, do nothing
+		elf_clear_rela(dst_rela);
 		return;
 	}
 
-	unsigned long data = elf_read_u64_va(ef, new_sym_addr);
 	// check copy size
-	if (sym->st_size == sizeof(unsigned long)) {
-		// 8 byte
-	} else if (sym->st_size == sizeof(unsigned char)) {
-		// NOTE: target mem is bss, so relative type write 7 zero is OK
-		// 1 byte
-		data = (unsigned char)data;
-	} else {
+	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
+	if (sym->st_size != sizeof(unsigned long)) {
 		si_panic("size wrong %s %lx\n", src_ef->file_name, src_rela->r_offset);
 		return;
 	}
 
-	rela_change_to_relative(dst_rela, data);
+	unsigned long new_addr_in_data = get_new_addr_by_old_addr(elf_link, lookup_ef, old_addr_in_data);
+	rela_change_to_relative(dst_rela, new_addr_in_data);
 }
 
 void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
@@ -187,6 +227,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 
 	// modify offset
 	dst_rela->r_offset = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_offset);
+
 	// old sym index to new index of .dynsym
 	unsigned int old_index = ELF64_R_SYM(src_rela->r_info);
 	int new_index = get_new_sym_index_no_clear(elf_link, src_ef, old_index);
@@ -233,6 +274,9 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		fallthrough;
 	case R_X86_64_RELATIVE:
 	case R_AARCH64_RELATIVE:
+		if (!elf_is_rela_symbol_null(src_rela)) {
+			si_panic("%s %lx\n", src_ef->file_name, src_rela->r_offset);
+		}
 		dst_rela->r_addend = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_addend);
 		break;
 	case R_AARCH64_TLS_TPREL:
@@ -257,7 +301,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		break;
 	default:
 		SI_LOG_ERR("%s %lx\n", src_ef->file_name, src_rela->r_offset);
-		si_panic("error not supported modify_rela_dyn type %d\n", type);
+		si_panic("error not supported type %d\n", type);
 	}
 
 	SI_LOG_DEBUG("old r_offset %016lx r_info %016lx r_addend %016lx -> new r_offset %016lx r_info %016lx r_addend %016lx\n",
@@ -299,6 +343,9 @@ void modify_got(elf_link_t *elf_link)
 	//   2006: 00000000003ffbd8     0 OBJECT  LOCAL  DEFAULT  ABS _GLOBAL_OFFSET_TABLE_
 	elf_file_t *template_ef = get_template_ef(elf_link);
 	Elf64_Sym *sym = elf_find_symbol_by_name(template_ef, "_GLOBAL_OFFSET_TABLE_");
+	if (sym == NULL) {
+		si_panic("find sym fail\n");
+	}
 	unsigned long new_addr = get_new_addr_by_old_addr(elf_link, template_ef, sym->st_value);
 	elf_file_t *out_ef = &elf_link->out_ef;
 	elf_write_u64(out_ef, new_addr, find_sec->sh_addr);

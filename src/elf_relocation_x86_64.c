@@ -25,6 +25,7 @@
 
 #include "elf_link_common.h"
 #include "elf_instruction.h"
+#include "elf_write_elf.h"
 
 #define BYTES_NOP1 0x90
 
@@ -262,8 +263,8 @@ static void modify_insn_func_offset(elf_link_t *elf_link, elf_file_t *ef, Elf64_
 
 	// This is where to make the change
 	unsigned long loc = get_new_addr_by_old_addr(elf_link, ef, rela->r_offset);
-	unsigned long sym_addr = get_new_addr_by_symobj_ok(elf_link, ef, sym);
-	if (sym_addr == 0) {
+	unsigned long sym_addr = get_new_addr_by_symobj(elf_link, ef, sym);
+	if (sym_addr == NOT_FOUND) {
 		// share mode libc func is use plt, no need change
 		if (is_share_mode(elf_link)) {
 			return;
@@ -271,14 +272,15 @@ static void modify_insn_func_offset(elf_link_t *elf_link, elf_file_t *ef, Elf64_
 
 		const char *sym_name = elf_get_sym_name(ef, sym);
 		if (is_symbol_maybe_undefined(sym_name)) {
+			sym_addr = 0UL;
 			goto out;
 		}
 		si_panic("find func fail %s %016lx\n", sym_name, rela->r_offset);
 		return;
 	}
 
-	val = (long)sym_addr - (long)loc + rela->r_addend;
 out:
+	val = (long)sym_addr - (long)loc + rela->r_addend;
 	modify_elf_file(elf_link, loc, &val, sizeof(int));
 }
 
@@ -304,29 +306,6 @@ static void modify_insn_for_pc32(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rel
 	if (ELF64_ST_TYPE(sym->st_info) == STT_FUNC) {
 		fix_main_for_static_mode(elf_link, ef, rela, sym);
 		return;
-	}
-
-	// stdout symbol is in libc, point addr in bash bss
-	// 000000000012dd60  000001b900000005 R_X86_64_COPY          000000000012dd60 stdout@GLIBC_2.2.5 + 0
-	// 441: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5 (2)
-	// 000000000004758e  0000066a00000002 R_X86_64_PC32          000000000012dd60 stdout@GLIBC_2.2.5 - 4
-	// 1642: 000000000012dd60     8 OBJECT  GLOBAL DEFAULT   36 stdout@GLIBC_2.2.5
-	// 4758b:	48 8b 3d ce 67 0e 00 	mov    0xe67ce(%rip),%rdi        # 12dd60 <stdout@@GLIBC_2.2.5>
-	// libc environ is weak, so other ELF have the some var
-	// feature: 48 89 05 96 f8 0d 00 	mov    %rax,0xdf896(%rip)
-	// 952: 00000000001f4ce0     8 OBJECT  WEAK   DEFAULT   44 environ@@GLIBC_2.2.5
-	if (is_direct_point_var_optimize(elf_link) && elf_is_copy_symbol(ef, sym)) {
-		unsigned long sym_addr = get_new_addr_by_symobj(elf_link, ef, sym);
-		if (sym_addr != NOT_FOUND) {
-			unsigned char *insn = get_insn_begin_by_offset(elf_link, ef, rela);
-			int ret = elf_insn_change_mov_to_lea(insn);
-			if (ret != 0) {
-				si_panic("%s %lx\n", ef->file_name, rela->r_offset);
-			}
-			unsigned long loc = get_new_addr_by_old_addr(elf_link, ef, rela->r_offset);
-			modify_insn_offset(elf_link, loc, sym_addr, rela->r_addend);
-			return;
-		}
 	}
 
 	// feature: if layout not random, use imm value, do not use lea
@@ -434,12 +413,6 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 	return 0;
 }
 
-static void clear_rela(Elf64_Rela *dst_rela)
-{
-	(void)memset(dst_rela, 0, sizeof(*dst_rela));
-	// TODO: bug, R_X86_64_NONE can not in .rela.plt
-}
-
 #define ADDRESS_OF_FOUR_BYTES  4
 #define ADDRESS_OF_SIX_BYTES   6
 void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
@@ -465,7 +438,7 @@ void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 		int new_index = get_new_sym_index_no_clear(elf_link, obj_rel->src_ef, old_index);
 		// func in this ELF need clear rela
 		if (new_index == NEED_CLEAR_RELA) {
-			clear_rela(dst_rela);
+			elf_clear_rela(dst_rela);
 			continue;
 		}
 		dst_rela->r_info = ELF64_R_INFO(new_index, ELF64_R_TYPE(src_rela->r_info));

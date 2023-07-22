@@ -16,6 +16,8 @@
 #include <elf.h>
 #include <stdbool.h>
 
+#define NOT_FOUND_SYM (-1U)
+
 #define NEED_CLEAR_RELA (-2)
 #define RELOCATION_ROOT_DIR "/usr/lib/relocation"
 
@@ -83,6 +85,16 @@ static inline char *elf_get_symbol_name(elf_file_t *ef, Elf64_Sym *sym)
 	return ef->strtab_data + sym->st_name;
 }
 
+static inline Elf64_Sym *elf_get_symtab_array(elf_file_t *ef)
+{
+	return (Elf64_Sym *)elf_get_section_data(ef, ef->symtab_sec);
+}
+
+static inline int elf_get_symtab_count(elf_file_t *ef)
+{
+	return ef->symtab_sec->sh_size / sizeof(Elf64_Sym);
+}
+
 static inline Elf64_Sym *elf_get_dynsym_array(elf_file_t *ef)
 {
 	return (Elf64_Sym *)elf_get_section_data(ef, ef->dynsym_sec);
@@ -129,6 +141,20 @@ static inline char *elf_get_sym_name(elf_file_t *ef, Elf64_Sym *sym)
 	return sym_name;
 }
 
+static inline int elf_get_symbol_index(Elf64_Rela *rela)
+{
+	return ELF64_R_SYM(rela->r_info);
+}
+
+static inline bool elf_is_rela_symbol_null(Elf64_Rela *rela)
+{
+	int index = elf_get_symbol_index(rela);
+	if (index == 0) {
+		return true;
+	}
+	return false;
+}
+
 static inline Elf64_Sym *elf_get_symtab_by_rela(elf_file_t *ef, Elf64_Rela *rela)
 {
 	return (Elf64_Sym *)((void *)ef->hdr + ef->symtab_sec->sh_offset) + ELF64_R_SYM(rela->r_info);
@@ -144,13 +170,17 @@ int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
 				unsigned long *start, unsigned long *end);
 
 // symbol
+bool elf_is_same_symbol_name(const char *a, const char *b);
+bool elf_is_symbol_at_libc(elf_file_t *ef, Elf64_Sym *sym);
 unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name);
 Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name);
 unsigned long elf_find_symbol_addr_by_name(elf_file_t *ef, char *sym_name);
-bool elf_is_same_symbol_name(const char *a, const char *b);
-char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int index);
+Elf64_Sym *elf_find_dynsym_by_name(elf_file_t *ef, const char *name);
 int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear);
-bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym);
+char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int index);
+
+// rela
+Elf64_Rela *elf_get_rela_by_addr(elf_file_t *ef, unsigned long addr);
 
 // section
 Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls_offset);

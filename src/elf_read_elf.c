@@ -41,6 +41,23 @@
 #define ELF_VERSION_NR_LOCAL 0
 #define ELF_VERSION_NR_GLOBAL 1
 
+Elf64_Rela *elf_get_rela_by_addr(elf_file_t *ef, unsigned long addr)
+{
+	Elf64_Shdr *sec = elf_find_section_by_name(ef, ".rela.dyn");
+	Elf64_Rela *relas = (Elf64_Rela *)elf_get_section_data(ef, sec);
+	int count = sec->sh_size / sizeof(Elf64_Rela);
+	Elf64_Rela *rela = NULL;
+
+	for (int i = 0; i < count; i++) {
+		rela = &relas[i];
+		if (rela->r_offset == addr) {
+			return rela;
+		}
+	}
+
+	return NULL;
+}
+
 static inline char *elf_get_version_name(elf_file_t *ef, Elf64_Vernaux *vernaux)
 {
 	return ef->dynstr_data + vernaux->vna_name;
@@ -92,7 +109,7 @@ char *elf_get_dynsym_version_name(elf_file_t *ef, Elf64_Sym *sym)
 	return elf_get_version_name(ef, vernaux);
 }
 
-bool elf_is_copy_symbol(elf_file_t *ef, Elf64_Sym *sym)
+bool elf_is_symbol_at_libc(elf_file_t *ef, Elf64_Sym *sym)
 {
 	char *sym_name = elf_get_sym_name(ef, sym);
 	bool is_dynsym = elf_is_dynsym(ef, sym);
@@ -140,31 +157,36 @@ bool elf_is_same_symbol_name(const char *a, const char *b)
 	return true;
 }
 
-int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear)
+Elf64_Sym *elf_find_dynsym_by_name(elf_file_t *ef, const char *name)
 {
 	Elf64_Sym *syms = elf_get_dynsym_array(ef);
 	int count = elf_get_dynsym_count(ef);
-	int found_index = -1;
-
 	Elf64_Sym *sym = NULL;
 	char *sym_name = NULL;
+
 	for (int i = 0; i < count; i++) {
 		sym = &syms[i];
-		sym_name = elf_get_sym_name(ef, sym);
+		sym_name = elf_get_dynsym_name(ef, sym);
 		if (elf_is_same_symbol_name(sym_name, name)) {
-			if (clear && sym->st_shndx != 0) {
-				return NEED_CLEAR_RELA;
-			}
-			found_index = i;
-			break;
+			return sym;
 		}
 	}
 
-	if (found_index == -1) {
+	return NULL;
+}
+
+int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear)
+{
+	Elf64_Sym *sym = elf_find_dynsym_by_name(ef, name);
+	if (sym == NULL) {
 		si_panic("%s\n", name);
 	}
 
-	return found_index;
+	if (clear && sym->st_shndx != 0) {
+		return NEED_CLEAR_RELA;
+	}
+
+	return elf_get_dynsym_index(ef, sym);
 }
 
 int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
@@ -176,9 +198,8 @@ int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
 	}
 	*start = sym->st_value;
 
-	Elf64_Shdr *sec = ef->symtab_sec;
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + sec->sh_offset);
-	unsigned count = sec->sh_size / sizeof(Elf64_Sym);
+	Elf64_Sym *syms = elf_get_symtab_array(ef);
+	unsigned count = elf_get_symtab_count(ef);
 
 	*end = ~0UL;
 	for (unsigned i = 0; i < count; i++) {
@@ -198,9 +219,8 @@ int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
 
 unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name)
 {
-	Elf64_Shdr *sec = ef->symtab_sec;
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + sec->sh_offset);
-	int count = sec->sh_size / sizeof(Elf64_Sym);
+	Elf64_Sym *syms = elf_get_symtab_array(ef);
+	int count = elf_get_symtab_count(ef);
 
 	for (int i = 0; i < count; i++) {
 		Elf64_Sym *sym = &syms[i];
@@ -211,22 +231,28 @@ unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name)
 		}
 	}
 
-	si_panic("find symbol fail %s %s\n", ef->file_name, name);
-	return ~0U; /* unreachable */
+	return NOT_FOUND_SYM;
 }
 
 Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name)
 {
-	Elf64_Shdr *sec = ef->symtab_sec;
-	Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + sec->sh_offset);
+	Elf64_Sym *syms = elf_get_symtab_array(ef);
+
 	unsigned i = elf_find_symbol_index_by_name(ef, sym_name);
+	if (i == NOT_FOUND_SYM) {
+		return NULL;
+	}
+
 	return &syms[i];
 }
 
 unsigned long elf_find_symbol_addr_by_name(elf_file_t *ef, char *sym_name)
 {
 	Elf64_Sym *sym = elf_find_symbol_by_name(ef, sym_name);
-	return sym->st_value;
+	if (sym) {
+		return sym->st_value;
+	}
+
 	si_panic("can not find sym, %s %s\n", ef->file_name, sym_name);
 	return 0;
 }

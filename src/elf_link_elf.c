@@ -1227,7 +1227,7 @@ static inline Elf64_Sym *get_src_sym_by_dst(elf_link_t *elf_link, Elf64_Sym *dst
 static void modify_symbol(elf_link_t *elf_link, Elf64_Shdr *sec)
 {
 	int len = sec->sh_size / sizeof(Elf64_Sym);
-	Elf64_Sym *base = ((void *)elf_link->out_ef.hdr) + sec->sh_offset;
+	Elf64_Sym *base = elf_get_section_data(&elf_link->out_ef, sec);
 
 	for (int i = 0; i < len; i++) {
 		Elf64_Sym *dst_sym = &base[i];
@@ -1247,7 +1247,7 @@ static void modify_symbol(elf_link_t *elf_link, Elf64_Shdr *sec)
 static Elf64_Sym *find_defined_symbol(elf_file_t *ef, Elf64_Shdr *sec, char *sym_name)
 {
 	int count = sec->sh_size / sizeof(Elf64_Sym);
-	Elf64_Sym *base = ((void *)ef->hdr) + sec->sh_offset;
+	Elf64_Sym *base = elf_get_section_data(ef, sec);
 
 	for (int i = 0; i < count; i++) {
 		Elf64_Sym *dst_sym = &base[i];
@@ -1266,7 +1266,7 @@ static Elf64_Sym *find_defined_symbol(elf_file_t *ef, Elf64_Shdr *sec, char *sym
 static void delete_undefined_symbol(elf_file_t *ef, Elf64_Shdr *sec)
 {
 	int count = sec->sh_size / sizeof(Elf64_Sym);
-	Elf64_Sym *base = ((void *)ef->hdr) + sec->sh_offset;
+	Elf64_Sym *base = elf_get_section_data(ef, sec);
 
 	for (int i = 0; i < count; i++) {
 		Elf64_Sym *dst_sym = &base[i];
@@ -1284,7 +1284,7 @@ static void delete_undefined_symbol(elf_file_t *ef, Elf64_Shdr *sec)
 static void sort_symbol_table(elf_file_t *ef, Elf64_Shdr *sec)
 {
 	int count = sec->sh_size / sizeof(Elf64_Sym);
-	void *base = ((void *)ef->hdr) + sec->sh_offset;
+	void *base = elf_get_section_data(ef, sec);
 
 	qsort(base, count, sizeof(Elf64_Sym), sym_cmp_func);
 }
@@ -1463,9 +1463,33 @@ char *disabled_funcs[] = {
     "frame_dummy",
     "__do_global_dtors_aux",
 };
+
 #define DISABLED_FUNCS_LEN (sizeof(disabled_funcs) / sizeof(disabled_funcs[0]))
 #define AARCH64_INSN_RET 0xD65F03C0U
 #define X86_64_INSN_RET 0xC3
+
+static void modify_init_and_fini_ef(elf_link_t *elf_link, elf_file_t *ef)
+{
+	Elf64_Ehdr *hdr = elf_link->out_ef.hdr;
+	elf_file_t *out_ef = &elf_link->out_ef;
+
+	// In .init_array and .fini_array, static-pie mode the EXEC ELF no need run
+	// so we need to disable such functions in EXEC ELF
+	for (unsigned j = 0; j < DISABLED_FUNCS_LEN; j++) {
+		Elf64_Sym *sym = elf_find_symbol_by_name(ef, disabled_funcs[j]);
+		if (sym == NULL) {
+			// do nothing
+			continue;
+		}
+		unsigned long addr = get_new_addr_by_symobj(elf_link, ef, sym);
+		if (hdr->e_machine == EM_AARCH64) {
+			elf_write_u32(out_ef, addr, AARCH64_INSN_RET);
+		} else {
+			elf_write_u8(out_ef, addr, X86_64_INSN_RET);
+		}
+	}
+}
+
 static void modify_init_and_fini(elf_link_t *elf_link)
 {
 	if (is_share_mode(elf_link) == true) {
@@ -1476,19 +1500,11 @@ static void modify_init_and_fini(elf_link_t *elf_link)
 		si_panic("e_machine not support\n");
 	}
 
-	elf_file_t *out_ef = &elf_link->out_ef;
-
-	// In .init_array and .fini_array, static-pie mode the EXEC ELF no need run
-	// so we need to disable such functions in EXEC ELF
-	elf_file_t *ef = get_main_ef(elf_link);
-	for (unsigned j = 0; j < DISABLED_FUNCS_LEN; j++) {
-		Elf64_Sym *sym = elf_find_symbol_by_name(ef, disabled_funcs[j]);
-		unsigned long addr = get_new_addr_by_symobj_ok(elf_link, ef, sym);
-		if (hdr->e_machine == EM_AARCH64) {
-			elf_write_u32(out_ef, addr, AARCH64_INSN_RET);
-		} else {
-			elf_write_u8(out_ef, addr, X86_64_INSN_RET);
-		}
+	elf_file_t *ef;
+	int in_ef_nr = elf_link->in_ef_nr;
+	for (int i = 0; i < in_ef_nr; i++) {
+		ef = &elf_link->in_efs[i];
+		modify_init_and_fini_ef(elf_link, ef);
 	}
 }
 

@@ -559,7 +559,6 @@ Elf64_Shdr *find_tmp_section_by_name(elf_link_t *elf_link, const char *sec_name)
 	return NULL;
 }
 
-// addr != offset from RELRO segment
 static unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long addr)
 {
 	int len = elf_link->sec_mapping_arr->len;
@@ -697,13 +696,17 @@ static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, El
 
 static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_name)
 {
-	int count = elf_link->in_ef_nr;
+	int in_ef_nr = elf_link->in_ef_nr;
 	elf_file_t *ef = NULL;
 	Elf64_Sym *sym = NULL;
 	int sym_count;
 
-	// find in all ELF symtab
-	for (int i = 1; i < count; i++) {
+	// find in all ELF symtab, find template elf after
+	int i = 0;
+	if (is_static_nolibc_mode(elf_link)) {
+		i = 1;
+	}
+	for (; i < in_ef_nr; i++) {
 		ef = &elf_link->in_efs[i];
 		sym_count = ef->symtab_sec->sh_size / sizeof(Elf64_Sym);
 		Elf64_Sym *syms = (Elf64_Sym *)(((void *)ef->hdr) + ef->symtab_sec->sh_offset);
@@ -741,6 +744,70 @@ out:
 	}
 
 	return get_new_addr_by_old_addr(elf_link, ef, sym->st_value);
+}
+
+// lookup symbol in order
+// scope: /usr/bin/bash /usr/lib64/libtinfo.so.6 /usr/lib64/libc.so.6 /lib64/ld-linux-x86-64.so.2
+static unsigned long get_new_addr_by_lookup(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Sym *sym)
+{
+	char *sym_name = elf_get_sym_name(src_ef, sym);
+
+	if (sym->st_shndx == SHN_UNDEF) {
+		goto out;
+	}
+
+	// find in main ELF
+	elf_file_t *ef = get_main_ef(elf_link);
+	Elf64_Sym *lookup_sym = elf_find_dynsym_by_name(ef, sym_name);
+	if ((lookup_sym != NULL) && (lookup_sym->st_shndx != SHN_UNDEF)) {
+		return get_new_addr_by_old_addr(elf_link, ef, lookup_sym->st_value);
+	}
+
+	// use self ELF sym
+	return get_new_addr_by_old_addr(elf_link, src_ef, sym->st_value);
+
+out:
+	// find sym in other merge ELF
+	return _get_new_addr_by_sym_name(elf_link, sym_name);
+}
+
+Elf64_Sym *elf_lookup_symbol_by_rela(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, elf_file_t **lookup_ef)
+{
+	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
+	char *sym_name = elf_get_sym_name(src_ef, sym);
+
+	int type = ELF64_R_TYPE(src_rela->r_info);
+	if (type != R_X86_64_COPY) {
+		si_panic("type wrong %s %lx\n", src_ef->file_name, src_rela->r_offset);
+		return NULL;
+	}
+
+	// feature: find order need deps lib
+	int in_ef_nr = elf_link->in_ef_nr;
+	elf_file_t *ef = NULL;
+	Elf64_Sym *syms = NULL;
+	int sym_count;
+
+	for (int i = 1; i < in_ef_nr; i++) {
+		ef = &elf_link->in_efs[i];
+		if (ef == src_ef) {
+			// dont find src ELF, src ELF is main ELF
+			continue;
+		}
+
+		syms = elf_get_dynsym_array(ef);
+		sym_count = elf_get_dynsym_count(ef);
+		for (int j = 0; j < sym_count; j++) {
+			sym = &syms[j];
+			char *name = elf_get_sym_name(ef, sym);
+			if (elf_is_same_symbol_name(sym_name, name) && sym->st_shndx != SHN_UNDEF) {
+				*lookup_ef = ef;
+				return sym;
+			}
+		}
+	}
+
+	return NULL;
 }
 
 static char *get_ifunc_nice_name(char *sym_name)
@@ -861,8 +928,8 @@ static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, El
 		// use ifunc return value
 		ret = _get_ifunc_new_addr_by_dl(elf_link, ef, sym, nice_sym_name);
 	}
-	append_symbol_mapping(elf_link, nice_sym_name, ret);
-	SI_LOG_DEBUG("ifunc %s %16lx\n", nice_sym_name, ret);
+	append_symbol_mapping(elf_link, sym_name, ret);
+	SI_LOG_DEBUG("ifunc %-30s %16lx\n", sym_name, ret);
 
 	return ret;
 }
@@ -889,13 +956,8 @@ static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
 		return get_ifunc_new_addr(elf_link, ef, sym, sym_name);
 	}
 
-	// When the shndx != SHN_UNDEF, the symbol in this ELF.
-	if (sym->st_shndx != SHN_UNDEF) {
-		return get_new_addr_by_old_addr(elf_link, ef, sym->st_value);
-	}
-
-	// find sym in other merge ELF
-	return _get_new_addr_by_sym_name(elf_link, sym_name);
+	// lookup order
+	return get_new_addr_by_lookup(elf_link, ef, sym);
 }
 
 unsigned long get_new_addr_by_symobj_ok(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym)
