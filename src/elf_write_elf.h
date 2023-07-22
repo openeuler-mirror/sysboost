@@ -15,8 +15,15 @@
 
 #include <elf.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "elf_link_common.h"
+
+// old ld.so can not compat to R_X86_64_NONE in .rela.plt
+static inline void elf_clear_rela(Elf64_Rela *dst_rela)
+{
+	(void)memset(dst_rela, 0, sizeof(*dst_rela));
+}
 
 void elf_modify_file_zero(elf_link_t *elf_link, unsigned long offset, unsigned long len);
 void elf_modify_section_zero(elf_link_t *elf_link, char *secname);

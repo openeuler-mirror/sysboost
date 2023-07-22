@@ -476,6 +476,9 @@ static void modify_new_adrp(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *re
 		old_sym_addr = get_adrp_addr(old_insn, old_offset);
 		/* make sure old_sym_addr locate in .got */
 		sym = elf_find_symbol_by_name(ef, "_GLOBAL_OFFSET_TABLE_");
+		if (sym == NULL) {
+			si_panic("find sym fail\n");
+		}
 		if (old_sym_addr < sym->st_value) {
 			old_sym_addr = sym->st_value;
 		}
@@ -1010,7 +1013,7 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 	int ret = elf_find_func_range_by_name(template_ef, "__run_exit_handlers",
 					      &start, &end);
 	if (ret) {
-		si_panic("%s: elf_find_func_range_by_name fail\n", __func__);
+		si_panic("elf_find_func_range_by_name fail\n");
 	}
 
 	/* find ldr with __stop___libc_atexit rela in __run_exit_handlers() */
@@ -1018,6 +1021,9 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 	Elf64_Rela *relas = ((void *)template_ef->hdr) + sec->sh_offset;
 	unsigned len = sec->sh_size / sec->sh_entsize;
 	unsigned sym_id = elf_find_symbol_index_by_name(template_ef, "__stop___libc_atexit");
+	if (sym_id == NOT_FOUND_SYM) {
+		si_panic("find sym fail\n");
+	}
 
 	unsigned long old_ldr_addr = 0;
 	for (unsigned i = 0; i < len; i++) {
@@ -1077,6 +1083,9 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 			continue;
 		}
 		Elf64_Sym *sym = elf_find_symbol_by_name(out_ef, "__stop___libc_atexit");
+		if (sym == NULL) {
+			si_panic("find sym fail\n");
+		}
 		rela->r_addend = sym->st_value;
 		SI_LOG_DEBUG("change .rela.dyn 0x%lx's value to 0x%lx\n",
 			     rela->r_offset, sym->st_value);

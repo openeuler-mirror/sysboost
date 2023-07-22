@@ -84,7 +84,11 @@ env:
 	objdump -d $(BASH) > bash.asm
 	readelf -W -a $(LIBC_R) > libc.so.elf
 	objdump -d $(LIBC_R) > libc.so.asm
-	readelf -W -a $(LIBTINFO_R) > libtinfo.so.elf
-	objdump -d $(LIBTINFO_R) > libtinfo.so.asm
+	readelf -W -a $(LIBTINFO) > libtinfo.so.elf
+	objdump -d $(LIBTINFO) > libtinfo.so.asm
 	readelf -W -a $(LIBLD) > ld.so.elf
 	objdump -d $(LIBLD) > ld.so.asm
+	LD_DEBUG=all $(BASH) -c "echo 1" &> bash.ld.log
+
+clean:
+	$(RM) *.o *.ro *.old *.so *.asm *.elf *.rto *.out *.log
