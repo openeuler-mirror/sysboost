@@ -281,10 +281,11 @@ mod tests {
         let bash_rto_backup: &str = "/usr/bin/bash.rtobak";
         create_or_backup_file(bash_rto_path, bash_rto_backup);
         
-        // do coredump monitor
-        let _coredump_monitor = thread::spawn(|| {
-            coredump_monitor_loop();
-        });
+        // start sysboost
+        let output = Command::new("systemctl").args(&["start", "sysboost.service"]).output().expect("Failed to start sysboost");
+        if !output.status.success() {
+            panic!("Failed to start sysboost service: {}", String::from_utf8_lossy(&output.stderr));
+        }
 
         let sleep_millis = time::Duration::from_millis(1000);
         thread::sleep(sleep_millis);
@@ -318,6 +319,4 @@ mod tests {
 
         reset_env();
     }
-
-
 }
