@@ -49,7 +49,7 @@ static void modify_local_call_sec(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sh
 	int ret = 0;
 
 	name = elf_get_section_name(ef, sec);
-	SI_LOG_DEBUG("sec %s\n", name);
+	SI_LOG_DEBUG("%s sec %s\n", ef->file_name, name);
 
 	for (int i = 0; i < len; i++) {
 		rela = &relas[i];

@@ -174,6 +174,7 @@ bool elf_is_same_symbol_name(const char *a, const char *b);
 bool elf_is_symbol_at_libc(elf_file_t *ef, Elf64_Sym *sym);
 unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name);
 Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name);
+Elf64_Sym *elf_find_symbol_by_addr(elf_file_t *ef, unsigned long addr);
 unsigned long elf_find_symbol_addr_by_name(elf_file_t *ef, char *sym_name);
 Elf64_Sym *elf_find_dynsym_by_name(elf_file_t *ef, const char *name);
 int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear);
