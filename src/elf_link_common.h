@@ -112,7 +112,7 @@ typedef struct {
 } elf_link_t;
 
 typedef struct {
-	char *symbol_name;
+	const char *symbol_name;
 	unsigned long symbol_addr;
 } elf_symbol_mapping_t;
 
@@ -309,7 +309,7 @@ elf_sec_mapping_t *elf_find_sec_mapping_by_dst(elf_link_t *elf_link, void *_dst_
 elf_sec_mapping_t *elf_find_sec_mapping_by_srcsec(elf_link_t *elf_link, Elf64_Shdr *src_sec);
 
 // symbol map
-void append_symbol_mapping(elf_link_t *elf_link, char *symbol_name, unsigned long symbol_addr);
+void append_symbol_mapping(elf_link_t *elf_link, const char *symbol_name, unsigned long symbol_addr);
 unsigned long get_new_addr_by_symbol_mapping(elf_link_t *elf_link, char *symbol_name);
 void init_symbol_mapping(elf_link_t *elf_link);
 

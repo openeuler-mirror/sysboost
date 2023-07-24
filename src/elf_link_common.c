@@ -156,7 +156,7 @@ bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
 }
 
 // symbol_name string can not change
-void append_symbol_mapping(elf_link_t *elf_link, char *symbol_name, unsigned long symbol_addr)
+void append_symbol_mapping(elf_link_t *elf_link, const char *symbol_name, unsigned long symbol_addr)
 {
 	elf_symbol_mapping_t sym_map = {0};
 
@@ -692,7 +692,7 @@ unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src
 	return get_new_addr_by_old_addr(elf_link, src_ef, offset);
 }
 
-static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, char *sym_name);
+static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, const char *sym_name);
 
 static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_name)
 {
@@ -914,7 +914,7 @@ static void elf_gen_nice_name(char *sym_name)
 
 // ifunc is in ELFs, so it can not init when start
 // Assume that ifunc function name is unique
-static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, char *sym_name)
+static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, const char *sym_name)
 {
 	// sym name may have version, strpbrk@GLIBC_2.2.5
 	char nice_sym_name[ELF_MAX_SYMBOL_NAME_LEN] = { 0 };
@@ -928,6 +928,8 @@ static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, El
 		// use ifunc return value
 		ret = _get_ifunc_new_addr_by_dl(elf_link, ef, sym, nice_sym_name);
 	}
+
+	// symbol name string can not change
 	append_symbol_mapping(elf_link, sym_name, ret);
 	SI_LOG_DEBUG("ifunc %-30s %16lx\n", sym_name, ret);
 
