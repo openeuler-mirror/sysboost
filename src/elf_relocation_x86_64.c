@@ -399,6 +399,9 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		modify_insn_imm_offset(elf_link, ef, rela, sym);
 		break;
 	case R_X86_64_64:
+		// .rela.init_array no use, .init_array will set by .rely.dyn in ld.so
+		// 00000000001222d0  0000000f00000001 R_X86_64_64            000000000002ee10 .text + 1910
+		break;
 	case R_X86_64_32S:
 		// direct value, data is already write
 		break;

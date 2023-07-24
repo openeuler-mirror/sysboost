@@ -246,6 +246,21 @@ Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name)
 	return &syms[i];
 }
 
+Elf64_Sym *elf_find_symbol_by_addr(elf_file_t *ef, unsigned long addr)
+{
+	Elf64_Sym *syms = elf_get_symtab_array(ef);
+	int count = elf_get_symtab_count(ef);
+
+	for (int i = 0; i < count; i++) {
+		Elf64_Sym *sym = &syms[i];
+		if (sym->st_value == addr) {
+			return sym;
+		}
+	}
+
+	return NULL;
+}
+
 unsigned long elf_find_symbol_addr_by_name(elf_file_t *ef, char *sym_name)
 {
 	Elf64_Sym *sym = elf_find_symbol_by_name(ef, sym_name);
