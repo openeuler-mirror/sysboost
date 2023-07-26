@@ -209,6 +209,35 @@ static inline elf_file_t *get_libc_ef(elf_link_t *elf_link)
 	return elf_link->libc_ef;
 }
 
+static inline bool is_init_name(const char *name)
+{
+	if (strcmp(name, ".init_array") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool is_preinit_name(const char *name)
+{
+	if (strcmp(name, ".preinit_array") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+// libc _init_first is in .init_array, this func must run before _start
+// move _init_first to .preinit_array
+static inline bool is_need_preinit(elf_link_t *elf_link)
+{
+	if (is_static_nold_mode(elf_link)) {
+		return true;
+	}
+
+	return false;
+}
+
 static inline int elf_read_s32(elf_file_t *ef, unsigned long offset)
 {
 	void *addr = ((void *)ef->hdr + (unsigned long)offset);

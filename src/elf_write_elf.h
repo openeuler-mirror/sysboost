@@ -36,6 +36,16 @@ unsigned int elf_align_file(elf_link_t *elf_link, unsigned int align);
 unsigned int elf_align_file_segment(elf_link_t *elf_link);
 unsigned int elf_align_file_section(elf_link_t *elf_link, Elf64_Shdr *sec, bool is_align_file_offset);
 
+// write section
+void copy_from_old_elf(elf_link_t *elf_link);
+void merge_text_sections(elf_link_t *elf_link);
+void merge_rodata_sections(elf_link_t *elf_link);
+void merge_data_relro_sections(elf_link_t *elf_link);
+void merge_rwdata_sections(elf_link_t *elf_link);
+
+void merge_template_ef_section(elf_link_t *elf_link, const char *sec_name);
+Elf64_Shdr *merge_all_ef_section(elf_link_t *elf_link, const char *name);
+
 int create_elf_file(char *file_name, elf_file_t *elf_file);
 void truncate_elf_file(elf_link_t *elf_link);
 

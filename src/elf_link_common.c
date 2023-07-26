@@ -98,6 +98,7 @@ static char *needed_sections[] = {
     ".eh_frame_hdr", // this section's header is not modified, is it really needed?
     ".tdata",
     ".tbss",
+    ".preinit_array",
     ".init_array",
     ".fini_array",
     ".data.rel.ro",
@@ -528,8 +529,18 @@ char *elf_get_tmp_section_name(elf_link_t *elf_link, Elf64_Shdr *shdr)
 
 	// sh_name maybe not change, use old elf string
 	elf_obj_mapping_t *obj_mapping = elf_get_mapping_by_dst(elf_link, shdr);
+	elf_file_t *src_ef = obj_mapping->src_ef;
+	Elf64_Shdr *src_sec = (Elf64_Shdr *)obj_mapping->src_obj;
 
-	return obj_mapping->src_ef->shstrtab_data + ((Elf64_Shdr *)obj_mapping->src_obj)->sh_name;
+	char *sec_name = elf_get_section_name(src_ef, src_sec);
+	if (is_need_preinit(elf_link) && is_init_name(sec_name)) {
+		elf_file_t *main_ef = get_main_ef(elf_link);
+		if (src_ef != main_ef) {
+			return ".preinit_array";
+		}
+	}
+
+	return sec_name;
 }
 
 Elf64_Shdr *find_tmp_section_by_src(elf_link_t *elf_link, Elf64_Shdr *shdr)
@@ -539,20 +550,20 @@ Elf64_Shdr *find_tmp_section_by_src(elf_link_t *elf_link, Elf64_Shdr *shdr)
 
 Elf64_Shdr *find_tmp_section_by_name(elf_link_t *elf_link, const char *sec_name)
 {
-	Elf64_Shdr *sechdrs = elf_link->out_ef.sechdrs;
-	unsigned int shnum = elf_link->out_ef.hdr->e_shnum;
-	unsigned int i;
-	Elf64_Shdr *shdr = NULL;
+	Elf64_Shdr *secs = elf_link->out_ef.sechdrs;
+	int shnum = elf_link->out_ef.hdr->e_shnum;
+	Elf64_Shdr *sec = NULL;
 	char *name = NULL;
 
-	for (i = 1; i < shnum; i++) {
-		shdr = &sechdrs[i];
-		name = elf_get_tmp_section_name(elf_link, shdr);
+	// index 0 is NULL type, skip 0
+	for (int i = 1; i < shnum; i++) {
+		sec = &secs[i];
+		name = elf_get_tmp_section_name(elf_link, sec);
 		if (name == NULL) {
 			continue;
 		}
 		if (strcmp(name, sec_name) == 0) {
-			return shdr;
+			return sec;
 		}
 	}
 
