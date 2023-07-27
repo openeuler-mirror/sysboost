@@ -26,6 +26,7 @@ const SYSBOOST_PATH: &str = "/usr/bin/sysboost";
 const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
 const KO_PATH: &str = "/lib/modules/sysboost/binfmt_rto.ko";
 const KO_RTO_PARAM_PATH: &str = "/sys/module/binfmt_rto/parameters/use_rto";
+const SYSBOOST_BOLT_PROFILE: &str = "/usr/lib/sysboost.d/profile/";
 const LDSO: &str = "ld-";
 const LIBCSO: &str = "libc.so";
 
@@ -40,6 +41,8 @@ pub struct RtoConfig {
 	pub elf_path: String,
 	pub mode: String,
 	pub libs: Vec<String>,
+	// Absolute path of the profile
+	pub profile_path: Option<String>,
 
 	#[serde(rename = "PATH")]
 	pub path: Option<String>,
@@ -65,6 +68,18 @@ fn is_symlink(path: &PathBuf) -> bool {
 	};
 
 	return file_type.is_symlink();
+}
+
+fn find_file_in_dirs(file_name: &str, dirs: &str) -> Option<String> {
+	let dir_entries = fs::read_dir(dirs).ok()?;
+	for entry in dir_entries {
+		let entry = entry.ok()?;
+		let path = entry.path();
+		if path.is_file() && path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default() == file_name {
+			return Some(path.to_string_lossy().into_owned());
+		}
+	}
+	None
 }
 
 fn db_add_link(conf: &RtoConfig) -> i32 {
@@ -164,9 +179,64 @@ fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	return run_child(SYSBOOST_PATH, &args);
 }
 
+fn bolt_optimize(conf: &RtoConfig) -> i32 {
+	if conf.elf_path.is_empty() {
+		let ret = bolt_optimize_so(&conf);
+		return ret;
+	} else {
+		let ret = bolt_optimize_bin(&conf);
+		return ret;
+	}
+}
+
+// support profile
+fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
+	let mut args: Vec<String> = Vec::new();
+
+	args.push("-reorder-blocks=ext-tsp".to_string());
+	args.push("-reorder-functions=hfsort".to_string());
+	args.push("-split-functions".to_string());
+	args.push("-split-all-cold".to_string());
+	args.push("-split-eh".to_string());
+	args.push("-dyno-stats".to_string());
+
+	let elf = conf.elf_path.clone();
+
+	let elf_path = Path::new(&elf);
+	let elf_path = match fs::canonicalize(elf_path) {
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("bolt_optimize_bin: get realpath failed: {}", e);
+			return -1;
+		}
+	};
+	let elf_bak_path = elf_path.with_extension("bak");
+	match fs::copy(&elf_path, &elf_bak_path) {
+		Ok(_) => {}
+		Err(e) => {
+			log::error!("Copy failed: {}", e);
+			return -1;
+		}
+	}
+	args.push(elf_bak_path.to_str().unwrap().to_string());
+	args.push("-o".to_string());
+	args.push(elf.split_whitespace().collect());
+	let profile_str = format!("{}{}", elf, ".profile");
+	if let Some(profile_path_str) = conf.profile_path.clone() {
+		args.push(format!("{}{}", "-data=".to_string(), profile_path_str));
+
+	} else {
+		if let Some(find_file_str) = find_file_in_dirs(&profile_str, &SYSBOOST_BOLT_PROFILE) {
+			args.push(format!("{}{}", "-data=".to_string(), find_file_str));
+		}
+	}
+	let ret = run_child("/usr/bin/llvm-bolt", &args);
+
+	return ret;
+}
+
 fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
 	let mut args: Vec<String> = Vec::new();
-	// TODO: support profile
 	let mut ret = 1;
 	// change layout of basic blocks in a function
 	args.push("-reorder-blocks=ext-tsp".to_string());
@@ -278,18 +348,6 @@ fn read_config(path: &PathBuf) -> Option<RtoConfig> {
 	return parse_config(contents);
 }
 
-fn find_file_in_dirs(file_name: &str, dirs: &str) -> Option<String> {
-	let dir_entries = fs::read_dir(dirs).ok()?;
-	for entry in dir_entries {
-		let entry = entry.ok()?;
-		let path = entry.path();
-		if path.is_file() && path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default() == file_name {
-			return Some(path.to_string_lossy().into_owned());
-		}
-	}
-	None
-}
-
 // Obtain the full path from real path, environment variable PATH, current dir
 fn get_lib_full_path(lib: &str, confpaths:Vec<&str>, rpaths: Vec<&str>, paths: Vec<&str>) -> Option<String> {
 	if !(confpaths.is_empty()) {
@@ -366,7 +424,7 @@ fn find_libs(conf: &RtoConfig, elf: &Elf) -> Vec<String> {
 fn sysboost_core_process(conf: &RtoConfig) -> i32 {
 	match conf.mode.as_str() {
 		"bolt" => {
-			let ret = bolt_optimize_so(&conf);
+			let ret = bolt_optimize(&conf);
 			if ret != 0 {
 				log::error!("Error: bolt mode start fault.");
 				return ret;
