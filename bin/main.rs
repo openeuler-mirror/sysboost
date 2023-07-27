@@ -12,6 +12,7 @@
 mod daemon;
 mod coredump_monitor;
 
+use crate::daemon::run_child;
 use crate::daemon::daemon_loop;
 use crate::coredump_monitor::coredump_monitor_loop;
 
@@ -23,39 +24,61 @@ use std::thread;
 
 const APP_NAME: &str = "sysboostd";
 
+fn test_kmod() -> i32 {
+	let mut args: Vec<String> = Vec::new();
+	args.push("-c".to_string());
+	args.push("lsmod | grep binfmt_rto".to_string());
+	let ret = run_child("/usr/bin/bash", &args);
+	if ret == 0 {
+		println!("binfmt_rto.ko is ready");
+	} else {
+		println!("binfmt_rto.ko is not ready");
+	}
+	return ret;
+}
+
 fn main() {
 	let args: Vec<String> = env::args().collect();
-	let argc = args.len();
-	let mut mode = "default";
+	let mut is_debug = false;
+	let mut is_daemon = false;
 
-	if argc != 1 {
-		// arg0 is program name, parameter is from arg1
-		let cur_arg = 1;
-
-		if args[cur_arg] == "-debug" {
-			mode = "debug";
-		} else if args[cur_arg] == "-daemon" {
-			mode = "daemon";
+	// arg0 is program name, parameter is from arg1
+	for i in 1..args.len() {
+		match args[i].as_str() {
+			"--debug" => {
+				is_debug = true;
+			}
+			"--daemon" => {
+				is_daemon = true;
+			}
+			"--test-kmod" => {
+				std::process::exit(test_kmod());
+			}
+			_ => {
+				println!("parameter is wrong");
+				std::process::exit(-1);
+			}
 		}
 	}
 
-	if mode == "debug" {
+	if is_debug {
 		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
 	} else {
 		logger::init_log(APP_NAME, log::LevelFilter::Info, "syslog", None);
 	}
 	log::info!("{} running", APP_NAME);
 
-	if mode == "daemon" {
+	if is_daemon {
 		let daemonize = Daemonize::new();
 		match daemonize.start() {
 			Ok(_) => log::info!("On Daemon"),
 			Err(e) => {
 				log::error!("Error, {}", e);
-				return;
+				std::process::exit(-1);
 			}
 		}
 	}
+
         // start up coredump monitor
         let _coredump_monitor_handle = thread::spawn(||{
                 coredump_monitor_loop();
