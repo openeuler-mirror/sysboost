@@ -108,7 +108,7 @@ pub fn db_remove_link(path: &String) {
 	};
 }
 
-fn run_child(cmd: &str, args: &Vec<String>) -> i32 {
+pub fn run_child(cmd: &str, args: &Vec<String>) -> i32 {
 	log::info!("run child: {}, {}", cmd, args.join(" ").to_string());
 	let mut child = match Command::new(cmd).args(args).stdout(Stdio::piped()).spawn() {
 		Ok(child) => child,

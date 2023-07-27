@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MulanPSL-2.0
-ROOT_DIR=../../
-BUILD_DIR=$(ROOT_DIR)build
+ROOT_DIR=../..
+SYSBOOSTD=$(ROOT_DIR)/target/debug/sysboostd
+BUILD_DIR=$(ROOT_DIR)/build
 SYSBOOST=$(BUILD_DIR)/src/sysboost
 RELOCATION_DIR=/usr/lib/relocation
 
@@ -42,6 +43,7 @@ ifeq ($(MODE), --static-nold)
 bash:
 	clear
 	make -C $(ROOT_DIR)
+	$(SYSBOOSTD) --test-kmod
 	@echo ===rto===
 	$(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO) $(LIBC)
 	readelf -W -a $(BASH).rto > bash.rto.elf
