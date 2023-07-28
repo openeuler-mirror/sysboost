@@ -227,8 +227,11 @@ static inline bool is_preinit_name(const char *name)
 	return false;
 }
 
-// libc _init_first is in .init_array, this func must run before _start
-// move _init_first to .preinit_array
+// libc _init_first is in .init_array, must run before _start, move _init_first to .preinit_array
+// libc __libc_early_init need init before .init_array, so put first of .preinit_array
+// dl_main(phdr, phnum, user_entry, auxv)
+//     _dl_call_libc_early_init (GL(dl_ns)[LM_ID_BASE].libc_map, true);
+//         __libc_early_init(true)
 static inline bool is_need_preinit(elf_link_t *elf_link)
 {
 	if (is_static_nold_mode(elf_link)) {

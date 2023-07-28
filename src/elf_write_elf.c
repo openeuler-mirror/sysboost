@@ -255,6 +255,22 @@ void copy_from_old_elf(elf_link_t *elf_link)
 	}
 }
 
+// add __libc_early_init to first of .preinit_array, add rela for it
+// __libc_early_init first arg is bool, is one Byte
+// init_func(argc, argv, env) first arg need < 256, other args no used
+static void preinit_add_libc_early_init(elf_link_t *elf_link)
+{
+	elf_file_t *libc_ef = get_libc_ef(elf_link);
+	if (libc_ef == NULL) {
+		return;
+	}
+
+	unsigned long old_sym_addr = elf_find_symbol_addr_by_name(libc_ef, "__libc_early_init");
+	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, libc_ef, old_sym_addr);
+
+	write_elf_file(elf_link, &new_sym_addr, sizeof(unsigned long));
+}
+
 static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, const char *name, bool skip_main_ef)
 {
 	elf_file_t *ef;
@@ -270,6 +286,10 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 	tmp_sec->sh_offset = elf_align_file(elf_link, tmp_sec->sh_addralign);
 	tmp_sec->sh_addr = elf_link->next_mem_addr;
 	SI_LOG_DEBUG("section %s at 0x%lx\n", name, tmp_sec->sh_offset);
+
+	if (is_preinit) {
+		preinit_add_libc_early_init(elf_link);
+	}
 
 	for (int i = 0; i < in_ef_nr; i++) {
 		if (is_preinit) {

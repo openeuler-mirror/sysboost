@@ -309,6 +309,23 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		     dst_rela->r_offset, dst_rela->r_info, dst_rela->r_addend);
 }
 
+static Elf64_Rela *find_none_rela(elf_file_t *ef, Elf64_Shdr *sec)
+{
+	int count = sec->sh_size / sizeof(Elf64_Rela);
+	Elf64_Rela *relas = elf_get_section_data(ef, sec);
+	Elf64_Rela *rela = NULL;
+
+	for (int i = 0; i < count; i++) {
+		rela = &relas[i];
+		// TODO: for ARM
+		if (ELF64_R_TYPE(rela->r_info) == R_X86_64_NONE) {
+			return rela;
+		}
+	}
+
+	return NULL;
+}
+
 // .rela.dyn
 void modify_rela_dyn(elf_link_t *elf_link)
 {
@@ -323,6 +340,28 @@ void modify_rela_dyn(elf_link_t *elf_link)
 		elf_file_t *src_ef = obj_rel->src_ef;
 		modify_rela_dyn_item(elf_link, src_ef, src_rela, dst_rela);
 	}
+
+	// add rela for __libc_early_init
+	if (is_need_preinit(elf_link) == false) {
+		return;
+	}
+	Elf64_Shdr *find_sec = find_tmp_section_by_name(elf_link, ".preinit_array");
+	if (find_sec == NULL) {
+		si_panic("find section fail\n");
+	}
+	Elf64_Shdr *sec = find_tmp_section_by_name(elf_link, ".rela.dyn");
+	if (sec == NULL) {
+		si_panic("find section fail\n");
+	}
+	elf_file_t *out_ef = &elf_link->out_ef;
+	Elf64_Rela *rela = find_none_rela(out_ef, sec);
+	if (rela == NULL) {
+		si_panic("find none rela fail\n");
+	}
+
+	rela->r_offset = find_sec->sh_addr;
+	unsigned long func = elf_read_u64(out_ef, find_sec->sh_offset);
+	rela_change_to_relative(rela, func);
 }
 
 void modify_got(elf_link_t *elf_link)
