@@ -241,45 +241,6 @@ static inline bool is_need_preinit(elf_link_t *elf_link)
 	return false;
 }
 
-static inline int elf_read_s32(elf_file_t *ef, unsigned long offset)
-{
-	void *addr = ((void *)ef->hdr + (unsigned long)offset);
-	return *(int *)addr;
-}
-
-static inline int elf_read_s32_va(elf_file_t *ef, unsigned long va)
-{
-	return elf_read_s32(ef, elf_va_to_offset(ef, va));
-}
-
-static inline unsigned elf_read_u32(elf_file_t *ef, unsigned long offset)
-{
-	void *addr = ((void *)ef->hdr + (unsigned long)offset);
-	return *(unsigned *)addr;
-}
-
-static inline unsigned elf_read_u32_va(elf_file_t *ef, unsigned long va)
-{
-	return elf_read_u32(ef, elf_va_to_offset(ef, va));
-}
-
-static inline unsigned long elf_read_u64(elf_file_t *ef, unsigned long offset)
-{
-	void *addr = ((void *)ef->hdr + (unsigned long)offset);
-	return *(unsigned long *)addr;
-}
-
-static inline unsigned elf_read_u64_va(elf_file_t *ef, unsigned long va)
-{
-	return elf_read_u64(ef, elf_va_to_offset(ef, va));
-}
-
-static inline void elf_write_u64(elf_file_t *ef, unsigned long addr_, unsigned long value)
-{
-	unsigned long *addr = ((void *)ef->hdr + (unsigned long)addr_);
-	*addr = value;
-}
-
 static inline void elf_write_u32(elf_file_t *ef, unsigned long addr_, unsigned value)
 {
 	unsigned *addr = ((void *)ef->hdr + (unsigned long)addr_);
@@ -303,7 +264,6 @@ static inline void modify_elf_file(elf_link_t *elf_link, unsigned long loc, void
 	void *dst = (void *)elf_link->out_ef.hdr + loc;
 	memcpy(dst, val, len);
 }
-
 
 // symbol
 bool is_symbol_maybe_undefined(const char *name);

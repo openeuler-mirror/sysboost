@@ -166,6 +166,46 @@ static inline Elf64_Sym *elf_get_dynsym_by_rela(elf_file_t *ef, Elf64_Rela *rela
 }
 
 unsigned long elf_va_to_offset(elf_file_t *ef, unsigned long va);
+
+static inline int elf_read_s32(elf_file_t *ef, unsigned long offset)
+{
+	void *addr = ((void *)ef->hdr + (unsigned long)offset);
+	return *(int *)addr;
+}
+
+static inline int elf_read_s32_va(elf_file_t *ef, unsigned long va)
+{
+	return elf_read_s32(ef, elf_va_to_offset(ef, va));
+}
+
+static inline unsigned elf_read_u32(elf_file_t *ef, unsigned long offset)
+{
+	void *addr = ((void *)ef->hdr + (unsigned long)offset);
+	return *(unsigned *)addr;
+}
+
+static inline unsigned elf_read_u32_va(elf_file_t *ef, unsigned long va)
+{
+	return elf_read_u32(ef, elf_va_to_offset(ef, va));
+}
+
+static inline unsigned long elf_read_u64(elf_file_t *ef, unsigned long offset)
+{
+	void *addr = ((void *)ef->hdr + (unsigned long)offset);
+	return *(unsigned long *)addr;
+}
+
+static inline unsigned long elf_read_u64_va(elf_file_t *ef, unsigned long va)
+{
+	return elf_read_u64(ef, elf_va_to_offset(ef, va));
+}
+
+static inline void elf_write_u64(elf_file_t *ef, unsigned long addr_, unsigned long value)
+{
+	unsigned long *addr = ((void *)ef->hdr + (unsigned long)addr_);
+	*addr = value;
+}
+
 int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
 				unsigned long *start, unsigned long *end);
 
