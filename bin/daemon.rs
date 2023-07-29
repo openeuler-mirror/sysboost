@@ -169,6 +169,10 @@ fn set_ko_rto_flag(is_set: bool) -> i32 {
 }
 
 fn gen_app_rto(conf: &RtoConfig) -> i32 {
+	if let Some(_p) = &conf.profile_path.clone() {
+		log::error!("Configuration file fail");
+		return -1;
+	}
 	let mut args: Vec<String> = Vec::new();
 	let arg_mode = format!("-{}", conf.mode);
 	args.push(arg_mode);
@@ -180,12 +184,17 @@ fn gen_app_rto(conf: &RtoConfig) -> i32 {
 }
 
 fn bolt_optimize(conf: &RtoConfig) -> i32 {
-	if conf.elf_path.is_empty() {
-		let ret = bolt_optimize_so(&conf);
-		return ret;
+	if let Some(_p) = &conf.path.clone() {
+		log::error!("Configuration file fail");
+		return -1;
 	} else {
-		let ret = bolt_optimize_bin(&conf);
-		return ret;
+		if conf.elf_path.is_empty() {
+			let ret = bolt_optimize_so(&conf);
+			return ret;
+		} else {
+			let ret = bolt_optimize_bin(&conf);
+			return ret;
+		}
 	}
 }
 
