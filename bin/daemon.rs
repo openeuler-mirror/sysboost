@@ -283,10 +283,14 @@ fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
 
 pub fn set_app_aot_flag(old_path: &String, is_set: bool) -> i32 {
 	let mut args: Vec<String> = Vec::new();
+	let setfattr = "setfattr".to_string();
+	args.push("-n".to_string());
+	args.push("trusted.sysboost_flags".to_string());
+	args.push("-v".to_string());
 	if is_set {
-		args.push("--set".to_string());
+		args.push("true".to_string());
 	} else {
-		args.push("--unset".to_string());
+		args.push("false".to_string());
 	}
 	let old_path = Path::new(old_path);
 	let old_path = match fs::canonicalize(old_path) {
@@ -305,7 +309,7 @@ pub fn set_app_aot_flag(old_path: &String, is_set: bool) -> i32 {
 		}
 	}
 	args.push(new_path.to_str().unwrap().to_string());
-	let ret = run_child(SYSBOOST_PATH, &args);
+	let ret = run_child(&setfattr, &args);
 	match fs::rename(&new_path, &old_path) {
 		Ok(_) => {}
 		Err(e) => {
