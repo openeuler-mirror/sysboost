@@ -11,7 +11,6 @@
 // See the Mulan PSL v2 for more details.
 
 #include <ctype.h>
-#include <curses.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>

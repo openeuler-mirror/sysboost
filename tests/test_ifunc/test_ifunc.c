@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: MulanPSL-2.0 */
 #include <ctype.h>
-#include <curses.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
