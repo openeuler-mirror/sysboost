@@ -293,6 +293,27 @@ unsigned long elf_va_to_offset(elf_file_t *ef, unsigned long va)
 	return -1;
 }
 
+Elf64_Dyn *elf_find_dyn_by_type(elf_file_t *ef, unsigned long dt)
+{
+	Elf64_Dyn *dyn = NULL;
+
+	Elf64_Shdr *sec = elf_find_section_by_name(ef, ".dynamic");
+	if (sec == NULL) {
+		return NULL;
+	}
+
+	Elf64_Dyn *dyn_arr = elf_get_section_data(ef, sec);
+	int dyn_count = sec->sh_size / sizeof(Elf64_Dyn);
+	for (int j = 0; j < dyn_count; j++) {
+		dyn = &dyn_arr[j];
+		if (dyn->d_tag == (Elf64_Sxword)dt) {
+			return dyn;
+		}
+	}
+
+	return NULL;
+}
+
 Elf64_Shdr *elf_find_section_by_addr(elf_file_t *ef, unsigned long addr)
 {
 	Elf64_Shdr *sechdrs = ef->sechdrs;

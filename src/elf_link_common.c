@@ -135,7 +135,7 @@ bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
 	}
 
 	if (is_delete_symbol_version(elf_link) == false) {
-		if (!strcmp(name, ".gnu.version") || !strcmp(name, ".gnu.version_r")) {
+		if (is_version_sec_name(name)) {
 			return true;
 		}
 	}

@@ -92,5 +92,9 @@ env:
 	objdump -d $(LIBLD) > ld.so.asm
 	LD_DEBUG=all $(BASH) -c "echo 1" &> bash.ld.log
 
+# test dlopen load so
+ld:
+	gdb --args env LD_DEBUG=all $(BASH).rto
+
 clean:
 	$(RM) *.o *.ro *.old *.so *.asm *.elf *.rto *.out *.log

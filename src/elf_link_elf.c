@@ -113,6 +113,10 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 			SI_LOG_ERR("elf_read_file fail, %s\n", LD_SO_PATH);
 			return -1;
 		}
+
+		// in this mode, ld.so lookup libc sym need symbol version
+		elf_link->delete_symbol_version = false;
+
 		// in this mode, ld.so and vdso layout must fixed
 		elf_link->direct_vdso_optimize = true;
 		return 0;
@@ -375,8 +379,11 @@ static void write_first_LOAD_segment(elf_link_t *elf_link)
 		if (is_direct_call_optimize(elf_link) && (strcmp(name, ".rela.plt") == 0)) {
 			continue;
 		}
-		if (is_delete_symbol_version(elf_link) && ((strcmp(name, ".gnu.version")) == 0
-					|| (strcmp(name, ".gnu.version_r")) == 0)) {
+		if (is_version_sec_name(name)) {
+			if (is_delete_symbol_version(elf_link) == false) {
+				// nold mode copy from libc
+				merge_libc_ef_section(elf_link, name);
+			}
 			continue;
 		}
 
@@ -601,19 +608,16 @@ static bool is_lib_had_insert(elf_link_t *elf_link, char *name, Elf64_Dyn *dyn_a
 
 static int dynamic_merge_lib_one(elf_link_t *elf_link, elf_file_t *ef, Elf64_Dyn *begin_dyn, int len)
 {
-	Elf64_Shdr *sec = NULL;
-	Elf64_Dyn *dyn_arr = NULL;
 	Elf64_Dyn *dyn = NULL;
-	Elf64_Dyn *dst_dyn = NULL;
-	int dyn_count = 0;
 
-	sec = elf_find_section_by_name(ef, ".dynamic");
+	Elf64_Shdr *sec = elf_find_section_by_name(ef, ".dynamic");
 	if (sec == NULL) {
 		return len;
 	}
-	dyn_arr = ((void *)ef->hdr) + sec->sh_offset;
-	dyn_count = sec->sh_size / sec->sh_entsize;
-	dst_dyn = &begin_dyn[len];
+
+	Elf64_Dyn *dyn_arr = elf_get_section_data(ef, sec);
+	int dyn_count = sec->sh_size / sizeof(Elf64_Dyn);
+	Elf64_Dyn *dst_dyn = &begin_dyn[len];
 	for (int j = 0; j < dyn_count; j++) {
 		dyn = &dyn_arr[j];
 		if (dyn->d_tag != DT_NEEDED) {
@@ -651,6 +655,53 @@ static int dynamic_merge_lib(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len
 		ef = &elf_link->in_efs[i];
 		len = dynamic_merge_lib_one(elf_link, ef, begin_dyn, len);
 	}
+
+	return len;
+}
+
+static void dynamic_copy_dyn(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Dyn *src_dyn, Elf64_Dyn *dst_dyn)
+{
+	dst_dyn->d_tag = src_dyn->d_tag;
+	dst_dyn->d_un.d_val = get_new_name_offset(elf_link, src_ef, src_ef->dynstr_sec, src_dyn->d_un.d_val);
+}
+
+static Elf64_Dyn *dynamic_copy_dyn_by_type(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long dt, Elf64_Dyn *dst_dyn)
+{
+	Elf64_Dyn *src_dyn = elf_find_dyn_by_type(src_ef, dt);
+	if (src_dyn == NULL) {
+		si_panic("need dyn %lu\n", dt);
+		return NULL;
+	}
+
+	dynamic_copy_dyn(elf_link, src_ef, src_dyn, dst_dyn);
+	return dst_dyn;
+}
+
+// .dynamic is merge all elf, so mem space is enough
+// libc is merge to APP, so let libc_map = main_map in dl_main()
+static int dynamic_add_soname(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
+{
+	if (!is_static_nold_mode(elf_link)) {
+		return len;
+	}
+
+	elf_file_t *libc_ef = get_libc_ef(elf_link);
+	if (libc_ef == NULL) {
+		si_panic("need libc.so\n");
+		return len;
+	}
+
+	// 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+	Elf64_Dyn *dst_dyn = &begin_dyn[len];
+	(void)dynamic_copy_dyn_by_type(elf_link, libc_ef, DT_NEEDED, dst_dyn);
+	len++;
+
+	// 0x000000000000000e (SONAME)             Library soname: [libc.so.6]
+	dst_dyn++;
+	(void)dynamic_copy_dyn_by_type(elf_link, libc_ef, DT_SONAME, dst_dyn);
+	len++;
+
+	printf("zk--- DT_SONAME \n");
 
 	return len;
 }
@@ -792,6 +843,9 @@ static void scan_dynamic(elf_link_t *elf_link)
 
 	begin_dyn = ((void *)elf_link->out_ef.hdr) + tmp_sec->sh_offset;
 	len = dynamic_merge_lib(elf_link, begin_dyn, len);
+
+	// DT_SONAME
+	len = dynamic_add_soname(elf_link, begin_dyn, len);
 
 	// DT_PREINIT_ARRAY
 	len = dynamic_add_preinit(elf_link, begin_dyn, len);

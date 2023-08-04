@@ -223,6 +223,9 @@ char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int index);
 // rela
 Elf64_Rela *elf_get_rela_by_addr(elf_file_t *ef, unsigned long addr);
 
+// dyn
+Elf64_Dyn *elf_find_dyn_by_type(elf_file_t *ef, unsigned long dt);
+
 // section
 Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls_offset);
 Elf64_Shdr *elf_find_section_by_name(elf_file_t *ef, const char *sec_name);
