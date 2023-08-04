@@ -1158,6 +1158,34 @@ static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
 }
 #endif /* CONFIG_ARM64 */
 
+static bool check_elf_xattr(struct linux_binprm *bprm)
+{
+	char *xattr = NULL;
+	int xattr_size = 0;
+	// try to get attr from bprm
+	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
+				  "trusted.flags", NULL, 0);
+	if (xattr_size < 0) {
+		return false;
+	}
+
+	xattr = kvmalloc(xattr_size, GFP_KERNEL);
+	if (xattr == NULL) {
+		return false;
+	}
+	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
+				  "trusted.flags", xattr, xattr_size);
+	if (xattr_size <= 0) {
+		kvfree(xattr);
+		return false;
+	}
+
+	if (memcmp(xattr, "true", xattr_size)) {
+		return false;
+	}
+	return true;
+}
+
 #endif /* CONFIG_ELF_SYSBOOST */
 
 static int load_elf_binary(struct linux_binprm *bprm)
@@ -1182,10 +1210,6 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	struct mm_struct *mm;
 	struct pt_regs *regs;
-	struct dentry *elf_dentry = (struct dentry *)bprm->file->f_path.dentry;
-	struct inode *elf_inode = (struct inode *)elf_dentry->d_inode;
-	struct xattr *xattr = NULL;
-	int xattr_size = 0;
 
 #ifdef CONFIG_ELF_SYSBOOST
 	bool is_rto_format = false;
@@ -1218,22 +1242,8 @@ load_rto:
 		goto out;
 
 #ifdef CONFIG_ELF_SYSBOOST
-	// try to get attr from bprm
-	xattr_size = elf_inode->i_op->getattr(elf_dentry, "trusted.flags", xattr, 0);
-	if (xattr_size > 0) {
-		xattr = kmalloc(xattr_size + 1, GFP_KERNEL);
-		if (!xattr) {
-			retval = -ENOMEM;
-			goto out;
-		}
-		xattr_size = elf_inode->i_op->getattr(elf_dentry, "trusted.flags", xattr, xattr_size);
-		if (xattr_size < 0) {
-			retval = -ENOMEM;
-			goto out;
-		}
-	}
 	/* replace app.rto file, then use binfmt */
-	if (!memcmp(xattr, "true", xattr_size)) {
+	if (check_elf_xattr(bprm)) {
 		int ret = try_replace_file(bprm);
 		if (!ret) {
 			if (elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO) {
