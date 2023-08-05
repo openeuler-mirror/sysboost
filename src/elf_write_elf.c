@@ -392,9 +392,8 @@ static void merge_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t 
 	dst_sec->sh_size = elf_link->next_mem_addr - dst_sec->sh_addr;
 }
 
-void merge_template_ef_section(elf_link_t *elf_link, const char *sec_name)
+static void merge_ef_section_by_name(elf_link_t *elf_link, elf_file_t *ef, const char *sec_name)
 {
-	elf_file_t *ef = get_template_ef(elf_link);
 	Elf64_Shdr *sec = elf_find_section_by_name(ef, sec_name);
 	Elf64_Shdr *dst_sec = add_tmp_section(elf_link, ef, sec);
 	if (dst_sec == NULL) {
@@ -404,6 +403,22 @@ void merge_template_ef_section(elf_link_t *elf_link, const char *sec_name)
 	merge_section(elf_link, dst_sec, ef, sec);
 	SI_LOG_DEBUG("section %-20s %08lx %08lx %06lx\n",
 			sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
+}
+
+void merge_libc_ef_section(elf_link_t *elf_link, const char *sec_name)
+{
+	elf_file_t *libc_ef = get_libc_ef(elf_link);
+	if (libc_ef == NULL) {
+		si_panic("need libc.so\n");
+	}
+
+	merge_ef_section_by_name(elf_link, libc_ef, sec_name);
+}
+
+void merge_template_ef_section(elf_link_t *elf_link, const char *sec_name)
+{
+	elf_file_t *ef = get_template_ef(elf_link);
+	merge_ef_section_by_name(elf_link, ef, sec_name);
 }
 
 static void merge_filter_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t *ef, section_filter_func filter)

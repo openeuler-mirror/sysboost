@@ -152,6 +152,11 @@ static inline bool is_static_nolibc_mode(elf_link_t *elf_link)
 	return elf_link->link_mode == ELF_LINK_STATIC_NOLIBC;
 }
 
+// this mode merge all ELFs exclude ld.so
+// ld.so parse env and parameter, rtld_global_ro share to libc.so
+// ld.so have some init process for libc, soname need call libc.so
+// ld.so will lookup some func by GUN_HASH, some section need like libc.so
+// .gnu.hash .dynsym .gnu.version .gnu.version_d .gnu.version_r
 static inline bool is_static_nold_mode(elf_link_t *elf_link)
 {
 	return elf_link->link_mode == ELF_LINK_STATIC_NOLD;
@@ -234,7 +239,21 @@ static inline bool is_preinit_name(const char *name)
 //         __libc_early_init(true)
 static inline bool is_need_preinit(elf_link_t *elf_link)
 {
-	if (is_static_nold_mode(elf_link)) {
+	// TODO: clean this
+	(void)elf_link;
+	//if (is_static_nold_mode(elf_link)) {
+	//	return true;
+	//}
+
+	return false;
+}
+
+static inline bool is_version_sec_name(const char *name)
+{
+	// TODO: fix .gnu.version_d
+	//if ((strcmp(name, ".gnu.version") == 0) || (strcmp(name, ".gnu.version_r") == 0)
+	//	|| (strcmp(name, ".gnu.version_d") == 0)) {
+	if ((strcmp(name, ".gnu.version") == 0) || (strcmp(name, ".gnu.version_r") == 0)) {
 		return true;
 	}
 

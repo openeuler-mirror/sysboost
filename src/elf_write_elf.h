@@ -43,6 +43,7 @@ void merge_rodata_sections(elf_link_t *elf_link);
 void merge_data_relro_sections(elf_link_t *elf_link);
 void merge_rwdata_sections(elf_link_t *elf_link);
 
+void merge_libc_ef_section(elf_link_t *elf_link, const char *sec_name);
 void merge_template_ef_section(elf_link_t *elf_link, const char *sec_name);
 Elf64_Shdr *merge_all_ef_section(elf_link_t *elf_link, const char *name);
 
