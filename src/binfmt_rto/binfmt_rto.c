@@ -10,7 +10,6 @@
  * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
 
-#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/log2.h>
@@ -51,6 +50,7 @@
 
 #include <asm/param.h>
 #include <asm/page.h>
+#include "main.h"
 
 #ifndef CONFIG_ELF_SYSBOOST
 #define CONFIG_ELF_SYSBOOST 1
@@ -59,15 +59,6 @@
 #ifdef CONFIG_ELF_SYSBOOST
 #include <linux/kprobes.h>
 #include "../elf_ext.h"
-
-static bool use_rto = false;
-module_param(use_rto, bool, 0600);
-MODULE_PARM_DESC(use_rto, "use rto featue");
-
-/* debug mode only process rto format */
-static int debug = 0;
-module_param(debug, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(debug, "debug mode");
 
 /* compat 22.03 LTS, 22.03 LTS SP2 */
 #ifndef MM_SAVED_AUXV
@@ -1162,6 +1153,9 @@ static bool check_elf_xattr(struct linux_binprm *bprm)
 {
 	char *xattr = NULL;
 	int xattr_size = 0;
+
+	return false;
+
 	// try to get attr from bprm
 	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
 				  "trusted.flags", NULL, 0);
@@ -2706,7 +2700,7 @@ end_coredump:
 
 #endif		/* CONFIG_ELF_CORE */
 
-static int init_rto_binfmt(void)
+int init_rto_binfmt(void)
 {
 #ifdef CONFIG_ELF_SYSBOOST
 	int ret = init_symbols();
@@ -2719,12 +2713,8 @@ static int init_rto_binfmt(void)
 	return 0;
 }
 
-static void exit_rto_binfmt(void)
+void exit_rto_binfmt(void)
 {
 	/* Remove the COFF and ELF loaders. */
 	unregister_binfmt(&elf_format);
 }
-
-module_init(init_rto_binfmt);
-module_exit(exit_rto_binfmt);
-MODULE_LICENSE("GPL");
