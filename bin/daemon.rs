@@ -24,8 +24,8 @@ use goblin::elf::Elf;
 
 const SYSBOOST_PATH: &str = "/usr/bin/sysboost";
 const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
-const KO_PATH: &str = "/lib/modules/sysboost/binfmt_rto.ko";
-const KO_RTO_PARAM_PATH: &str = "/sys/module/binfmt_rto/parameters/use_rto";
+const KO_PATH: &str = "/lib/modules/sysboost/sysboost_loader.ko";
+const KO_RTO_PARAM_PATH: &str = "/sys/module/sysboost_loader/parameters/use_rto";
 const SYSBOOST_BOLT_PROFILE: &str = "/usr/lib/sysboost.d/profile/";
 const LDSO: &str = "ld-";
 const LIBCSO: &str = "libc.so";
@@ -154,7 +154,7 @@ pub fn run_child(cmd: &str, args: &Vec<String>) -> i32 {
 	exit_code
 }
 
-// echo 1 > /sys/module/binfmt_rto/parameters/use_rto
+// echo 1 > /sys/module/sysboost_loader/parameters/use_rto
 fn set_ko_rto_flag(is_set: bool) -> i32 {
 	let mut args: Vec<String> = Vec::new();
 	if is_set {

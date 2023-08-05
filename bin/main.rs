@@ -27,12 +27,12 @@ const APP_NAME: &str = "sysboostd";
 fn test_kmod() -> i32 {
 	let mut args: Vec<String> = Vec::new();
 	args.push("-c".to_string());
-	args.push("lsmod | grep binfmt_rto".to_string());
+	args.push("lsmod | grep sysboost_loader".to_string());
 	let ret = run_child("/usr/bin/bash", &args);
 	if ret == 0 {
-		println!("binfmt_rto.ko is ready");
+		println!("sysboost_loader.ko is ready");
 	} else {
-		println!("binfmt_rto.ko is not ready");
+		println!("sysboost_loader.ko is not ready");
 	}
 	return ret;
 }

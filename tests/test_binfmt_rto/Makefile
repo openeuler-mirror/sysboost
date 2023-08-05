@@ -2,7 +2,7 @@
 ROOT_DIR=../../
 BUILD_DIR=$(ROOT_DIR)build/
 SYSBOOST=$(BUILD_DIR)src/sysboost
-KO_DIR=$(ROOT_DIR)src/binfmt_rto
+KO_DIR=$(ROOT_DIR)src/sysboost_loader
 
 .PHONY: all
 

@@ -1,14 +1,15 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-obj-m := binfmt_rto.o
+obj-m := sysboost_loader.o
+sysboost_loader-objs := main.o binfmt_rto.o loader_device.o
 PWD := $(shell pwd)
 
 modules:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
 install:
-	rmmod binfmt_rto || true
-	insmod binfmt_rto.ko use_rto=1 debug=1
+	rmmod sysboost_loader || true
+	insmod sysboost_loader.ko use_rto=1 debug=1
 
 .PHONEY: clean
 
@@ -20,3 +21,4 @@ clean:
 	rm -f *.mod.c
 	rm -f Module.symvers
 	rm -f modules.order
+	rm -f *.mod
