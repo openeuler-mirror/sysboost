@@ -6,3 +6,5 @@
 int __init loader_device_init(void);
 void __exit loader_device_exit(void);
 
+#define S_SYSBOOST_RTO		(1 << 31) /* has rto cache */
+#define IS_SYSBOOST_RTO(inode)	((inode)->i_flags & S_SYSBOOST_RTO)
