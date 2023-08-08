@@ -174,34 +174,50 @@ elf_file_t *elf_link_add_infile(elf_link_t *elf_link, char *path)
 	return ef;
 }
 
+static int get_new_sec_index_by_old(elf_link_t *elf_link, Elf64_Shdr *dst_sec, int old_index)
+{
+	if (old_index == 0) {
+		return 0;
+	}
+
+	elf_obj_mapping_t *obj_mapping = elf_get_mapping_by_dst(elf_link, dst_sec);
+	elf_file_t *src_ef = obj_mapping->src_ef;
+	//Elf64_Shdr *src_sec = (Elf64_Shdr *)obj_mapping->src_obj;
+
+	// is not section index, do not change
+	if (old_index >= src_ef->hdr->e_shnum) {
+		return old_index;
+	}
+	Elf64_Shdr *old_sec = &src_ef->sechdrs[old_index];
+	Elf64_Shdr *new_sec = find_tmp_section_by_src(elf_link, old_sec);
+	if (new_sec == NULL) {
+		// old sec struct may not copy to dst
+		char *sec_name = elf_get_section_name(src_ef, old_sec);
+		new_sec = find_tmp_section_by_name(elf_link, sec_name);
+		if (new_sec == NULL) {
+			si_panic("find sec fail old %s %s\n", src_ef->file_name, sec_name);
+		}
+	}
+
+	return new_sec - elf_link->out_ef.sechdrs;
+}
+
+// .dynsym段是动态符号表, sh_info字段表示该段中符号表的第一个非本地符号的索引
+// .gnu.version_r段是用于动态链接的版本控制信息的段, sh_info指定了版本表中默认版本的索引
 static void modify_section_link(elf_link_t *elf_link)
 {
-	elf_file_t *template_ef = get_template_ef(elf_link);
-	int count = template_ef->hdr->e_shnum;
-	int j = elf_link->out_ef.hdr->e_shnum;
-	Elf64_Shdr *find_sec = NULL;
-	Elf64_Shdr *src_sec = template_ef->sechdrs;
+	int out_sec_count = elf_link->out_ef.hdr->e_shnum;
 	Elf64_Shdr *sec = NULL;
 
 	// fix link
-	for (int i = 1; i < j; i++) {
+	for (int i = 1; i < out_sec_count; i++) {
 		sec = &elf_link->out_ef.sechdrs[i];
-		if (sec->sh_link != 0 && (int)sec->sh_link < count) {
-			find_sec = find_tmp_section_by_src(elf_link, &src_sec[sec->sh_link]);
-			if (find_sec == NULL) {
-				si_panic("find sec fail\n");
-			}
-			sec->sh_link = find_sec - elf_link->out_ef.sechdrs;
+		sec->sh_link = get_new_sec_index_by_old(elf_link, sec, sec->sh_link);
+		char *name = elf_get_tmp_section_name(elf_link, sec);
+		if (is_dynsym_sec_name(name) || is_gnu_version_r_sec_name(name)) {
+			continue;
 		}
-		if (sec->sh_info != 0 && (int)sec->sh_info < count) {
-			find_sec = find_tmp_section_by_src(elf_link, &src_sec[sec->sh_info]);
-			if (find_sec == NULL) {
-				// when .plt merge to .text, can not find .plt
-				sec->sh_info = 0;
-				continue;
-			}
-			sec->sh_info = find_sec - elf_link->out_ef.sechdrs;
-		}
+		sec->sh_info = get_new_sec_index_by_old(elf_link, sec, sec->sh_info);
 	}
 }
 
@@ -222,7 +238,7 @@ static void modify_PHDR_segment(elf_link_t *elf_link)
 
 static void modify_INTERP_segment(elf_link_t *elf_link)
 {
-	elf_file_t *out_ef = &elf_link->out_ef;
+	elf_file_t *out_ef = get_out_ef(elf_link);
 
 	// INTERP segment is second segment
 	Elf64_Phdr *p = &out_ef->segments[1];
@@ -241,7 +257,7 @@ static void modify_INTERP_segment(elf_link_t *elf_link)
 
 static void modify_GNU_EH_FRAME_segment(elf_link_t *elf_link)
 {
-	elf_file_t *out_ef = &elf_link->out_ef;
+	elf_file_t *out_ef = get_out_ef(elf_link);
 	Elf64_Phdr *p = out_ef->frame_Phdr;
 
 	if (p == NULL) {
@@ -335,7 +351,12 @@ static void write_interp_and_note(elf_link_t *elf_link)
 	Elf64_Shdr *end_sec = NULL;
 	char *name = NULL;
 
-	begin_sec = elf_find_section_by_name(template_ef, ".interp");
+	if (is_static_nolibc_mode(elf_link)) {
+		begin_sec = elf_find_section_by_name(template_ef, ".note.gnu.property");
+	} else {
+		begin_sec = elf_find_section_by_name(template_ef, ".interp");
+	}
+
 	// end is before .gnu.hash
 	end_sec = elf_find_section_by_name(template_ef, ".gnu.hash");
 
@@ -349,7 +370,6 @@ static void write_interp_and_note(elf_link_t *elf_link)
 	}
 }
 
-// .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt
 static void write_first_LOAD_segment(elf_link_t *elf_link)
 {
 	Elf64_Phdr *p = NULL;
@@ -363,6 +383,7 @@ static void write_first_LOAD_segment(elf_link_t *elf_link)
 	write_interp_and_note(elf_link);
 
 	// first sec is .gnu.hash, end by SHF_EXECINSTR
+	// .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt
 	Elf64_Shdr *sec = elf_find_section_by_name(template_ef, ".gnu.hash");
 	int i = sec - secs;
 	for (; i < count; i++) {
@@ -376,14 +397,25 @@ static void write_first_LOAD_segment(elf_link_t *elf_link)
 		}*/
 
 		name = elf_get_section_name(template_ef, &secs[i]);
-		if (is_direct_call_optimize(elf_link) && (strcmp(name, ".rela.plt") == 0)) {
+		if (is_static_nold_mode(elf_link) && is_gnu_hash_sec_name(name)) {
+			merge_libc_ef_section(elf_link, name);
 			continue;
 		}
+
+		if (is_static_nold_mode(elf_link) && is_dynsym_sec_name(name)) {
+			merge_libc_ef_section(elf_link, name);
+			continue;
+		}
+
 		if (is_version_sec_name(name)) {
 			if (is_delete_symbol_version(elf_link) == false) {
 				// nold mode copy from libc
 				merge_libc_ef_section(elf_link, name);
 			}
+			continue;
+		}
+
+		if (is_direct_call_optimize(elf_link) && (strcmp(name, ".rela.plt") == 0)) {
 			continue;
 		}
 
@@ -700,8 +732,6 @@ static int dynamic_add_soname(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int le
 	dst_dyn++;
 	(void)dynamic_copy_dyn_by_type(elf_link, libc_ef, DT_SONAME, dst_dyn);
 	len++;
-
-	printf("zk--- DT_SONAME \n");
 
 	return len;
 }

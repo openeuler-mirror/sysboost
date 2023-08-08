@@ -59,9 +59,9 @@ else
 # static-nolibc
 bash:
 	clear
+	make -C $(ROOT_DIR)
 	readelf -W -a $(TEMPLATE_FILE) > sysboost_static_template.elf
 	objdump -d $(TEMPLATE_FILE) > sysboost_static_template.asm
-	make -C $(ROOT_DIR)
 	xz $(TEMPLATE_FILE)
 	mv -f $(TEMPLATE_FILE).xz $(TEMPLATE_FILE_PUB_PATH)
 	@echo ===rto===

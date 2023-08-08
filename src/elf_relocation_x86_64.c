@@ -438,7 +438,7 @@ void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 
 		// old sym index to new index of .dynsym
 		unsigned int old_index = ELF64_R_SYM(src_rela->r_info);
-		int new_index = get_new_sym_index_no_clear(elf_link, obj_rel->src_ef, old_index);
+		int new_index = get_new_sym_index(elf_link, obj_rel->src_ef, old_index);
 		// func in this ELF need clear rela
 		if (new_index == NEED_CLEAR_RELA) {
 			elf_clear_rela(dst_rela);

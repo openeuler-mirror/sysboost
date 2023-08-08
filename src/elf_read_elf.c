@@ -175,15 +175,11 @@ Elf64_Sym *elf_find_dynsym_by_name(elf_file_t *ef, const char *name)
 	return NULL;
 }
 
-int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear)
+int elf_find_dynsym_index_by_name(elf_file_t *ef, const char *name)
 {
 	Elf64_Sym *sym = elf_find_dynsym_by_name(ef, name);
 	if (sym == NULL) {
 		si_panic("%s\n", name);
-	}
-
-	if (clear && sym->st_shndx != 0) {
-		return NEED_CLEAR_RELA;
 	}
 
 	return elf_get_dynsym_index(ef, sym);

@@ -88,7 +88,7 @@ int elf_set_rto(char *path, bool state)
 void elf_set_hugepage(elf_link_t *elf_link)
 {
 	int i, exec_only = 1;
-	elf_file_t *ef = &elf_link->out_ef;
+	elf_file_t *ef = get_out_ef(elf_link);
 	int count = ef->hdr->e_phnum;
 	Elf64_Phdr *phdr = (Elf64_Phdr *)ef->hdr_Phdr;
 

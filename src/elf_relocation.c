@@ -228,10 +228,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 	// modify offset
 	dst_rela->r_offset = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_offset);
 
-	// old sym index to new index of .dynsym
 	unsigned int old_index = ELF64_R_SYM(src_rela->r_info);
-	int new_index = get_new_sym_index_no_clear(elf_link, src_ef, old_index);
-	dst_rela->r_info = ELF64_R_INFO(new_index, ELF64_R_TYPE(src_rela->r_info));
 
 	type = ELF64_R_TYPE(src_rela->r_info);
 	switch (type) {
@@ -245,12 +242,10 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 			// 000000000000129d  0000006e0000002a R_X86_64_REX_GOTPCRELX 0000000000004000 ___g_so_path_list - 4
 			// 129a:	4c 8b 2d 4f 2d 00 00 	mov    0x2d4f(%rip),%r13        # 3ff0 <___g_so_path_list@@Base-0x10>
 			// 48: 0000000000004000  4096 OBJECT  GLOBAL DEFAULT   27 ___g_so_path_list
-			new_index = ELF64_R_SYM(dst_rela->r_info);
-			const char *sym_name = elf_get_dynsym_name_by_index(&elf_link->out_ef, new_index);
+			const char *sym_name = elf_get_dynsym_name_by_index(src_ef, old_index);
 			if (elf_is_same_symbol_name(sym_name, "___g_so_path_list")) {
 				// when ELF load, real addr will set
-				dst_rela->r_info = ELF64_R_INFO(new_index, ELF64_R_TYPE(R_X86_64_RELATIVE));
-				dst_rela->r_addend = (unsigned long)elf_link->so_path_struct;
+				rela_change_to_relative(dst_rela, (unsigned long)elf_link->so_path_struct);
 				break;
 			}
 		}
@@ -266,6 +261,8 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		// 14: 0000000000000000     0 OBJECT  GLOBAL DEFAULT  UND _rtld_global@GLIBC_PRIVATE (37)
 		if ((ELF64_ST_TYPE(sym->st_info) == STT_FUNC) || (ELF64_ST_TYPE(sym->st_info) == STT_OBJECT)) {
 			modify_rela_to_RELATIVE(elf_link, src_ef, src_rela, dst_rela);
+		} else {
+			si_panic("error branch %s %lx\n", src_ef->file_name, src_rela->r_offset);
 		}
 		break;
 	case R_X86_64_IRELATIVE:
@@ -277,17 +274,19 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		if (!elf_is_rela_symbol_null(src_rela)) {
 			si_panic("%s %lx\n", src_ef->file_name, src_rela->r_offset);
 		}
+		// relative type have no sym index
 		dst_rela->r_addend = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_addend);
 		break;
 	case R_AARCH64_TLS_TPREL:
 		// all TLS got entry will be modified directly when processing instructions later,
 		// so no .dyn.rela entry is needed.
-		dst_rela->r_info = ELF64_R_INFO(0, R_AARCH64_NONE);
+		elf_clear_rela(dst_rela);
 		break;
 	case R_X86_64_TPOFF64:
 	case R_X86_64_TPOFF32:
 		// Offset in initial TLS block
 		// 00000000001f0d78  0000000000000012 R_X86_64_TPOFF64                          38
+		// TLS type have no sym index
 		dst_rela->r_addend = elf_get_new_tls_offset(elf_link, src_ef, src_rela->r_addend);
 		break;
 	case R_X86_64_COPY:
@@ -296,6 +295,12 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 	case R_AARCH64_COPY:
 		// Variables in the bss section, some from glibc, some declared by the application
 		// Redefined in the template file temporarily, so skip here
+		// TODO: is really do nothing?
+		{
+			int new_index = get_new_sym_index(elf_link, src_ef, old_index);
+			dst_rela->r_info = ELF64_R_INFO(new_index, ELF64_R_TYPE(src_rela->r_info));
+		}
+		break;
 	case R_AARCH64_NONE:
 		/* nothing need to do */
 		break;

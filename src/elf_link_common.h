@@ -248,6 +248,33 @@ static inline bool is_need_preinit(elf_link_t *elf_link)
 	return false;
 }
 
+static inline bool is_gnu_hash_sec_name(const char *name)
+{
+	if (strcmp(name, ".gnu.hash") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool is_dynsym_sec_name(const char *name)
+{
+	if (strcmp(name, ".dynsym") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool is_gnu_version_r_sec_name(const char *name)
+{
+	if (strcmp(name, ".gnu.version_r") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
 static inline bool is_version_sec_name(const char *name)
 {
 	// TODO: fix .gnu.version_d
@@ -287,8 +314,8 @@ static inline void modify_elf_file(elf_link_t *elf_link, unsigned long loc, void
 // symbol
 bool is_symbol_maybe_undefined(const char *name);
 bool is_gnu_weak_symbol(Elf64_Sym *sym);
-int get_new_sym_index_no_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
 int get_new_sym_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
+int get_new_sym_index_or_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index);
 Elf64_Sym *elf_lookup_symbol_by_rela(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, elf_file_t **lookup_ef);
 
 // addr
