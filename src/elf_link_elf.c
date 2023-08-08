@@ -353,6 +353,8 @@ static void write_interp_and_note(elf_link_t *elf_link)
 
 	if (is_static_nolibc_mode(elf_link)) {
 		begin_sec = elf_find_section_by_name(template_ef, ".note.gnu.property");
+		if (begin_sec == NULL) 
+			begin_sec = elf_find_section_by_name(template_ef, ".note.gnu.build-id");
 	} else {
 		begin_sec = elf_find_section_by_name(template_ef, ".interp");
 	}
