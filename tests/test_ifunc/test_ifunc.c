@@ -29,8 +29,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <term.h>
-#include <termcap.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
