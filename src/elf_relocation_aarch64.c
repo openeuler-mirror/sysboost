@@ -802,10 +802,16 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		check_two_rela_insn_addr(elf_link, ef, rela, sym);
 		return 0;
 	case R_AARCH64_ADD_ABS_LO12_NC:
+	case R_AARCH64_LDST128_ABS_LO12_NC:
 	case R_AARCH64_LDST64_ABS_LO12_NC:
 	case R_AARCH64_LDST32_ABS_LO12_NC:
 	case R_AARCH64_LDST16_ABS_LO12_NC:
 	case R_AARCH64_LDST8_ABS_LO12_NC:
+		// 00000000000118e0  0000000d00000113 R_AARCH64_ADR_PREL_PG_HI21 000000000001cbc0 .rodata + 7730
+		// 00000000000118ec  0000000d0000012b R_AARCH64_LDST128_ABS_LO12_NC 000000000001cbc0 .rodata + 7730
+		// 13: 000000000001cbc0     0 SECTION LOCAL  DEFAULT   15 .rodata
+		// 118e0:	f0000080 	adrp	x0, 24000 <_nc_tinfo_fkeys+0x1d0>
+		// 118ec:	3dc0bc00 	ldr	q0, [x0, #752]
 		if (is_special_symbol_redirection(ef, rela, sym)) {
 			 modify_new_special_insn(elf_link, ef, rela, sym);
 		}
@@ -841,7 +847,7 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		modify_tls_ie(elf_link, ef, rela, sym);
 		return SKIP_ONE_RELA;
 	default:
-		si_panic("invalid type %d\n", (int)ELF64_R_TYPE(rela->r_info));
+		si_panic("invalid type %x file %s offset %lx\n", (int)ELF64_R_TYPE(rela->r_info), ef->file_name, rela->r_offset);
 		return -1;
 	}
 
