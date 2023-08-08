@@ -15,7 +15,7 @@ sysboost:
 	ninja -C build -v
 
 binfmt_rto:
-	make -C src/binfmt_rto
+	make -C src/binfmt_rto || true
 
 release:
 	rm -rf Cargo.lock

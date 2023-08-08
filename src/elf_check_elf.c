@@ -115,8 +115,8 @@ static void check_func(elf_file_t *out_ef, unsigned long func_point)
 
 	// 00000000001222d0  0000000000000008 R_X86_64_RELATIVE                         30720
 	// rela must be type R_X86_64_RELATIVE
-	if (ELF64_R_TYPE(rela->r_info) != R_X86_64_RELATIVE) {
-		si_panic("rela type wrong, %lx\n", rela->r_addend);
+	if (!elf_rela_is_relative(rela)) {
+		si_panic("rela type wrong, r_info %lx r_addend %lx\n", rela->r_info, rela->r_addend);
 	}
 
 	// addr must in symbol table

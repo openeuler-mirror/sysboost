@@ -221,6 +221,16 @@ int elf_find_dynsym_index_by_name(elf_file_t *ef, const char *name);
 char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int index);
 
 // rela
+static inline bool elf_rela_is_relative(Elf64_Rela *rela)
+{
+	int type = ELF64_R_TYPE(rela->r_info);
+	if ((type == R_X86_64_RELATIVE) || (type == R_AARCH64_RELATIVE)) {
+		return true;
+	}
+
+	return false;
+}
+
 Elf64_Rela *elf_get_rela_by_addr(elf_file_t *ef, unsigned long addr);
 
 // dyn
