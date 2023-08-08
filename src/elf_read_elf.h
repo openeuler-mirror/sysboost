@@ -217,7 +217,7 @@ Elf64_Sym *elf_find_symbol_by_name(elf_file_t *ef, const char *sym_name);
 Elf64_Sym *elf_find_symbol_by_addr(elf_file_t *ef, unsigned long addr);
 unsigned long elf_find_symbol_addr_by_name(elf_file_t *ef, char *sym_name);
 Elf64_Sym *elf_find_dynsym_by_name(elf_file_t *ef, const char *name);
-int find_dynsym_index_by_name(elf_file_t *ef, const char *name, bool clear);
+int elf_find_dynsym_index_by_name(elf_file_t *ef, const char *name);
 char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int index);
 
 // rela

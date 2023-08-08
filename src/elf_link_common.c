@@ -1026,17 +1026,6 @@ unsigned long get_new_name_offset(elf_link_t *elf_link, elf_file_t *src_ef, Elf6
 	return 0;
 }
 
-int get_new_sym_index_no_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index)
-{
-	if (old_index == 0) {
-		return 0;
-	}
-
-	const char *name = elf_get_dynsym_name_by_index(src_ef, old_index);
-
-	return find_dynsym_index_by_name(&elf_link->out_ef, name, false);
-}
-
 int get_new_sym_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index)
 {
 	if (old_index == 0) {
@@ -1045,5 +1034,26 @@ int get_new_sym_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old
 
 	const char *name = elf_get_dynsym_name_by_index(src_ef, old_index);
 
-	return find_dynsym_index_by_name(&elf_link->out_ef, name, true);
+	return elf_find_dynsym_index_by_name(&elf_link->out_ef, name);
+}
+
+int get_new_sym_index_or_clear(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int old_index)
+{
+	if (old_index == 0) {
+		return 0;
+	}
+
+	const char *name = elf_get_dynsym_name_by_index(src_ef, old_index);
+
+	elf_file_t *out_ef = get_out_ef(elf_link);
+	Elf64_Sym *sym = elf_find_dynsym_by_name(out_ef, name);
+	if (sym == NULL) {
+		si_panic("%s\n", name);
+	}
+
+	if (sym->st_shndx != 0) {
+		return NEED_CLEAR_RELA;
+	}
+
+	return elf_get_dynsym_index(out_ef, sym);
 }
