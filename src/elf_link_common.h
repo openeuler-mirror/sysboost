@@ -131,6 +131,13 @@ typedef struct {
 	void *dst_obj;
 } elf_obj_mapping_t;
 
+typedef Elf64_Shdr *(*meger_section_func)(elf_link_t *elf_link, const char *sec_name);
+
+typedef struct {
+	const char *sec_name;
+	meger_section_func func;
+} elf_section_t;
+
 static inline bool is_share_mode(elf_link_t *elf_link)
 {
 	return elf_link->link_mode == ELF_LINK_SHARE;
@@ -214,6 +221,25 @@ static inline elf_file_t *get_libc_ef(elf_link_t *elf_link)
 	return elf_link->libc_ef;
 }
 
+
+static inline bool is_rela_plt_name(const char *name)
+{
+	if (strcmp(name, ".rela.plt") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool is_rela_dyn_name(const char *name)
+{
+	if (strcmp(name, ".rela.dyn") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
 static inline bool is_init_name(const char *name)
 {
 	if (strcmp(name, ".init_array") == 0) {
@@ -244,45 +270,6 @@ static inline bool is_need_preinit(elf_link_t *elf_link)
 	//if (is_static_nold_mode(elf_link)) {
 	//	return true;
 	//}
-
-	return false;
-}
-
-static inline bool is_gnu_hash_sec_name(const char *name)
-{
-	if (strcmp(name, ".gnu.hash") == 0) {
-		return true;
-	}
-
-	return false;
-}
-
-static inline bool is_dynsym_sec_name(const char *name)
-{
-	if (strcmp(name, ".dynsym") == 0) {
-		return true;
-	}
-
-	return false;
-}
-
-static inline bool is_gnu_version_r_sec_name(const char *name)
-{
-	if (strcmp(name, ".gnu.version_r") == 0) {
-		return true;
-	}
-
-	return false;
-}
-
-static inline bool is_version_sec_name(const char *name)
-{
-	// TODO: fix .gnu.version_d
-	//if ((strcmp(name, ".gnu.version") == 0) || (strcmp(name, ".gnu.version_r") == 0)
-	//	|| (strcmp(name, ".gnu.version_d") == 0)) {
-	if ((strcmp(name, ".gnu.version") == 0) || (strcmp(name, ".gnu.version_r") == 0)) {
-		return true;
-	}
 
 	return false;
 }

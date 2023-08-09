@@ -271,14 +271,69 @@ static void preinit_add_libc_early_init(elf_link_t *elf_link)
 	write_elf_file(elf_link, &new_sym_addr, sizeof(unsigned long));
 }
 
+static void record_rela_arr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec, void *dst)
+{
+	si_array_t *arr = NULL;
+	char *name = elf_get_section_name(ef, sec);
+
+	void *src = ((void *)ef->hdr) + sec->sh_offset;
+
+	if (is_rela_plt_name(name)) {
+		arr = elf_link->rela_plt_arr;
+	} else if (is_rela_dyn_name(name)) {
+		arr = elf_link->rela_dyn_arr;
+	} else {
+		return;
+	}
+
+	int obj_nr = sec->sh_size / sec->sh_entsize;
+	for (int j = 0; j < obj_nr; j++) {
+		elf_obj_mapping_t obj_rel = {0};
+		obj_rel.src_ef = ef;
+		obj_rel.src_sec = sec;
+		obj_rel.src_obj = src;
+		obj_rel.dst_obj = dst;
+		si_array_append(arr, &obj_rel);
+		src = src + sec->sh_entsize;
+		dst = dst + sec->sh_entsize;
+	}
+}
+
+static unsigned long elf_get_sh_size(elf_link_t *elf_link, Elf64_Shdr *tmp_sec)
+{
+	if (tmp_sec->sh_flags & SHF_ALLOC) {
+		// .text .bss
+		return elf_link->next_mem_addr - tmp_sec->sh_addr;
+	} else {
+		// .symtab is not ALLOC, so not need mem addr
+		// it is at end of file, it get mem space is OK too
+		return elf_link->next_file_offset - tmp_sec->sh_offset;
+	}
+}
+
+static bool is_merge_libc_first(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, const char *name)
+{
+	if (!is_static_nold_mode(elf_link)) {
+		return false;
+	}
+
+	if (elf_is_dynsym_sec(tmp_sec)) {
+		return true;
+	}
+
+	if (elf_is_dynstr_name(name)) {
+		return true;
+	}
+
+	return false;
+}
+
 static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, const char *name, bool skip_main_ef)
 {
-	elf_file_t *ef;
+	elf_file_t *ef = NULL;
 	int in_ef_nr = elf_link->in_ef_nr;
 	Elf64_Shdr *sec = NULL;
-	elf_obj_mapping_t obj_rel = {0};
 	void *dst = NULL;
-	si_array_t *arr = NULL;
 	elf_file_t *main_ef = get_main_ef(elf_link);
 	bool is_preinit = is_need_preinit(elf_link) && is_preinit_name(name);
 	char *l_name = (char*)name;
@@ -289,6 +344,16 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 
 	if (is_preinit) {
 		preinit_add_libc_early_init(elf_link);
+	}
+
+	// libc .dynsym .dynstr need put first, so version section no change
+	bool is_first_libc = is_merge_libc_first(elf_link, tmp_sec, name);
+	elf_file_t *libc_ef = get_libc_ef(elf_link);
+	if (is_first_libc) {
+		ef = libc_ef;
+		sec = elf_find_section_by_name(ef, name);
+		elf_align_file(elf_link, sec->sh_addralign);
+		write_elf_file_section(elf_link, ef, sec, tmp_sec);
 	}
 
 	for (int i = 0; i < in_ef_nr; i++) {
@@ -303,6 +368,9 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 		if (skip_main_ef && (ef == main_ef)) {
 			continue;
 		}
+		if (is_first_libc && (ef == libc_ef)) {
+			continue;
+		}
 		sec = elf_find_section_by_name(ef, l_name);
 		if (sec == NULL) {
 			continue;
@@ -310,33 +378,10 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 
 		elf_align_file(elf_link, sec->sh_addralign);
 		dst = write_elf_file_section(elf_link, ef, sec, tmp_sec);
-
-		void *src = ((void *)ef->hdr) + sec->sh_offset;
-
-		if (strcmp(name, ".rela.plt") == 0) {
-			arr = elf_link->rela_plt_arr;
-		} else if (strcmp(name, ".rela.dyn") == 0) {
-			arr = elf_link->rela_dyn_arr;
-		} else {
-			continue;
-		}
-		int obj_nr = sec->sh_size / sec->sh_entsize;
-		for (int j = 0; j < obj_nr; j++) {
-			obj_rel.src_ef = ef;
-			obj_rel.src_sec = sec;
-			obj_rel.src_obj = src;
-			obj_rel.dst_obj = dst;
-			si_array_append(arr, &obj_rel);
-			src = src + sec->sh_entsize;
-			dst = dst + sec->sh_entsize;
-		}
+		record_rela_arr(elf_link, ef, sec, dst);
 	}
 
-	if (tmp_sec->sh_flags & SHF_ALLOC) {
-		tmp_sec->sh_size = elf_link->next_mem_addr - tmp_sec->sh_addr;
-	} else {
-		tmp_sec->sh_size = elf_link->next_file_offset - tmp_sec->sh_offset;
-	}
+	tmp_sec->sh_size = elf_get_sh_size(elf_link, tmp_sec);
 	return tmp_sec;
 }
 
@@ -389,36 +434,37 @@ static void merge_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t 
 	dst_sec->sh_addr = 0;
 
 	append_section(elf_link, dst_sec, ef, sec);
-	dst_sec->sh_size = elf_link->next_mem_addr - dst_sec->sh_addr;
+	dst_sec->sh_size = elf_get_sh_size(elf_link, dst_sec);
 }
 
-static void merge_ef_section_by_name(elf_link_t *elf_link, elf_file_t *ef, const char *sec_name)
+static Elf64_Shdr *merge_ef_section_by_name(elf_link_t *elf_link, elf_file_t *ef, const char *sec_name)
 {
 	Elf64_Shdr *sec = elf_find_section_by_name(ef, sec_name);
 	Elf64_Shdr *dst_sec = add_tmp_section(elf_link, ef, sec);
 	if (dst_sec == NULL) {
-		return;
+		return NULL;
 	}
 
 	merge_section(elf_link, dst_sec, ef, sec);
 	SI_LOG_DEBUG("section %-20s %08lx %08lx %06lx\n",
 			sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
+	return dst_sec;
 }
 
-void merge_libc_ef_section(elf_link_t *elf_link, const char *sec_name)
+Elf64_Shdr *merge_libc_ef_section(elf_link_t *elf_link, const char *sec_name)
 {
 	elf_file_t *libc_ef = get_libc_ef(elf_link);
 	if (libc_ef == NULL) {
 		si_panic("need libc.so\n");
 	}
 
-	merge_ef_section_by_name(elf_link, libc_ef, sec_name);
+	return merge_ef_section_by_name(elf_link, libc_ef, sec_name);
 }
 
-void merge_template_ef_section(elf_link_t *elf_link, const char *sec_name)
+Elf64_Shdr *merge_template_ef_section(elf_link_t *elf_link, const char *sec_name)
 {
 	elf_file_t *ef = get_template_ef(elf_link);
-	merge_ef_section_by_name(elf_link, ef, sec_name);
+	return merge_ef_section_by_name(elf_link, ef, sec_name);
 }
 
 static void merge_filter_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t *ef, section_filter_func filter)
