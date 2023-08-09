@@ -440,6 +440,9 @@ static void merge_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t 
 static Elf64_Shdr *merge_ef_section_by_name(elf_link_t *elf_link, elf_file_t *ef, const char *sec_name)
 {
 	Elf64_Shdr *sec = elf_find_section_by_name(ef, sec_name);
+	if (sec == NULL) {
+		return NULL;
+	}
 	Elf64_Shdr *dst_sec = add_tmp_section(elf_link, ef, sec);
 	if (dst_sec == NULL) {
 		return NULL;
