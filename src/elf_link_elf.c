@@ -706,6 +706,8 @@ static void dynamic_copy_dyn(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Dyn
 	case DT_VERDEF:
 	case DT_VERNEED:
 	case DT_VERSYM:
+	case DT_GNU_HASH:
+	case DT_SYMTAB:
 		dst_dyn->d_un.d_val = get_new_addr_by_old_addr(elf_link, src_ef, src_dyn->d_un.d_val);
 		break;
 	case DT_VERDEFNUM:
@@ -746,6 +748,8 @@ static unsigned long libc_dt_arr[] = {
 	DT_VERNEED,
 	DT_VERNEEDNUM,
 	DT_VERSYM,
+	DT_GNU_HASH,
+	DT_SYMTAB,
 };
 #define LIBC_DT_ARR_LEN (sizeof(libc_dt_arr) / sizeof(libc_dt_arr[0]))
 
@@ -824,11 +828,16 @@ static int dynamic_copy_obj(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 			// fix name index
 			new_d_val = get_new_name_offset(elf_link, ef, ef->dynstr_sec, dyn->d_un.d_val);
 			break;
+		case DT_GNU_HASH:
+		case DT_SYMTAB:
+			if (is_static_nold_mode(elf_link)) {
+				// have done before
+				continue;
+			}
+			fallthrough;
 		case DT_INIT:
 		case DT_FINI:
-		case DT_GNU_HASH:
 		case DT_STRTAB:
-		case DT_SYMTAB:
 		case DT_PLTGOT:
 		case DT_RELA:
 			new_d_val = get_new_addr_by_old_addr(elf_link, ef, dyn->d_un.d_val);
