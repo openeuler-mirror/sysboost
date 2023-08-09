@@ -123,7 +123,7 @@ bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
 
 	// no use .plt, so delete .rela.plt
 	if (is_direct_call_optimize(elf_link) == true) {
-		if (!strcmp(name, ".rela.plt")) {
+		if (elf_is_rela_plt_name(name)) {
 			return false;
 		}
 	}
@@ -135,7 +135,7 @@ bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
 	}
 
 	if (is_delete_symbol_version(elf_link) == false) {
-		if (is_version_sec_name(name)) {
+		if (elf_is_version_sec(sec)) {
 			return true;
 		}
 	}
@@ -145,9 +145,6 @@ bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
 	/*
 	TODO: clean code, below is original implementation, don't have any effect now
 	if ((sec->sh_type == SHT_RELA) && (!(sec->sh_flags & SHF_ALLOC)))
-		return false;
-	if (sec->sh_type == SHT_GNU_versym || sec->sh_type == SHT_GNU_verdef ||
-	    sec->sh_type == SHT_GNU_verneed)
 		return false;
 	if (elf_is_debug_section(ef, sec))
 		return false;

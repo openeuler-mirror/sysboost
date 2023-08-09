@@ -204,20 +204,30 @@ static int get_new_sec_index_by_old(elf_link_t *elf_link, Elf64_Shdr *dst_sec, i
 
 // .dynsym段是动态符号表, sh_info字段表示该段中符号表的第一个非本地符号的索引
 // .gnu.version_r段是用于动态链接的版本控制信息的段, sh_info指定了版本表中默认版本的索引
+// .gnu.version_d段, sh_info表示自定义version个数
+static bool elf_is_need_fix_sh_info(Elf64_Shdr *sec)
+{
+	// SHT_RELA sh_info is index of text code section
+	if (sec->sh_type == SHT_RELA) {
+		return true;
+	}
+
+	return false;
+}
+
 static void modify_section_link(elf_link_t *elf_link)
 {
 	int out_sec_count = elf_link->out_ef.hdr->e_shnum;
 	Elf64_Shdr *sec = NULL;
 
-	// fix link
+	// fix sh_link and sh_info
 	for (int i = 1; i < out_sec_count; i++) {
 		sec = &elf_link->out_ef.sechdrs[i];
 		sec->sh_link = get_new_sec_index_by_old(elf_link, sec, sec->sh_link);
-		char *name = elf_get_tmp_section_name(elf_link, sec);
-		if (is_dynsym_sec_name(name) || is_gnu_version_r_sec_name(name)) {
-			continue;
+
+		if (elf_is_need_fix_sh_info(sec)) {
+			sec->sh_info = get_new_sec_index_by_old(elf_link, sec, sec->sh_info);
 		}
-		sec->sh_info = get_new_sec_index_by_old(elf_link, sec, sec->sh_info);
 	}
 }
 
@@ -342,87 +352,77 @@ static void write_sysboost_section(elf_link_t *elf_link)
 }*/
 
 // main ELF and libc.so have .interp, need to ignore it
-// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag
-static void write_interp_and_note(elf_link_t *elf_link)
+// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
+static elf_section_t hdr_segment_section_arr[] = {
+	{".interp", merge_template_ef_section},
+	{".note.gnu.property", merge_template_ef_section},
+	{".note.gnu.build-id", merge_template_ef_section},
+	{".note.ABI-tag", merge_template_ef_section},
+	{".gnu.hash", merge_all_ef_section},
+	{".dynsym", merge_all_ef_section},
+	{".dynstr", merge_all_ef_section},
+	{".gnu.version", NULL},
+	{".gnu.version_d", NULL},
+	{".gnu.version_r", NULL},
+	{".rela.dyn", merge_all_ef_section},
+	{".rela.plt", merge_all_ef_section},
+};
+#define HDR_SEGMENT_SECTION_ARR_LEN (sizeof(hdr_segment_section_arr) / sizeof(hdr_segment_section_arr[0]))
+
+static void write_hdr_segment_section_arr(elf_link_t *elf_link)
 {
-	elf_file_t *template_ef = get_template_ef(elf_link);
-	Elf64_Shdr *sec = NULL;
-	Elf64_Shdr *begin_sec = NULL;
-	Elf64_Shdr *end_sec = NULL;
-	char *name = NULL;
-
-	if (is_static_nolibc_mode(elf_link)) {
-		begin_sec = elf_find_section_by_name(template_ef, ".note.gnu.property");
-		if (begin_sec == NULL) 
-			begin_sec = elf_find_section_by_name(template_ef, ".note.gnu.build-id");
-	} else {
-		begin_sec = elf_find_section_by_name(template_ef, ".interp");
-	}
-
-	// end is before .gnu.hash
-	end_sec = elf_find_section_by_name(template_ef, ".gnu.hash");
-
-	if (begin_sec == NULL || end_sec == NULL) {
-		si_panic("section not found\n");
-	}
-
-	for (sec = begin_sec; sec < end_sec; sec = sec + 1) {
-		name = elf_get_section_name(template_ef, sec);
-		merge_template_ef_section(elf_link, name);
+	for (unsigned i = 0; i < HDR_SEGMENT_SECTION_ARR_LEN; i++) {
+		elf_section_t *sec_obj = &hdr_segment_section_arr[i];
+		if (sec_obj->func == NULL) {
+			continue;
+		}
+		sec_obj->func(elf_link, sec_obj->sec_name);
 	}
 }
 
-static void write_first_LOAD_segment(elf_link_t *elf_link)
+static void fix_section_merge_func(elf_link_t *elf_link)
 {
-	Elf64_Phdr *p = NULL;
-	char *name = NULL;
-	elf_file_t *template_ef = get_template_ef(elf_link);
-	int count = template_ef->hdr->e_shnum;
-	Elf64_Shdr *secs = template_ef->sechdrs;
+	for (unsigned i = 0; i < HDR_SEGMENT_SECTION_ARR_LEN; i++) {
+		elf_section_t *sec_obj = &hdr_segment_section_arr[i];
 
-	// main ELF and libc.so have .interp, need to ignore it
-	// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag
-	write_interp_and_note(elf_link);
-
-	// first sec is .gnu.hash, end by SHF_EXECINSTR
-	// .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt
-	Elf64_Shdr *sec = elf_find_section_by_name(template_ef, ".gnu.hash");
-	int i = sec - secs;
-	for (; i < count; i++) {
-		if (secs[i].sh_flags & SHF_EXECINSTR) {
-			break;
-		}
-
-		// write after NOTE section, so it can load in first PAGE memory
-		/*if ((sechdrs[i - 1].sh_type == SHT_NOTE) && (sechdrs[i].sh_type != SHT_NOTE)) {
-			write_sysboost_section(elf_link);
-		}*/
-
-		name = elf_get_section_name(template_ef, &secs[i]);
-		if (is_static_nold_mode(elf_link) && is_gnu_hash_sec_name(name)) {
-			merge_libc_ef_section(elf_link, name);
+		// .gnu.hash
+		if (is_static_nold_mode(elf_link) && elf_is_gnu_hash_sec_name(sec_obj->sec_name)) {
+			sec_obj->func = merge_libc_ef_section;
 			continue;
 		}
 
-		if (is_static_nold_mode(elf_link) && is_dynsym_sec_name(name)) {
-			merge_libc_ef_section(elf_link, name);
+		// .dynsym
+		if (is_static_nold_mode(elf_link) && elf_is_dynsym_sec_name(sec_obj->sec_name)) {
+			sec_obj->func = merge_libc_ef_section;
 			continue;
 		}
 
-		if (is_version_sec_name(name)) {
+		// .gnu.version .gnu.version_d .gnu.version_r
+		if (elf_is_version_sec_name(sec_obj->sec_name)) {
 			if (is_delete_symbol_version(elf_link) == false) {
 				// nold mode copy from libc
-				merge_libc_ef_section(elf_link, name);
+				sec_obj->func = merge_libc_ef_section;
+				continue;
 			}
-			continue;
 		}
 
-		if (is_direct_call_optimize(elf_link) && (strcmp(name, ".rela.plt") == 0)) {
+		if (is_direct_call_optimize(elf_link) && elf_is_rela_plt_name(sec_obj->sec_name)) {
+			sec_obj->func = NULL;
 			continue;
 		}
-
-		merge_all_ef_section(elf_link, name);
 	}
+}
+
+// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
+static void write_first_LOAD_segment(elf_link_t *elf_link)
+{
+	fix_section_merge_func(elf_link);
+	write_hdr_segment_section_arr(elf_link);
+
+	// write after NOTE section, so it can load in first PAGE memory
+	/*if ((sechdrs[i - 1].sh_type == SHT_NOTE) && (sechdrs[i].sh_type != SHT_NOTE)) {
+		write_sysboost_section(elf_link);
+	}*/
 
 	// after merge section, .dynstr put new addr
 	Elf64_Shdr *tmp_sec = find_tmp_section_by_name(elf_link, ".dynstr");
@@ -437,7 +437,7 @@ static void write_first_LOAD_segment(elf_link_t *elf_link)
 
 	// first LOAD segment
 	elf_file_t *out_ef = &elf_link->out_ef;
-	p = out_ef->hdr_Phdr;
+	Elf64_Phdr *p = out_ef->hdr_Phdr;
 	p->p_filesz = elf_link->next_file_offset;
 	p->p_memsz = p->p_filesz;
 	p->p_align = SI_HUGEPAGE_ALIGN_SIZE;
@@ -696,7 +696,27 @@ static int dynamic_merge_lib(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len
 static void dynamic_copy_dyn(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Dyn *src_dyn, Elf64_Dyn *dst_dyn)
 {
 	dst_dyn->d_tag = src_dyn->d_tag;
-	dst_dyn->d_un.d_val = get_new_name_offset(elf_link, src_ef, src_ef->dynstr_sec, src_dyn->d_un.d_val);
+
+	switch (src_dyn->d_tag) {
+	case DT_NEEDED:
+	case DT_SONAME:
+		// fix name index
+		dst_dyn->d_un.d_val = get_new_name_offset(elf_link, src_ef, src_ef->dynstr_sec, src_dyn->d_un.d_val);
+		break;
+	case DT_VERDEF:
+	case DT_VERNEED:
+	case DT_VERSYM:
+		dst_dyn->d_un.d_val = get_new_addr_by_old_addr(elf_link, src_ef, src_dyn->d_un.d_val);
+		break;
+	case DT_VERDEFNUM:
+	case DT_VERNEEDNUM:
+		// do not change nr, just copy from libc
+		dst_dyn->d_un.d_val = src_dyn->d_un.d_val;
+		break;
+	default:
+		si_panic("error dyn %lu\n", dst_dyn->d_tag);
+		break;
+	}
 }
 
 static Elf64_Dyn *dynamic_copy_dyn_by_type(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long dt, Elf64_Dyn *dst_dyn)
@@ -711,9 +731,27 @@ static Elf64_Dyn *dynamic_copy_dyn_by_type(elf_link_t *elf_link, elf_file_t *src
 	return dst_dyn;
 }
 
+// 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+// 0x000000000000000e (SONAME)             Library soname: [libc.so.6]
+// 0x000000006ffffffc (VERDEF)             0x23a70
+// 0x000000006ffffffd (VERDEFNUM)          36
+// 0x000000006ffffffe (VERNEED)            0x23f70
+// 0x000000006fffffff (VERNEEDNUM)         1
+// 0x000000006ffffff0 (VERSYM)             0x222de
+static unsigned long libc_dt_arr[] = {
+	DT_NEEDED,
+	DT_SONAME,
+	DT_VERDEF,
+	DT_VERDEFNUM,
+	DT_VERNEED,
+	DT_VERNEEDNUM,
+	DT_VERSYM,
+};
+#define LIBC_DT_ARR_LEN (sizeof(libc_dt_arr) / sizeof(libc_dt_arr[0]))
+
 // .dynamic is merge all elf, so mem space is enough
 // libc is merge to APP, so let libc_map = main_map in dl_main()
-static int dynamic_add_soname(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
+static int dynamic_add_obj_from_libc(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 {
 	if (!is_static_nold_mode(elf_link)) {
 		return len;
@@ -725,15 +763,12 @@ static int dynamic_add_soname(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int le
 		return len;
 	}
 
-	// 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
 	Elf64_Dyn *dst_dyn = &begin_dyn[len];
-	(void)dynamic_copy_dyn_by_type(elf_link, libc_ef, DT_NEEDED, dst_dyn);
-	len++;
-
-	// 0x000000000000000e (SONAME)             Library soname: [libc.so.6]
-	dst_dyn++;
-	(void)dynamic_copy_dyn_by_type(elf_link, libc_ef, DT_SONAME, dst_dyn);
-	len++;
+	for (unsigned i = 0; i < LIBC_DT_ARR_LEN; i++) {
+		(void)dynamic_copy_dyn_by_type(elf_link, libc_ef, libc_dt_arr[i], dst_dyn);
+		len++;
+		dst_dyn++;
+	}
 
 	return len;
 }
@@ -777,17 +812,18 @@ static int dynamic_copy_obj(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 		dyn = &dyn_arr[i];
 		switch (dyn->d_tag) {
 		case DT_NEEDED:
+		case DT_SONAME:
+		case DT_VERDEF:
+		case DT_VERNEED:
+		case DT_VERSYM:
+		case DT_VERDEFNUM:
+		case DT_VERNEEDNUM:
+			// have done before, here do nothing
 			continue;
 		case DT_RUNPATH:
 			// fix name index
 			new_d_val = get_new_name_offset(elf_link, ef, ef->dynstr_sec, dyn->d_un.d_val);
 			break;
-		case DT_VERNEED:
-		case DT_VERSYM:
-			if (is_delete_symbol_version(elf_link)) {
-				continue;
-			}
-			fallthrough;
 		case DT_INIT:
 		case DT_FINI:
 		case DT_GNU_HASH:
@@ -845,12 +881,6 @@ static int dynamic_copy_obj(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 			sec = find_tmp_section_by_name(elf_link, ".fini_array");
 			new_d_val = sec->sh_size;
 			break;
-		case DT_VERNEEDNUM:
-			if (is_delete_symbol_version(elf_link)) {
-				continue;
-			}
-			// TODO: feature, symbol version DT_VERNEEDNUM
-			fallthrough;
 		default:
 			*dst_dyn = *dyn;
 			dst_dyn++;
@@ -877,7 +907,7 @@ static void scan_dynamic(elf_link_t *elf_link)
 	len = dynamic_merge_lib(elf_link, begin_dyn, len);
 
 	// DT_SONAME
-	len = dynamic_add_soname(elf_link, begin_dyn, len);
+	len = dynamic_add_obj_from_libc(elf_link, begin_dyn, len);
 
 	// DT_PREINIT_ARRAY
 	len = dynamic_add_preinit(elf_link, begin_dyn, len);
@@ -1312,7 +1342,7 @@ static void do_special_adapts(elf_link_t *elf_link)
 // .data .tm_clone_table __libc_subfreeres __libc_IO_vtables __libc_atexit .bss __libc_freeres_ptrs
 static void elf_link_write_sections(elf_link_t *elf_link)
 {
-	// .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt
+	// .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
 	write_first_LOAD_segment(elf_link);
 
 	// .init .plt .text __libc_freeres_fn .fini

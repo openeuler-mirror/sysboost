@@ -233,10 +233,86 @@ static inline bool elf_rela_is_relative(Elf64_Rela *rela)
 
 Elf64_Rela *elf_get_rela_by_addr(elf_file_t *ef, unsigned long addr);
 
+
 // dyn
 Elf64_Dyn *elf_find_dyn_by_type(elf_file_t *ef, unsigned long dt);
 
+
 // section
+static inline bool elf_is_rela_plt_name(const char *name)
+{
+	if (strcmp(name, ".rela.plt") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool elf_is_dynstr_name(const char *name)
+{
+	if (strcmp(name, ".dynstr") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool elf_is_dynsym_sec_name(const char *name)
+{
+	if (strcmp(name, ".dynsym") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool elf_is_gnu_hash_sec_name(const char *name)
+{
+	if (strcmp(name, ".gnu.hash") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool elf_is_gnu_hash_sec(Elf64_Shdr *sec)
+{
+	if (sec->sh_type == SHT_GNU_HASH) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool elf_is_dynsym_sec(Elf64_Shdr *sec)
+{
+	if (sec->sh_type == SHT_DYNSYM) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool elf_is_version_sec_name(const char *name)
+{
+	if ((strcmp(name, ".gnu.version") == 0) || (strcmp(name, ".gnu.version_r") == 0)
+		|| (strcmp(name, ".gnu.version_d") == 0)) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool elf_is_version_sec(Elf64_Shdr *sec)
+{
+	if (sec->sh_type == SHT_GNU_versym || sec->sh_type == SHT_GNU_verdef ||
+		sec->sh_type == SHT_GNU_verneed) {
+		return true;
+	}
+
+	return false;
+}
+
 Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls_offset);
 Elf64_Shdr *elf_find_section_by_name(elf_file_t *ef, const char *sec_name);
 Elf64_Shdr *elf_find_section_by_addr(elf_file_t *ef, unsigned long addr);
