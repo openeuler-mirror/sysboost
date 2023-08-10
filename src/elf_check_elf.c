@@ -77,6 +77,11 @@ static void check_rela_dyn(elf_link_t *elf_link, elf_file_t *out_ef)
 		if (ELF64_R_SYM(rela->r_info) == 0) {
 			continue;
 		}
+
+		if (elf_rela_is_relative(rela) == false) {
+			SI_LOG_EMERG("rela is not relative, offset %lx info %lx\n", rela->r_offset, rela->r_info);
+		}
+
 		Elf64_Sym *sym = elf_get_dynsym_by_rela(out_ef, rela);
 		const char *sym_name = elf_get_sym_name(out_ef, sym);
 		if (is_dynsym_valid(sym, sym_name) == false
@@ -113,6 +118,9 @@ static void check_dynamic(elf_link_t *elf_link, elf_file_t *out_ef)
 static void check_func(elf_file_t *out_ef, unsigned long func_point)
 {
 	Elf64_Rela *rela = elf_get_rela_by_addr(out_ef, func_point);
+	if (rela == NULL) {
+		si_panic("not fonud r_offset in .rely.dyn, %lx\n", func_point);
+	}
 
 	// 00000000001222d0  0000000000000008 R_X86_64_RELATIVE                         30720
 	// rela must be type R_X86_64_RELATIVE

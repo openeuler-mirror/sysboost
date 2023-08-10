@@ -179,7 +179,7 @@ int elf_find_dynsym_index_by_name(elf_file_t *ef, const char *name)
 {
 	Elf64_Sym *sym = elf_find_dynsym_by_name(ef, name);
 	if (sym == NULL) {
-		si_panic("%s\n", name);
+		si_panic("%s %s\n", ef->file_name, name);
 	}
 
 	return elf_get_dynsym_index(ef, sym);

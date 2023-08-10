@@ -221,25 +221,6 @@ static inline elf_file_t *get_libc_ef(elf_link_t *elf_link)
 	return elf_link->libc_ef;
 }
 
-
-static inline bool is_rela_plt_name(const char *name)
-{
-	if (strcmp(name, ".rela.plt") == 0) {
-		return true;
-	}
-
-	return false;
-}
-
-static inline bool is_rela_dyn_name(const char *name)
-{
-	if (strcmp(name, ".rela.dyn") == 0) {
-		return true;
-	}
-
-	return false;
-}
-
 static inline bool is_init_name(const char *name)
 {
 	if (strcmp(name, ".init_array") == 0) {

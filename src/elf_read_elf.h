@@ -239,6 +239,15 @@ Elf64_Dyn *elf_find_dyn_by_type(elf_file_t *ef, unsigned long dt);
 
 
 // section
+static inline bool elf_is_rela_dyn_name(const char *name)
+{
+	if (strcmp(name, ".rela.dyn") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
 static inline bool elf_is_rela_plt_name(const char *name)
 {
 	if (strcmp(name, ".rela.plt") == 0) {

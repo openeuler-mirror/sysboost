@@ -707,6 +707,7 @@ static void dynamic_copy_dyn(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Dyn
 	case DT_VERNEED:
 	case DT_VERSYM:
 	case DT_GNU_HASH:
+	case DT_STRTAB:
 	case DT_SYMTAB:
 		dst_dyn->d_un.d_val = get_new_addr_by_old_addr(elf_link, src_ef, src_dyn->d_un.d_val);
 		break;
@@ -740,6 +741,9 @@ static Elf64_Dyn *dynamic_copy_dyn_by_type(elf_link_t *elf_link, elf_file_t *src
 // 0x000000006ffffffe (VERNEED)            0x23f70
 // 0x000000006fffffff (VERNEEDNUM)         1
 // 0x000000006ffffff0 (VERSYM)             0x222de
+// 0x000000006ffffef5 (GNU_HASH)           0x42e0
+// 0x0000000000000005 (STRTAB)             0x1a470
+// 0x0000000000000006 (SYMTAB)             0x89c8
 static unsigned long libc_dt_arr[] = {
 	DT_NEEDED,
 	DT_SONAME,
@@ -749,6 +753,7 @@ static unsigned long libc_dt_arr[] = {
 	DT_VERNEEDNUM,
 	DT_VERSYM,
 	DT_GNU_HASH,
+	DT_STRTAB,
 	DT_SYMTAB,
 };
 #define LIBC_DT_ARR_LEN (sizeof(libc_dt_arr) / sizeof(libc_dt_arr[0]))
@@ -829,6 +834,7 @@ static int dynamic_copy_obj(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 			new_d_val = get_new_name_offset(elf_link, ef, ef->dynstr_sec, dyn->d_un.d_val);
 			break;
 		case DT_GNU_HASH:
+		case DT_STRTAB:
 		case DT_SYMTAB:
 			if (is_static_nold_mode(elf_link)) {
 				// have done before
@@ -837,7 +843,6 @@ static int dynamic_copy_obj(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 			fallthrough;
 		case DT_INIT:
 		case DT_FINI:
-		case DT_STRTAB:
 		case DT_PLTGOT:
 		case DT_RELA:
 			new_d_val = get_new_addr_by_old_addr(elf_link, ef, dyn->d_un.d_val);
@@ -1176,13 +1181,19 @@ static void modify_dynsym(elf_link_t *elf_link)
 	Elf64_Shdr *sec = find_tmp_section_by_name(elf_link, ".dynsym");
 	modify_symbol(elf_link, sec);
 
+	// defined and undefined symbol from elfs all in dynsym
 	// delete undefined symbol, so dlsym can find the addr
 	delete_undefined_symbol(&elf_link->out_ef, sec);
 
-	sort_symbol_table(&elf_link->out_ef, sec);
-
 	// sh_info is STB_LOCAL symbol count
 	sec->sh_info = get_local_symbol_count(&elf_link->out_ef, sec);
+
+	// nold mode, libc gun_hash no change, dynsym no sort
+	if (is_static_nold_mode(elf_link)) {
+		return;
+	}
+
+	sort_symbol_table(&elf_link->out_ef, sec);
 
 	Elf64_Shdr *dyn = sec;
 	sec = find_tmp_section_by_name(elf_link, ".gnu.hash");
