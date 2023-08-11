@@ -10,18 +10,7 @@
 #include <asm/pgtable.h>
 #include "main.h"
 #include "loader_device.h"
-
-struct loaded_seg {
-	struct list_head	list;
-	struct list_head	hpages;
-};
-
-struct loaded_rto {
-	struct list_head	list;
-	struct inode 		*inode;
-	struct list_head	segs;
-	atomic_t		use_count;
-};
+#include "binfmt_rto.h"
 
 static LIST_HEAD(loaded_rtos);
 static DEFINE_RWLOCK(rtos_rwlock);
@@ -89,7 +78,6 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 	list_add(&loaded_seg->list, &loaded_rto->segs);
 	return 0;
 error:
-pr_info("load_seg error: %d\n", ret);
 	loaded_seg_free(loaded_seg);
 	return ret;
 }
@@ -125,35 +113,52 @@ static void loaded_rto_put(struct loaded_rto *loaded_rto)
 		loaded_rto_free(loaded_rto);
 }
 
-static int do_load_rto(struct file *file)
+static int load_rto(struct file *file)
 {
-	int ret;
+	int ret, i;
 	struct loaded_rto *loaded_rto;
 	struct inode *inode = file->f_inode;
+	unsigned long size, offset;
+	struct elfhdr *elf_ex;
+	struct elf_phdr *elf_ppnt, *elf_phdata;
 
 	loaded_rto = loaded_rto_alloc(inode);
 	if (!loaded_rto)
 		return -ENOMEM;
 
-	ret = load_seg(file, loaded_rto, 0, 2*HPAGE_SIZE);
-	if (ret)
-		goto error;
+	elf_ex = load_bprm_buf(file);
+	if (IS_ERR(elf_ex)) {
+		ret = PTR_ERR(elf_ex);
+		goto error_bprm_buf;
+	}
+	elf_phdata = load_elf_phdrs(elf_ex, file);
+	if (!elf_phdata) {
+		ret = -EIO;
+		goto error_phdrs;
+	}
 
+	for(i = 0, elf_ppnt = elf_phdata; i < elf_ex->e_phnum; i++, elf_ppnt++) {
+		if (elf_ppnt->p_type != PT_LOAD)
+			continue;
+
+		size = elf_ppnt->p_filesz + ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
+		offset = elf_ppnt->p_offset - ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
+		ret = load_seg(file, loaded_rto, offset, size);
+		if (ret)
+			goto error_seg;
+	}
+
+	kfree(elf_phdata);
+	kfree(elf_ex);
 	return 0;
-error:
+
+error_seg:
+	kfree(elf_phdata);
+error_phdrs:
+	kfree(elf_ex);
+error_bprm_buf:
 	loaded_rto_free(loaded_rto);
 	return ret;
-}
-
-static int load_rto(struct file *file)
-{
-	struct inode *inode;
-
-	inode = file->f_inode;
-
-	do_load_rto(file);
-
-	return 0;
 }
 
 struct loaded_rto *find_loaded_rto(struct inode *inode)

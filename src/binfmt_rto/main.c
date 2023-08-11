@@ -5,6 +5,7 @@
 
 #include "main.h"
 #include "loader_device.h"
+#include "binfmt_rto.h"
 
 bool use_rto = false;
 module_param(use_rto, bool, 0600);
@@ -15,17 +16,47 @@ int debug = 0;
 module_param(debug, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "debug mode");
 
-int init_rto_binfmt(void);
-void exit_rto_binfmt(void);
+kallsyms_lookup_name_kprobe_t klookupf;
+
+static int init_kallsyms_lookup_name(void)
+{
+	int ret;
+	struct kprobe kallsyms_kprobe_var =  {
+		.symbol_name = "kallsyms_lookup_name",
+	};
+
+	ret = register_kprobe(&kallsyms_kprobe_var);
+	if (ret) {
+		pr_err("register_kprobes returned %d\n", ret);
+		return ret;
+	}
+
+	klookupf = (kallsyms_lookup_name_kprobe_t)kallsyms_kprobe_var.addr;
+	unregister_kprobe(&kallsyms_kprobe_var);
+	if (!klookupf) {
+		pr_err("no kallsyms_lookup_name in kernel!\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
 
 static int __init sysboost_loader_init(void)
 {
 	int ret = 0;
 
+	ret = init_kallsyms_lookup_name();
+	if (ret)
+		goto error_rto;
+
+	ret = rto_populate_init();
+	if (ret)
+		goto error_rto;
+
 	ret = init_rto_binfmt();
 	if (ret)
 		goto error_rto;
-	
+
 	ret = loader_device_init();
 	if (ret)
 		goto error_device;
