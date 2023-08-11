@@ -157,29 +157,6 @@ static Elf64_Shdr *add_tmp_section(elf_link_t *elf_link, elf_file_t *ef, Elf64_S
 	return dst_sec;
 }
 
-static Elf64_Shdr *find_sec_exclude_main_ef(elf_link_t *elf_link, const char *name, elf_file_t **lef)
-{
-	int in_ef_nr = elf_link->in_ef_nr;
-	elf_file_t *ef = NULL;
-	Elf64_Shdr *sec = NULL;
-	elf_file_t *main_ef = get_main_ef(elf_link);
-
-	for (int i = 0; i < in_ef_nr; i++) {
-		ef = &elf_link->in_efs[i];
-		if (ef == main_ef) {
-			continue;
-		}
-		sec = elf_find_section_by_name(ef, name);
-		if (sec == NULL) {
-			continue;
-		}
-		*lef = ef;
-		return sec;
-	}
-
-	return NULL;
-}
-
 static Elf64_Shdr *add_tmp_section_by_name(elf_link_t *elf_link, const char *name)
 {
 	int in_ef_nr = elf_link->in_ef_nr;
@@ -199,15 +176,6 @@ static Elf64_Shdr *add_tmp_section_by_name(elf_link_t *elf_link, const char *nam
 		}
 		// found
 		break;
-	}
-
-	// libc _init_first is in .init_array, this func must run before _start
-	// move _init_first to .preinit_array
-	if (is_need_preinit(elf_link) && is_preinit_name(name)) {
-		if (sec) {
-			si_panic(".preinit_array not supported\n");
-		}
-		sec = find_sec_exclude_main_ef(elf_link, ".init_array", &ef);
 	}
 
 	if (sec == NULL) {
@@ -253,22 +221,6 @@ void copy_from_old_elf(elf_link_t *elf_link)
 	if (elf_link->out_ef.hdr_Phdr->p_vaddr != 0UL) {
 		si_panic("ELF must compile with pie\n");
 	}
-}
-
-// add __libc_early_init to first of .preinit_array, add rela for it
-// __libc_early_init first arg is bool, is one Byte
-// init_func(argc, argv, env) first arg need < 256, other args no used
-static void preinit_add_libc_early_init(elf_link_t *elf_link)
-{
-	elf_file_t *libc_ef = get_libc_ef(elf_link);
-	if (libc_ef == NULL) {
-		return;
-	}
-
-	unsigned long old_sym_addr = elf_find_symbol_addr_by_name(libc_ef, "__libc_early_init");
-	unsigned long new_sym_addr = get_new_addr_by_old_addr(elf_link, libc_ef, old_sym_addr);
-
-	write_elf_file(elf_link, &new_sym_addr, sizeof(unsigned long));
 }
 
 static void record_rela_arr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec, void *dst)
@@ -335,16 +287,10 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 	Elf64_Shdr *sec = NULL;
 	void *dst = NULL;
 	elf_file_t *main_ef = get_main_ef(elf_link);
-	bool is_preinit = is_need_preinit(elf_link) && is_preinit_name(name);
-	char *l_name = (char*)name;
 
 	tmp_sec->sh_offset = elf_align_file(elf_link, tmp_sec->sh_addralign);
 	tmp_sec->sh_addr = elf_link->next_mem_addr;
 	SI_LOG_DEBUG("section %s at 0x%lx\n", name, tmp_sec->sh_offset);
-
-	if (is_preinit) {
-		preinit_add_libc_early_init(elf_link);
-	}
 
 	// libc .dynsym .dynstr need put first, so version section no change
 	bool is_first_libc = is_merge_libc_first(elf_link, tmp_sec, name);
@@ -357,21 +303,16 @@ static Elf64_Shdr *elf_merge_section(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, 
 	}
 
 	for (int i = 0; i < in_ef_nr; i++) {
-		if (is_preinit) {
-			// TODO: order by deps lib
-			ef = &elf_link->in_efs[in_ef_nr - 1 - i];
-			// libs .init_array to .preinit_array
-			l_name = ".init_array";
-		} else {
-			ef = &elf_link->in_efs[i];
-		}
+		// TODO: order by deps lib
+		// ef = &elf_link->in_efs[in_ef_nr - 1 - i];
+		ef = &elf_link->in_efs[i];
 		if (skip_main_ef && (ef == main_ef)) {
 			continue;
 		}
 		if (is_first_libc && (ef == libc_ef)) {
 			continue;
 		}
-		sec = elf_find_section_by_name(ef, l_name);
+		sec = elf_find_section_by_name(ef, name);
 		if (sec == NULL) {
 			continue;
 		}
@@ -537,15 +478,6 @@ static int foreach_merge_section_by_name(const void *item, void *pridata)
 {
 	const char *name = item;
 	elf_link_t *elf_link = pridata;
-
-	// add .preinit_array section for libc init func
-	if (is_need_preinit(elf_link) && is_init_name(name)) {
-		merge_libs_ef_section(elf_link, ".preinit_array");
-
-		// .init_array
-		merge_template_ef_section(elf_link, name);
-		return 0;
-	}
 
 	merge_all_ef_section(elf_link, name);
 	return 0;
