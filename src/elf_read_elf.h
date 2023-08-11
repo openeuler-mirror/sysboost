@@ -231,6 +231,23 @@ static inline bool elf_rela_is_relative(Elf64_Rela *rela)
 	return false;
 }
 
+static inline Elf64_Rela *elf_find_none_rela(elf_file_t *ef, Elf64_Shdr *sec)
+{
+	int count = sec->sh_size / sizeof(Elf64_Rela);
+	Elf64_Rela *relas = elf_get_section_data(ef, sec);
+	Elf64_Rela *rela = NULL;
+
+	for (int i = 0; i < count; i++) {
+		rela = &relas[i];
+		// TODO: for ARM
+		if (ELF64_R_TYPE(rela->r_info) == R_X86_64_NONE) {
+			return rela;
+		}
+	}
+
+	return NULL;
+}
+
 Elf64_Rela *elf_get_rela_by_addr(elf_file_t *ef, unsigned long addr);
 
 

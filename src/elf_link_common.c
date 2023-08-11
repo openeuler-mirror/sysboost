@@ -530,13 +530,6 @@ char *elf_get_tmp_section_name(elf_link_t *elf_link, Elf64_Shdr *shdr)
 	Elf64_Shdr *src_sec = (Elf64_Shdr *)obj_mapping->src_obj;
 
 	char *sec_name = elf_get_section_name(src_ef, src_sec);
-	if (is_need_preinit(elf_link) && is_init_name(sec_name)) {
-		elf_file_t *main_ef = get_main_ef(elf_link);
-		if (src_ef != main_ef) {
-			return ".preinit_array";
-		}
-	}
-
 	return sec_name;
 }
 

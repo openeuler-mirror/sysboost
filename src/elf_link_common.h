@@ -159,6 +159,12 @@ static inline bool is_static_nolibc_mode(elf_link_t *elf_link)
 	return elf_link->link_mode == ELF_LINK_STATIC_NOLIBC;
 }
 
+// libc _init_first is in .init_array, must run before _start
+// libc __libc_early_init need init before .init_array
+// dl_main(phdr, phnum, user_entry, auxv)
+//     _dl_call_libc_early_init (GL(dl_ns)[LM_ID_BASE].libc_map, true);
+//         __libc_early_init(true)
+
 // this mode merge all ELFs exclude ld.so
 // ld.so parse env and parameter, rtld_global_ro share to libc.so
 // ld.so have some init process for libc, soname need call libc.so
@@ -219,40 +225,6 @@ static inline elf_file_t *get_out_ef(elf_link_t *elf_link)
 static inline elf_file_t *get_libc_ef(elf_link_t *elf_link)
 {
 	return elf_link->libc_ef;
-}
-
-static inline bool is_init_name(const char *name)
-{
-	if (strcmp(name, ".init_array") == 0) {
-		return true;
-	}
-
-	return false;
-}
-
-static inline bool is_preinit_name(const char *name)
-{
-	if (strcmp(name, ".preinit_array") == 0) {
-		return true;
-	}
-
-	return false;
-}
-
-// libc _init_first is in .init_array, must run before _start, move _init_first to .preinit_array
-// libc __libc_early_init need init before .init_array, so put first of .preinit_array
-// dl_main(phdr, phnum, user_entry, auxv)
-//     _dl_call_libc_early_init (GL(dl_ns)[LM_ID_BASE].libc_map, true);
-//         __libc_early_init(true)
-static inline bool is_need_preinit(elf_link_t *elf_link)
-{
-	// TODO: clean this
-	(void)elf_link;
-	//if (is_static_nold_mode(elf_link)) {
-	//	return true;
-	//}
-
-	return false;
 }
 
 static inline void elf_write_u32(elf_file_t *ef, unsigned long addr_, unsigned value)
