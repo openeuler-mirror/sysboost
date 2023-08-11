@@ -19,7 +19,6 @@
 #include <linux/signal.h>
 #include <linux/binfmts.h>
 #include <linux/string.h>
-#include <linux/file.h>
 #include <linux/slab.h>
 #include <linux/personality.h>
 #include <linux/elfcore.h>
@@ -50,22 +49,24 @@
 
 #include <asm/param.h>
 #include <asm/page.h>
+#ifdef CONFIG_X86
+#include <asm/vdso.h>
+#endif
 #include "main.h"
+#include "loader_device.h"
+#include "binfmt_rto.h"
 
 #ifndef CONFIG_ELF_SYSBOOST
 #define CONFIG_ELF_SYSBOOST 1
 #endif
 
 #ifdef CONFIG_ELF_SYSBOOST
-#include <linux/kprobes.h>
 #include "../elf_ext.h"
 
 /* compat 22.03 LTS, 22.03 LTS SP2 */
 #ifndef MM_SAVED_AUXV
 #define MM_SAVED_AUXV(mm) mm->saved_auxv
 #endif
-
-extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
@@ -95,7 +96,7 @@ static struct global_symbols {
 	proc_symbol(arch_align_stack);
 	proc_symbol(task_cputime);
 	proc_symbol(thread_group_cputime);
-} g_sym;
+} rto_sym;
 
 #define proc_symbol_char(x) #x
 static char *global_symbol_names[] = {
@@ -126,57 +127,10 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(thread_group_cputime)
 };
 
-typedef unsigned long (*kallsyms_lookup_name_kprobe_t)(const char *name);
-kallsyms_lookup_name_kprobe_t klookupf;
-
-static int init_kallsyms_lookup_name(void)
+static int init_symbols(void)
 {
 	int ret;
-	struct kprobe kallsyms_kprobe_var =  {
-		.symbol_name = "kallsyms_lookup_name",
-	};
-
-	ret = register_kprobe(&kallsyms_kprobe_var);
-	if (ret) {
-		pr_err("register_kprobes returned %d\n", ret);
-		return ret;
-	}
-
-	klookupf = (kallsyms_lookup_name_kprobe_t)kallsyms_kprobe_var.addr;
-	unregister_kprobe(&kallsyms_kprobe_var);
-	if (!klookupf) {
-		pr_err("no kallsyms_lookup_name in kernel!\n");
-		return -EFAULT;
-	}
-
-	return 0;
-}
-
-int do_init_symbols(unsigned long *func_base, char *func[], unsigned int num)
-{
-	unsigned int i;
-	unsigned long *input_func_base = func_base;
-
-	for (i = 0; i < num; i++) {
-		*input_func_base = klookupf(func[i]);
-		if (!*input_func_base) {
-			pr_warn("get %s failed\n", func[i]);
-			return -EEXIST;
-		}
-		input_func_base++;
-	}
-
-	return 0;
-}
-
-int init_symbols(void)
-{
-	int ret;
-	unsigned long *func_base = (unsigned long *)&g_sym;
-
-	ret = init_kallsyms_lookup_name();
-	if (ret)
-		return ret;
+	unsigned long *func_base = (unsigned long *)&rto_sym;
 
 	ret = do_init_symbols(func_base, global_symbol_names, ARRAY_SIZE(global_symbol_names));
 	if (ret < 0)
@@ -191,7 +145,7 @@ int init_symbols(void)
 static inline unsigned long __cpu_get_elf_hwcap(void)
 {
 #ifdef CONFIG_ARM64
-	return g_sym.cpu_get_elf_hwcap();
+	return rto_sym.cpu_get_elf_hwcap();
 #else
 	// x86 boot_cpu_data is export
 	return (boot_cpu_data.x86_capability[CPUID_1_EDX]);
@@ -205,10 +159,10 @@ static inline unsigned long __cpu_get_elf_hwcap(void)
 static inline unsigned long __cpu_get_elf_hwcap2(void)
 {
 #ifdef CONFIG_ARM64
-	return g_sym.cpu_get_elf_hwcap2();
+	return rto_sym.cpu_get_elf_hwcap2();
 #else
 	// x86 is global val elf_hwcap2, not export
-	return *(u32 *)g_sym.elf_hwcap2;
+	return *(u32 *)rto_sym.elf_hwcap2;
 #endif
 }
 #endif
@@ -228,35 +182,35 @@ do {									\
 	 * If we haven't determined a sensible value to give to		\
 	 * userspace, omit the entry:					\
 	 */								\
-	if (likely(*g_sym.signal_minsigstksz))				\
-		NEW_AUX_ENT(AT_MINSIGSTKSZ, *g_sym.signal_minsigstksz);	\
+	if (likely(*rto_sym.signal_minsigstksz))				\
+		NEW_AUX_ENT(AT_MINSIGSTKSZ, *rto_sym.signal_minsigstksz);	\
 	else								\
 		NEW_AUX_ENT(AT_IGNORE, 0);				\
 } while (0)
 
 // TODO: vdso layout for ARM64
-#define __arch_setup_additional_pages(bprm, uses_interp, load_bias, is_rto_format) (g_sym.arch_setup_additional_pages(bprm, uses_interp))
+#define __arch_setup_additional_pages(bprm, uses_interp, load_bias, is_rto_format) (rto_sym.arch_setup_additional_pages(bprm, uses_interp))
 
 #ifdef arch_elf_adjust_prot
 #undef arch_elf_adjust_prot
 #endif
 
-#define arch_elf_adjust_prot g_sym.arch_elf_adjust_prot
+#define arch_elf_adjust_prot rto_sym.arch_elf_adjust_prot
 
 #else
 // x86
 #ifdef get_sigframe_size
 #define ARCH_DLINFO							\
 do {									\
-	if (*(unsigned int *)g_sym.vdso64_enabled)			\
+	if (*(unsigned int *)rto_sym.vdso64_enabled)			\
 		NEW_AUX_ENT(AT_SYSINFO_EHDR,				\
 			    (unsigned long __force)current->mm->context.vdso); \
-	NEW_AUX_ENT(AT_MINSIGSTKSZ, g_sym.get_sigframe_size());		\
+	NEW_AUX_ENT(AT_MINSIGSTKSZ, rto_sym.get_sigframe_size());		\
 } while (0)
 #else
 #define ARCH_DLINFO							\
 do {									\
-	if (*(unsigned int *)g_sym.vdso64_enabled)			\
+	if (*(unsigned int *)rto_sym.vdso64_enabled)			\
 		NEW_AUX_ENT(AT_SYSINFO_EHDR,				\
 			    (unsigned long __force)current->mm->context.vdso); \
 } while (0)
@@ -265,10 +219,10 @@ do {									\
 int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, unsigned long load_bias, bool is_rto_format)
 {
 	if (!is_rto_format) {
-		return g_sym.arch_setup_additional_pages(bprm, uses_interp);
+		return rto_sym.arch_setup_additional_pages(bprm, uses_interp);
 	}
 
-	if (!*(unsigned int *)g_sym.vdso64_enabled)
+	if (!*(unsigned int *)rto_sym.vdso64_enabled)
 		return 0;
 
 	// layout for vdso and app and ld.so
@@ -277,13 +231,13 @@ int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, un
 	// vvar | vdso | app
 	if (debug)
 		printk("binfmt_rto: base 0x%lx vvar 0x%lx\n", load_bias, load_bias - ELF_VVAR_AND_VDSO_LEN);
-	return g_sym.map_vdso(g_sym.vdso_image_64, load_bias - ELF_VVAR_AND_VDSO_LEN);
+	return rto_sym.map_vdso(rto_sym.vdso_image_64, load_bias - ELF_VVAR_AND_VDSO_LEN);
 }
 
 #ifdef SET_PERSONALITY2
 #undef SET_PERSONALITY2
 #endif
-#define SET_PERSONALITY2(ex, state) (g_sym.set_personality_64bit())
+#define SET_PERSONALITY2(ex, state) (rto_sym.set_personality_64bit())
 
 #endif
 
@@ -323,19 +277,9 @@ static int elf_core_dump(struct coredump_params *cprm);
 #define elf_core_dump	NULL
 #endif
 
-#if ELF_EXEC_PAGESIZE > PAGE_SIZE
-#define ELF_MIN_ALIGN	ELF_EXEC_PAGESIZE
-#else
-#define ELF_MIN_ALIGN	PAGE_SIZE
-#endif
-
 #ifndef ELF_CORE_EFLAGS
 #define ELF_CORE_EFLAGS	0
 #endif
-
-#define ELF_PAGESTART(_v) ((_v) & ~(unsigned long)(ELF_MIN_ALIGN-1))
-#define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
-#define ELF_PAGEALIGN(_v) (((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
 
 static struct linux_binfmt elf_format = {
 	.module		= THIS_MODULE,
@@ -436,7 +380,7 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 	 * thing we can do is to shuffle the initial stack for them.
 	 */
 
-	p = g_sym.arch_align_stack(p);
+	p = rto_sym.arch_align_stack(p);
 
 	/*
 	 * If this architecture has a platform capability string, copy it
@@ -622,11 +566,16 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 	*/
 	if (total_size) {
 		total_size = ELF_PAGEALIGN(total_size);
+		pr_info("vm_mmap, addr: %lx, total_size: %lx, off: %lx", 
+			addr, total_size, off);
 		map_addr = vm_mmap(filep, addr, total_size, prot, type, off);
 		if (!BAD_ADDR(map_addr))
 			vm_munmap(map_addr+size, total_size-size);
-	} else
+	} else {
 		map_addr = vm_mmap(filep, addr, size, prot, type, off);
+		pr_info("vm_mmap, addr: %lx, size: %lx, off: %lx", 
+			addr, size, off);
+	}
 
 	if ((type & MAP_FIXED_NOREPLACE) &&
 	    PTR_ERR((void *)map_addr) == -EEXIST)
@@ -694,8 +643,8 @@ static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
  * header pointed to by elf_ex, into a newly allocated array. The caller is
  * responsible for freeing the allocated data. Returns an ERR_PTR upon failure.
  */
-static struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
-				       struct file *elf_file)
+struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
+				struct file *elf_file)
 {
 	struct elf_phdr *elf_phdata = NULL;
 	int retval, err = -1;
@@ -1085,29 +1034,38 @@ static struct file * try_get_rto_file(struct file *file)
 	return rto_file;
 }
 
-static int prepare_rto(struct linux_binprm *bprm)
+void *load_bprm_buf(struct file *file)
 {
+	ssize_t ret;
+	char *buffer;
 	loff_t pos = 0;
-	void *buffer;
-	long ret;
 
 	buffer = kmalloc(BINPRM_BUF_SIZE, GFP_KERNEL);
 	if (!buffer)
-		return -ENOMEM;
-	memcpy(buffer, bprm->buf, BINPRM_BUF_SIZE);
+		return ERR_PTR(-ENOMEM);
 
-	memset(bprm->buf, 0, BINPRM_BUF_SIZE);
-	ret = kernel_read(bprm->file, bprm->buf, BINPRM_BUF_SIZE, &pos);
+	ret = kernel_read(file, buffer, BINPRM_BUF_SIZE, &pos);
 	if (ret != BINPRM_BUF_SIZE) {
-		memcpy(bprm->buf, buffer, BINPRM_BUF_SIZE);
-		if (ret >= 0)
-			ret = -ENOENT;
-	} else {
-		ret = 0;
+		kfree(buffer);
+		if (ret < 0)
+			return ERR_PTR(ret);
+		return ERR_PTR(-EIO);
 	}
 
+	return buffer;
+}
+
+static int prepare_rto(struct linux_binprm *bprm)
+{
+	void *buffer;
+
+	buffer = load_bprm_buf(bprm->file);
+	if (IS_ERR(buffer))
+		return PTR_ERR(buffer);
+
+	memcpy(bprm->buf, buffer, BINPRM_BUF_SIZE);
 	kfree(buffer);
-	return ret;
+	return 0;
 }
 
 static inline int try_replace_file(struct linux_binprm *bprm)
@@ -1144,41 +1102,41 @@ static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
 {
 	start_thread_common(regs, pc);
 	regs->pstate = PSR_MODE_EL0t;
-	g_sym.spectre_v4_enable_task_mitigation(current);
+	rto_sym.spectre_v4_enable_task_mitigation(current);
 	regs->sp = sp;
 }
 #endif /* CONFIG_ARM64 */
 
-static bool check_elf_xattr(struct linux_binprm *bprm)
-{
-	char *xattr = NULL;
-	int xattr_size = 0;
+// static bool check_elf_xattr(struct linux_binprm *bprm)
+// {
+// 	char *xattr = NULL;
+// 	int xattr_size = 0;
 
-	return false;
+// 	return false;
 
-	// try to get attr from bprm
-	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
-				  "trusted.flags", NULL, 0);
-	if (xattr_size < 0) {
-		return false;
-	}
+// 	// try to get attr from bprm
+// 	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
+// 				  "trusted.flags", NULL, 0);
+// 	if (xattr_size < 0) {
+// 		return false;
+// 	}
 
-	xattr = kvmalloc(xattr_size, GFP_KERNEL);
-	if (xattr == NULL) {
-		return false;
-	}
-	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
-				  "trusted.flags", xattr, xattr_size);
-	if (xattr_size <= 0) {
-		kvfree(xattr);
-		return false;
-	}
+// 	xattr = kvmalloc(xattr_size, GFP_KERNEL);
+// 	if (xattr == NULL) {
+// 		return false;
+// 	}
+// 	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
+// 				  "trusted.flags", xattr, xattr_size);
+// 	if (xattr_size <= 0) {
+// 		kvfree(xattr);
+// 		return false;
+// 	}
 
-	if (memcmp(xattr, "true", xattr_size)) {
-		return false;
-	}
-	return true;
-}
+// 	if (memcmp(xattr, "true", xattr_size)) {
+// 		return false;
+// 	}
+// 	return true;
+// }
 
 #endif /* CONFIG_ELF_SYSBOOST */
 
@@ -1208,14 +1166,15 @@ static int load_elf_binary(struct linux_binprm *bprm)
 #ifdef CONFIG_ELF_SYSBOOST
 	bool is_rto_format = false;
 
-load_rto:
+// load_rto:
 	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
 	retval = -ENOEXEC;
 
 	/* close feature to rmmod this ko */
-	if (!use_rto) {
+	if (!use_rto || !IS_SYSBOOST_RTO(bprm->file->f_inode)) {
 		goto out;
 	}
+	pr_info("lyt enter rto\n");
 #endif
 
 	/* First of all, some simple consistency checks */
@@ -1235,28 +1194,28 @@ load_rto:
 	if (!elf_phdata)
 		goto out;
 
-#ifdef CONFIG_ELF_SYSBOOST
-	/* replace app.rto file, then use binfmt */
-	if (check_elf_xattr(bprm)) {
-		int ret = try_replace_file(bprm);
-		if (!ret) {
-			if (elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO) {
-				goto load_rto;
-			} else {
-				goto out;
-			}
-		} else {
-			/* limit print */
-			printk("replace rto file fail, %d\n", ret);
-			goto out;
-		}
-	}
-	if (!is_rto_format && !(elf_ex->e_flags & OS_SPECIFIC_FLAG_HUGEPAGE))
-		goto out;
-	if (debug) {
-		printk("exec in rto mode, is_rto_format %d\n", is_rto_format);
-	}
-#endif
+// #ifdef CONFIG_ELF_SYSBOOST
+// 	/* replace app.rto file, then use binfmt */
+// 	if (check_elf_xattr(bprm)) {
+// 		int ret = try_replace_file(bprm);
+// 		if (!ret) {
+// 			if (elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO) {
+// 				goto load_rto;
+// 			} else {
+// 				goto out;
+// 			}
+// 		} else {
+// 			/* limit print */
+// 			printk("replace rto file fail, %d\n", ret);
+// 			goto out;
+// 		}
+// 	}
+// 	if (!is_rto_format && !(elf_ex->e_flags & OS_SPECIFIC_FLAG_HUGEPAGE))
+// 		goto out;
+// 	if (debug) {
+// 		printk("exec in rto mode, is_rto_format %d\n", is_rto_format);
+// 	}
+// #endif
 
 	elf_ppnt = elf_phdata;
 	for (i = 0; i < elf_ex->e_phnum; i++, elf_ppnt++) {
@@ -1405,14 +1364,14 @@ out_free_interp:
 	if (elf_read_implies_exec(*elf_ex, executable_stack))
 		current->personality |= READ_IMPLIES_EXEC;
 
-	if (!(current->personality & ADDR_NO_RANDOMIZE) && *g_sym.randomize_va_space)
+	if (!(current->personality & ADDR_NO_RANDOMIZE) && *rto_sym.randomize_va_space)
 		current->flags |= PF_RANDOMIZE;
 
 	setup_new_exec(bprm);
 
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
-	retval = setup_arg_pages(bprm, g_sym.randomize_stack_top(STACK_TOP),
+	retval = setup_arg_pages(bprm, rto_sym.randomize_stack_top(STACK_TOP),
 				 executable_stack);
 	if (retval < 0)
 		goto out_free_dentry;
@@ -1430,7 +1389,7 @@ out_free_interp:
 	for(i = 0, elf_ppnt = elf_phdata;
 	    i < elf_ex->e_phnum; i++, elf_ppnt++) {
 		int elf_prot, elf_flags;
-		unsigned long k, vaddr;
+		unsigned long k, vaddr, size, off;
 		unsigned long total_size = 0;
 		unsigned long alignment;
 
@@ -1510,7 +1469,7 @@ out_free_interp:
 			if (interpreter) {
 				load_bias = ELF_ET_DYN_BASE;
 				if (current->flags & PF_RANDOMIZE)
-					load_bias += g_sym.arch_mmap_rnd();
+					load_bias += rto_sym.arch_mmap_rnd();
 				alignment = maximum_alignment(elf_phdata, elf_ex->e_phnum);
 				if (alignment)
 					load_bias &= ~(alignment - 1);
@@ -1542,6 +1501,11 @@ out_free_interp:
 				PTR_ERR((void*)error) : -EINVAL;
 			goto out_free_dentry;
 		}
+		// size = elf_ppnt->p_filesz + ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
+		// off = elf_ppnt->p_offset - ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
+		// pr_info("lyt addr: 0x%lx, off: 0x%lx, size: 0x%lx, \n",
+		// 	load_bias + vaddr, off, size);
+		// rto_populate(bprm->file, error, off, size);
 
 		if (!load_addr_set) {
 			load_addr_set = 1;
@@ -1675,7 +1639,7 @@ out_free_interp:
 	mm->end_data = end_data;
 	mm->start_stack = bprm->p;
 
-	if ((current->flags & PF_RANDOMIZE) && (*g_sym.randomize_va_space > 1)) {
+	if ((current->flags & PF_RANDOMIZE) && (*rto_sym.randomize_va_space > 1)) {
 		/*
 		 * For architectures with ELF randomization, when executing
 		 * a loader directly (i.e. no interpreter listed in ELF
@@ -1688,7 +1652,7 @@ out_free_interp:
 			mm->brk = mm->start_brk = ELF_ET_DYN_BASE;
 		}
 
-		mm->brk = mm->start_brk = g_sym.arch_randomize_brk(mm);
+		mm->brk = mm->start_brk = rto_sym.arch_randomize_brk(mm);
 #ifdef compat_brk_randomized
 		current->brk_randomized = 1;
 #endif
@@ -1926,13 +1890,13 @@ static void fill_prstatus(struct elf_prstatus *prstatus,
 		 * This is the record for the group leader.  It shows the
 		 * group-wide total, not its individual thread total.
 		 */
-		g_sym.thread_group_cputime(p, &cputime);
+		rto_sym.thread_group_cputime(p, &cputime);
 		prstatus->pr_utime = ns_to_kernel_old_timeval(cputime.utime);
 		prstatus->pr_stime = ns_to_kernel_old_timeval(cputime.stime);
 	} else {
 		u64 utime, stime;
 
-		g_sym.task_cputime(p, &utime, &stime);
+		rto_sym.task_cputime(p, &utime, &stime);
 		prstatus->pr_utime = ns_to_kernel_old_timeval(utime);
 		prstatus->pr_stime = ns_to_kernel_old_timeval(stime);
 	}
@@ -2678,7 +2642,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 	for (i = 0; i < cprm->vma_count; i++) {
 		struct core_vma_metadata *meta = cprm->vma_meta + i;
 
-		if (!g_sym.dump_user_range(cprm, meta->start, meta->dump_size))
+		if (!rto_sym.dump_user_range(cprm, meta->start, meta->dump_size))
 			goto end_coredump;
 	}
 	dump_truncate(cprm);

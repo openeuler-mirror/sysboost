@@ -1,7 +1,7 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 obj-m := sysboost_loader.o
-sysboost_loader-objs := main.o binfmt_rto.o loader_device.o
+sysboost_loader-objs := main.o binfmt_rto.o loader_device.o rto_populate.o
 PWD := $(shell pwd)
 
 modules:
