@@ -48,6 +48,8 @@ bash:
 	$(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO) $(LIBC)
 	readelf -W -a $(BASH).rto > bash.rto.elf
 	objdump -d $(BASH).rto > bash.rto.asm
+	readelf -W -s $(BASH).rto > bash.rto.dynsym.elf
+	readelf -W -s $(LIBC_R) > libc.so.dynsym.elf
 	@echo ===run===
 	$(BASH).rto -c "echo 1"
 

@@ -122,6 +122,13 @@ static void rela_change_to_relative(Elf64_Rela *dst_rela, unsigned long addend)
 	// offset modify by caller
 }
 
+static void fix_rela_new_index(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
+{
+	unsigned int old_index = ELF64_R_SYM(src_rela->r_info);
+	int new_index = get_new_sym_index(elf_link, src_ef, old_index);
+	dst_rela->r_info = ELF64_R_INFO(new_index, ELF64_R_TYPE(src_rela->r_info));
+}
+
 // The __stack_chk_guard and __stack_chk_fail symbols are normally supplied by a GCC library called libssp
 // we can not change code to direct access the symbol, some code use 2 insn to point symbol, the adrp insn may be shared
 static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
@@ -134,9 +141,18 @@ static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, El
 		// some addr need be 0, use by cmp jump
 		char *name = elf_get_sym_name(src_ef, sym);
 		if (!is_symbol_maybe_undefined(name)) {
-			si_panic("%s\n", name);
+			si_panic("symbol can not be UND, %s %s\n", src_ef->file_name, name);
 		}
-		// do nothing
+
+		// nold mode dynsym is only libc, clear UND rela
+		// FEATURE: to support UND symbol
+		if (is_static_nold_mode(elf_link)) {
+			elf_clear_rela(dst_rela);
+			return;
+		}
+
+		// UND symbol need new index
+		fix_rela_new_index(elf_link, src_ef, src_rela, dst_rela);
 		return;
 	}
 
@@ -220,39 +236,56 @@ static void rela_use_relative(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Re
 	rela_change_to_relative(dst_rela, new_addr_in_data);
 }
 
+static void fix_rela_tls_offset(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
+{
+	// TODO: static mode, x86, tls offset is imm value, so rela need clear
+
+	// Offset in initial TLS block
+	// 00000000001f0d78  0000000000000012 R_X86_64_TPOFF64                          38
+	// TLS type have no sym index
+	dst_rela->r_addend = elf_get_new_tls_offset(elf_link, src_ef, src_rela->r_addend);
+	// 00000000001ebf38  0000052e00000012 R_X86_64_TPOFF64       0000000000000040 __libc_dlerror_result@@GLIBC_PRIVATE + 0
+	// force clear sym index
+	dst_rela->r_info = ELF64_R_INFO(0, ELF64_R_TYPE(src_rela->r_info));
+	SI_LOG_DEBUG("%s offset %lx info %lx\n", src_ef->file_name, src_rela->r_offset, src_rela->r_info);
+}
+
+static void fix_rela_got_entry(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
+{
+	// set addr of so path list
+	if (elf_link->hook_func) {
+		// .got var point to ___g_so_path_list data area, change point to real addr
+		// .rela.dyn
+		// 0000000000003ff0  0000003000000006 R_X86_64_GLOB_DAT      0000000000004000 ___g_so_path_list + 0
+		// .rela.text
+		// 000000000000129d  0000006e0000002a R_X86_64_REX_GOTPCRELX 0000000000004000 ___g_so_path_list - 4
+		// 129a:	4c 8b 2d 4f 2d 00 00 	mov    0x2d4f(%rip),%r13        # 3ff0 <___g_so_path_list@@Base-0x10>
+		// 48: 0000000000004000  4096 OBJECT  GLOBAL DEFAULT   27 ___g_so_path_list
+		unsigned int old_index = ELF64_R_SYM(src_rela->r_info);
+		const char *sym_name = elf_get_dynsym_name_by_index(src_ef, old_index);
+		if (elf_is_same_symbol_name(sym_name, "___g_so_path_list")) {
+			// when ELF load, real addr will set
+			rela_change_to_relative(dst_rela, (unsigned long)elf_link->so_path_struct);
+			return;
+		}
+	}
+
+	// some symbol do not export in .dynsym, change to R_AARCH64_RELATIVE
+	modify_rela_to_RELATIVE(elf_link, src_ef, src_rela, dst_rela);
+}
+
 void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
 {
-	int type;
 	Elf64_Sym *sym = elf_get_dynsym_by_rela(src_ef, src_rela);
 
 	// modify offset
 	dst_rela->r_offset = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_offset);
 
-	unsigned int old_index = ELF64_R_SYM(src_rela->r_info);
-
-	type = ELF64_R_TYPE(src_rela->r_info);
+	int type = ELF64_R_TYPE(src_rela->r_info);
 	switch (type) {
 	case R_X86_64_GLOB_DAT:
-		// set addr of so path list
-		if (elf_link->hook_func) {
-			// .got var point to ___g_so_path_list data area, change point to real addr
-			// .rela.dyn
-			// 0000000000003ff0  0000003000000006 R_X86_64_GLOB_DAT      0000000000004000 ___g_so_path_list + 0
-			// .rela.text
-			// 000000000000129d  0000006e0000002a R_X86_64_REX_GOTPCRELX 0000000000004000 ___g_so_path_list - 4
-			// 129a:	4c 8b 2d 4f 2d 00 00 	mov    0x2d4f(%rip),%r13        # 3ff0 <___g_so_path_list@@Base-0x10>
-			// 48: 0000000000004000  4096 OBJECT  GLOBAL DEFAULT   27 ___g_so_path_list
-			const char *sym_name = elf_get_dynsym_name_by_index(src_ef, old_index);
-			if (elf_is_same_symbol_name(sym_name, "___g_so_path_list")) {
-				// when ELF load, real addr will set
-				rela_change_to_relative(dst_rela, (unsigned long)elf_link->so_path_struct);
-				break;
-			}
-		}
-		fallthrough;
 	case R_AARCH64_GLOB_DAT:
-		// some symbol do not export in .dynsym, change to R_AARCH64_RELATIVE
-		modify_rela_to_RELATIVE(elf_link, src_ef, src_rela, dst_rela);
+		fix_rela_got_entry(elf_link, src_ef, src_rela, dst_rela);
 		break;
 	case R_X86_64_64:
 	case R_AARCH64_ABS64:
@@ -284,10 +317,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		break;
 	case R_X86_64_TPOFF64:
 	case R_X86_64_TPOFF32:
-		// Offset in initial TLS block
-		// 00000000001f0d78  0000000000000012 R_X86_64_TPOFF64                          38
-		// TLS type have no sym index
-		dst_rela->r_addend = elf_get_new_tls_offset(elf_link, src_ef, src_rela->r_addend);
+		fix_rela_tls_offset(elf_link, src_ef, src_rela, dst_rela);
 		break;
 	case R_X86_64_COPY:
 		rela_use_relative(elf_link, src_ef, src_rela, dst_rela);
@@ -296,10 +326,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		// Variables in the bss section, some from glibc, some declared by the application
 		// Redefined in the template file temporarily, so skip here
 		// TODO: is really do nothing?
-		{
-			int new_index = get_new_sym_index(elf_link, src_ef, old_index);
-			dst_rela->r_info = ELF64_R_INFO(new_index, ELF64_R_TYPE(src_rela->r_info));
-		}
+		fix_rela_new_index(elf_link, src_ef, src_rela, dst_rela);
 		break;
 	case R_AARCH64_NONE:
 		/* nothing need to do */

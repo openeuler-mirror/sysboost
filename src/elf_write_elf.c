@@ -278,9 +278,9 @@ static void record_rela_arr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *se
 
 	void *src = ((void *)ef->hdr) + sec->sh_offset;
 
-	if (is_rela_plt_name(name)) {
+	if (elf_is_rela_plt_name(name)) {
 		arr = elf_link->rela_plt_arr;
-	} else if (is_rela_dyn_name(name)) {
+	} else if (elf_is_rela_dyn_name(name)) {
 		arr = elf_link->rela_dyn_arr;
 	} else {
 		return;
