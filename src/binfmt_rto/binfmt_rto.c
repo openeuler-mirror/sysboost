@@ -53,7 +53,6 @@
 #include <asm/vdso.h>
 #endif
 #include "main.h"
-#include "loader_device.h"
 #include "binfmt_rto.h"
 
 #ifndef CONFIG_ELF_SYSBOOST
@@ -1025,7 +1024,7 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 }
 
 #ifdef CONFIG_ELF_SYSBOOST
-static struct file * try_get_rto_file(struct file *file)
+struct file *try_get_rto_file(struct file *file)
 {
 	char *buffer, *rto_path;
 	struct file *rto_file;
@@ -1112,37 +1111,6 @@ static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
 }
 #endif /* CONFIG_ARM64 */
 
-// static bool check_elf_xattr(struct linux_binprm *bprm)
-// {
-// 	char *xattr = NULL;
-// 	int xattr_size = 0;
-
-// 	return false;
-
-// 	// try to get attr from bprm
-// 	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
-// 				  "trusted.flags", NULL, 0);
-// 	if (xattr_size < 0) {
-// 		return false;
-// 	}
-
-// 	xattr = kvmalloc(xattr_size, GFP_KERNEL);
-// 	if (xattr == NULL) {
-// 		return false;
-// 	}
-// 	xattr_size = vfs_getxattr(bprm->file->f_path.dentry,
-// 				  "trusted.flags", xattr, xattr_size);
-// 	if (xattr_size <= 0) {
-// 		kvfree(xattr);
-// 		return false;
-// 	}
-
-// 	if (memcmp(xattr, "true", xattr_size)) {
-// 		return false;
-// 	}
-// 	return true;
-// }
-
 #endif /* CONFIG_ELF_SYSBOOST */
 
 static int load_elf_binary(struct linux_binprm *bprm)
@@ -1162,27 +1130,53 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long reloc_func_desc __maybe_unused = 0;
 	int executable_stack = EXSTACK_DEFAULT;
-	struct elfhdr *elf_ex = (struct elfhdr *)bprm->buf;
+	struct elfhdr *elf_ex;
 	struct elfhdr *interp_elf_ex = NULL;
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	struct mm_struct *mm;
 	struct pt_regs *regs;
+	struct dentry *dentry = d_find_alias(bprm->file->f_inode);
 
 #ifdef CONFIG_ELF_SYSBOOST
-	bool is_rto_format = false;
+	bool is_rto_format, is_rto_symbolic_link;
+	struct loaded_rto *loaded_rto = NULL;
+	struct list_head *preload_seg_pos = NULL;
+	struct loaded_seg *loaded_seg;
+	// TODO check rto inode!
 
-// load_rto:
+load_rto:
+	elf_ex = (struct elfhdr *)bprm->buf;
 	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
+	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
 	retval = -ENOEXEC;
 
 	/* close feature to rmmod this ko */
 	if (!use_rto) {
 		goto out;
 	}
-	if (!is_rto_format && !IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode)) {
+	if (!is_rto_format && !is_rto_symbolic_link) {
 		goto out;
 	}
-	pr_info("lyt enter rto\n");
+
+	/* replace app.rto file, then use binfmt */
+	if (is_rto_symbolic_link && !is_rto_format) {
+		struct inode *inode = bprm->file->f_inode;
+		loaded_rto = find_loaded_rto(bprm->file->f_inode);
+		int ret = try_replace_file(bprm);
+		if (ret) {
+			/* limit print */
+			printk("replace rto file fail, %d\n", ret);
+			goto out;
+		}
+		pr_info("replace rto file success, loaded_rto: 0x%lx, inode: 0x%lx\n",
+			loaded_rto, inode);
+		goto load_rto;
+	}
+
+	/* loading rto from now on */
+	if (debug) {
+		printk("exec in rto mode, is_rto_format %d\n", is_rto_format);
+	}
 #endif
 
 	/* First of all, some simple consistency checks */
@@ -1201,29 +1195,6 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	elf_phdata = load_elf_phdrs(elf_ex, bprm->file);
 	if (!elf_phdata)
 		goto out;
-
-// #ifdef CONFIG_ELF_SYSBOOST
-// 	/* replace app.rto file, then use binfmt */
-// 	if (check_elf_xattr(bprm)) {
-// 		int ret = try_replace_file(bprm);
-// 		if (!ret) {
-// 			if (elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO) {
-// 				goto load_rto;
-// 			} else {
-// 				goto out;
-// 			}
-// 		} else {
-// 			/* limit print */
-// 			printk("replace rto file fail, %d\n", ret);
-// 			goto out;
-// 		}
-// 	}
-// 	if (!is_rto_format && !(elf_ex->e_flags & OS_SPECIFIC_FLAG_HUGEPAGE))
-// 		goto out;
-// 	if (debug) {
-// 		printk("exec in rto mode, is_rto_format %d\n", is_rto_format);
-// 	}
-// #endif
 
 	elf_ppnt = elf_phdata;
 	for (i = 0; i < elf_ex->e_phnum; i++, elf_ppnt++) {
@@ -1392,6 +1363,8 @@ out_free_interp:
 	start_data = 0;
 	end_data = 0;
 
+	if (loaded_rto)
+		preload_seg_pos = &loaded_rto->segs;
 	/* Now we do a little grungy work by mmapping the ELF image into
 	   the correct location in memory. */
 	for(i = 0, elf_ppnt = elf_phdata;
@@ -1400,6 +1373,7 @@ out_free_interp:
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
 		unsigned long alignment;
+		unsigned long size, off;
 
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
@@ -1509,11 +1483,17 @@ out_free_interp:
 				PTR_ERR((void*)error) : -EINVAL;
 			goto out_free_dentry;
 		}
-		// size = elf_ppnt->p_filesz + ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
-		// off = elf_ppnt->p_offset - ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
-		// pr_info("lyt addr: 0x%lx, off: 0x%lx, size: 0x%lx, \n",
-		// 	load_bias + vaddr, off, size);
-		// rto_populate(bprm->file, error, off, size);
+		if (preload_seg_pos) {
+			preload_seg_pos = preload_seg_pos->next;
+			BUG_ON(preload_seg_pos == &loaded_rto->segs);
+			loaded_seg = list_entry(preload_seg_pos,
+						struct loaded_seg, list);
+			size = elf_ppnt->p_filesz + ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
+			off = elf_ppnt->p_offset - ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
+			pr_info("lyt vaddr: 0x%lx, vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
+				load_bias + vaddr, error, off, size);
+			// rto_populate(bprm->file, error, off, size, loaded_seg);
+		}
 
 		if (!load_addr_set) {
 			load_addr_set = 1;

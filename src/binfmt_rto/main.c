@@ -4,7 +4,6 @@
  */
 
 #include "main.h"
-#include "loader_device.h"
 #include "binfmt_rto.h"
 
 bool use_rto = false;

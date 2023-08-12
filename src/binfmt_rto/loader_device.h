@@ -21,3 +21,7 @@ void __exit loader_device_exit(void);
 
 #define S_SYSBOOST_RTO_SYMBOLIC_LINK		(1 << 31) /* has rto cache */
 #define IS_SYSBOOST_RTO_SYMBOLIC_LINK(inode)	((inode)->i_flags & S_SYSBOOST_RTO_SYMBOLIC_LINK)
+
+#define RTO_LOAD_FLAG_LOAD		0x1
+#define RTO_LOAD_FLAG_PRELOAD		0x2
+#define RTO_LOAD_FLAG_MAX		0x100
