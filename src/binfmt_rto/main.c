@@ -49,9 +49,12 @@ static int __init sysboost_loader_init(void)
 	if (ret)
 		goto error_rto;
 
+// TODO: x86 check_vma_flags found fail
+#ifdef CONFIG_ARM64
 	ret = rto_populate_init();
 	if (ret)
 		goto error_rto;
+#endif
 
 	ret = init_rto_binfmt();
 	if (ret)

@@ -1176,7 +1176,10 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	retval = -ENOEXEC;
 
 	/* close feature to rmmod this ko */
-	if (!use_rto || !IS_SYSBOOST_RTO(bprm->file->f_inode)) {
+	if (!use_rto) {
+		goto out;
+	}
+	if (!is_rto_format && !IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode)) {
 		goto out;
 	}
 	pr_info("lyt enter rto\n");
