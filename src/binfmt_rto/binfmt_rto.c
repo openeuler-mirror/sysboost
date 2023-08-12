@@ -68,6 +68,11 @@
 #define MM_SAVED_AUXV(mm) mm->saved_auxv
 #endif
 
+/* x86, 22.03 LTS map_vdso is undefine  */
+#ifndef map_vdso
+extern int map_vdso(const struct vdso_image *image, unsigned long addr);
+#endif
+
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
 #ifdef CONFIG_ARM64
@@ -1389,7 +1394,7 @@ out_free_interp:
 	for(i = 0, elf_ppnt = elf_phdata;
 	    i < elf_ex->e_phnum; i++, elf_ppnt++) {
 		int elf_prot, elf_flags;
-		unsigned long k, vaddr, size, off;
+		unsigned long k, vaddr;
 		unsigned long total_size = 0;
 		unsigned long alignment;
 
