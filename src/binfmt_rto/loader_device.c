@@ -205,12 +205,12 @@ static int do_loader_ioctl(char *rto_path)
 	inode = file->f_inode;
 
 	spin_lock(&inode->i_lock);
-	if (IS_SYSBOOST_RTO(inode)) {
+	if (IS_SYSBOOST_RTO_SYMBOLIC_LINK(inode)) {
 		iput(inode);
-		inode->i_flags &= ~S_SYSBOOST_RTO;
+		inode->i_flags &= ~S_SYSBOOST_RTO_SYMBOLIC_LINK;
 	} else {
 		ihold(inode);
-		inode->i_flags |= S_SYSBOOST_RTO;
+		inode->i_flags |= S_SYSBOOST_RTO_SYMBOLIC_LINK;
 	}
 	pr_info("lyt inode: 0x%pK, i_flags: 0x%x, i_count: %d\n",
 		inode, inode->i_flags, atomic_read(&inode->i_count));
