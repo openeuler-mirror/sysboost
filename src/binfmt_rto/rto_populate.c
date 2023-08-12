@@ -33,7 +33,9 @@
 #include <linux/page_owner.h>
 #include <linux/dynamic_hugetlb.h>
 
+#ifdef CONFIG_ARM64
 #include <asm/tlb.h>
+#endif
 #include <asm/pgalloc.h>
 
 #include "main.h"
@@ -56,7 +58,10 @@ static struct global_symbols {
 	proc_symbol(__pud_alloc);
 	proc_symbol(__anon_vma_prepare);
 	proc_symbol(__pmd_alloc);
-	
+#ifdef CONFIG_X86
+	proc_symbol(__p4d_alloc);
+	proc_symbol(pud_clear_bad);
+#endif
 } ppl_sym;
 
 #define proc_symbol_char(x) #x
@@ -66,7 +71,46 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(__pud_alloc),
 	proc_symbol_char(__anon_vma_prepare),
 	proc_symbol_char(__pmd_alloc),
+#ifdef CONFIG_X86
+	proc_symbol_char(__p4d_alloc),
+	proc_symbol_char(pud_clear_bad),
+#endif
 };
+
+#ifdef CONFIG_X86
+// p4d_alloc -> __p4d_alloc
+#define p4d_alloc rto_p4d_alloc
+static inline p4d_t *rto_p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
+		unsigned long address)
+{
+	return (unlikely(pgd_none(*pgd)) && ppl_sym.__p4d_alloc(mm, pgd, address)) ?
+		NULL : p4d_offset(pgd, address);
+}
+
+// pud_trans_unstable()
+//     pud_none_or_trans_huge_or_dev_or_clear_bad()
+//         pud_clear_bad()
+#define pud_trans_unstable rto_pud_trans_unstable
+
+static inline int rto_pud_none_or_trans_huge_or_dev_or_clear_bad(pud_t *pud)
+{
+	pud_t pudval = READ_ONCE(*pud);
+
+	if (pud_none(pudval) || pud_trans_huge(pudval) || pud_devmap(pudval))
+		return 1;
+	if (unlikely(pud_bad(pudval))) {
+		ppl_sym.pud_clear_bad(pud);
+		return 1;
+	}
+	return 0;
+}
+
+static inline int rto_pud_trans_unstable(pud_t *pud)
+{
+	return rto_pud_none_or_trans_huge_or_dev_or_clear_bad(pud);
+}
+
+#endif
 
 static int init_symbols(void)
 {
