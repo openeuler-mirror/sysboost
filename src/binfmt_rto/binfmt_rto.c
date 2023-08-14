@@ -100,6 +100,7 @@ static struct global_symbols {
 	proc_symbol(arch_align_stack);
 	proc_symbol(task_cputime);
 	proc_symbol(thread_group_cputime);
+	proc_symbol(do_mm_populate);
 } rto_sym;
 
 #define proc_symbol_char(x) #x
@@ -128,7 +129,8 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(dump_user_range),
 	proc_symbol_char(arch_align_stack),
 	proc_symbol_char(task_cputime),
-	proc_symbol_char(thread_group_cputime)
+	proc_symbol_char(thread_group_cputime),
+	proc_symbol_char(do_mm_populate),
 };
 
 static int init_symbols(void)
@@ -234,7 +236,7 @@ int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, un
 	// without ld.so
 	// vvar | vdso | app
 	if (debug)
-		printk("binfmt_rto: base 0x%lx vvar 0x%lx\n", load_bias, load_bias - ELF_VVAR_AND_VDSO_LEN);
+		printk("sysboost: base 0x%lx vvar 0x%lx\n", load_bias, load_bias - ELF_VVAR_AND_VDSO_LEN);
 	return rto_sym.map_vdso(rto_sym.vdso_image_64, load_bias - ELF_VVAR_AND_VDSO_LEN);
 }
 
@@ -818,7 +820,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 		load_addr = no_base - ELF_VVAR_AND_VDSO_LEN - ELF_PAGEALIGN(total_size);
 		load_addr_set = 1;
 		if (debug)
-			printk("binfmt_rto: base 0x%lx ld_so_addr 0x%lx total_size 0x%lx", no_base, load_addr, total_size);
+			printk("sysboost: base 0x%lx ld_so_addr 0x%lx total_size 0x%lx\n", no_base, load_addr, total_size);
 	}
 #endif
 
@@ -1138,6 +1140,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct dentry *dentry = d_find_alias(bprm->file->f_inode);
 
 #ifdef CONFIG_ELF_SYSBOOST
+	unsigned long rto_layout_start_addr = 0UL;
 	bool is_rto_format, is_rto_symbolic_link;
 	struct loaded_rto *loaded_rto = NULL;
 	struct list_head *preload_seg_pos = NULL;
@@ -1578,6 +1581,7 @@ out_free_interp:
 					    load_bias, interp_elf_phdata,
 					    &arch_state, is_rto_format);
 		if (!IS_ERR((void *)elf_entry)) {
+			rto_layout_start_addr = elf_entry;
 			/*
 			 * load_elf_interp() returns relocation
 			 * adjustment
@@ -1614,6 +1618,18 @@ out_free_interp:
 	if (retval < 0)
 		goto out;
 #endif /* ARCH_HAS_SETUP_ADDITIONAL_PAGES */
+
+#ifdef CONFIG_ELF_SYSBOOST
+	if (is_rto_format) {
+		// populate memory for no running pagefault
+		// elf_bss is last LOAD segment file end addr
+		// do not populate bss memory
+		unsigned long pop_len = ELF_PAGEALIGN(elf_bss) - rto_layout_start_addr;
+		if (debug)
+			printk("sysboost: start 0x%lx end 0x%lx len 0x%lx\n", rto_layout_start_addr, ELF_PAGEALIGN(elf_bss), pop_len);
+		rto_sym.do_mm_populate(current->mm, rto_layout_start_addr, pop_len, 1);
+	}
+#endif
 
 	retval = create_elf_tables(bprm, elf_ex, interp_load_addr,
 				   e_entry, phdr_addr);
