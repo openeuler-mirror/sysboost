@@ -19,13 +19,48 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include <si_debug.h>
 #include <si_log.h>
 
+#include "elf_hugepage.h"
 #include "elf_link_common.h"
 #include "elf_ext.h"
+
+int elf_set_symbolic_link(char *path, bool state)
+{
+	int fd_dev, fd_elf, ret = 0;
+	unsigned int cmd, nr = 0;
+
+	fd_dev = open("/dev/sysboost_loader", 0);
+	if (fd_dev == -1) {
+		SI_LOG_ERR("open sysboost_loader device fail\n");
+		return -1;
+	}
+	fd_elf = open(path, 0);
+	if (fd_elf == -1) {
+		SI_LOG_ERR("open %s fail\n", path);
+		ret = -1;
+		goto error_elf;
+	}
+
+	if (state)
+		nr |= RTO_LOAD_FLAG_LOAD | RTO_LOAD_FLAG_PRELOAD;
+
+	cmd = _IO(0, nr);
+
+	ret = ioctl(fd_dev, cmd, fd_elf);
+	if (ret) {
+		SI_LOG_ERR("ioctl error\n");
+	}
+
+	close(fd_elf);
+error_elf:
+	close(fd_dev);
+	return ret;
+}
 
 static int _elf_set_flags(char *path, unsigned int flags)
 {
@@ -67,14 +102,6 @@ static int _elf_unset_flags(char *path, unsigned int flags)
 	free(ef);
 	ef = NULL;
 	return 0;
-}
-
-int elf_set_symbolic_link(char *path, bool state)
-{
-	if (state) {
-		return _elf_set_flags(path, OS_SPECIFIC_FLAG_SYMBOLIC_LINK);
-	}
-	return _elf_unset_flags(path, OS_SPECIFIC_FLAG_SYMBOLIC_LINK);
 }
 
 int elf_set_rto(char *path, bool state)

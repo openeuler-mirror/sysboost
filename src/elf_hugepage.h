@@ -20,4 +20,7 @@ void elf_set_hugepage(elf_link_t *elf_link);
 int elf_set_symbolic_link(char *path, bool state);
 int elf_set_rto(char *path, bool state);
 
+#define RTO_LOAD_FLAG_LOAD		0x1
+#define RTO_LOAD_FLAG_PRELOAD		0x2
+
 #endif /* _ELF_HUGEPAGE_H */

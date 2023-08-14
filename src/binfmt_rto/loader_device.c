@@ -9,7 +9,6 @@
 #include <linux/mm.h>
 #include <asm/pgtable.h>
 #include "main.h"
-#include "loader_device.h"
 #include "binfmt_rto.h"
 
 static LIST_HEAD(loaded_rtos);
@@ -52,7 +51,7 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 	if (!loaded_seg)
 		return -ENOMEM;
 	
-	for (;;) {
+	for (; pos < end; ) {
 		page = alloc_pages(GFP_KERNEL | __GFP_ZERO, HUGETLB_PAGE_ORDER);
 		if (!page) {
 			ret = -ENOMEM;
@@ -70,9 +69,7 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 		}
 
 		list_add(&page->lru, &loaded_seg->hpages);
-		pr_info("load_seg: load 1\n");
-		if (pos >= end)
-			break;
+		pr_info("load_seg: load 1 hpage: 0x%lx\n", page);
 	}
 
 	list_add(&loaded_seg->list, &loaded_rto->segs);
@@ -113,7 +110,7 @@ static void loaded_rto_put(struct loaded_rto *loaded_rto)
 		loaded_rto_free(loaded_rto);
 }
 
-static int load_rto(struct file *file)
+static int preload_rto(struct file *file)
 {
 	int ret, i;
 	struct loaded_rto *loaded_rto;
@@ -121,17 +118,25 @@ static int load_rto(struct file *file)
 	unsigned long size, offset;
 	struct elfhdr *elf_ex;
 	struct elf_phdr *elf_ppnt, *elf_phdata;
+	struct file *rto_file;
+
+	rto_file = try_get_rto_file(file);
+	if (IS_ERR(rto_file)) {
+		return -ENOENT;
+	}
 
 	loaded_rto = loaded_rto_alloc(inode);
-	if (!loaded_rto)
-		return -ENOMEM;
+	if (!loaded_rto) {
+		ret = -ENOMEM;
+		goto error_alloc;
+	}
 
-	elf_ex = load_bprm_buf(file);
+	elf_ex = load_bprm_buf(rto_file);
 	if (IS_ERR(elf_ex)) {
 		ret = PTR_ERR(elf_ex);
 		goto error_bprm_buf;
 	}
-	elf_phdata = load_elf_phdrs(elf_ex, file);
+	elf_phdata = load_elf_phdrs(elf_ex, rto_file);
 	if (!elf_phdata) {
 		ret = -EIO;
 		goto error_phdrs;
@@ -143,13 +148,17 @@ static int load_rto(struct file *file)
 
 		size = elf_ppnt->p_filesz + ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
 		offset = elf_ppnt->p_offset - ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
-		ret = load_seg(file, loaded_rto, offset, size);
+		pr_info("load_seg, offset: 0x%lx, size: 0x%lx\n", offset, size);
+		ret = load_seg(rto_file, loaded_rto, offset, size);
 		if (ret)
 			goto error_seg;
 	}
 
+	list_add(&loaded_rtos, &loaded_rto->list);
+
 	kfree(elf_phdata);
 	kfree(elf_ex);
+	fput(rto_file);
 	return 0;
 
 error_seg:
@@ -158,6 +167,8 @@ error_phdrs:
 	kfree(elf_ex);
 error_bprm_buf:
 	loaded_rto_free(loaded_rto);
+error_alloc:
+	fput(rto_file);
 	return ret;
 }
 
@@ -175,40 +186,31 @@ struct loaded_rto *find_loaded_rto(struct inode *inode)
 	return result;
 }
 
-static void unload_rto(struct inode *inode)
-{
-	struct loaded_rto *loaded_rto;
+// static void unload_rto(struct inode *inode)
+// {
+// 	struct loaded_rto *loaded_rto;
 
-	loaded_rto = find_loaded_rto(inode);
-	if (!loaded_rto) {
-		pr_err("inode sysboost flag is set, but cannot find loaded_rto!\n");
-		return;
-	}
+// 	loaded_rto = find_loaded_rto(inode);
+// 	if (!loaded_rto) {
+// 		pr_err("inode sysboost flag is set, but cannot find loaded_rto!\n");
+// 		return;
+// 	}
 	
-	write_lock(&rtos_rwlock);
-	list_del(&loaded_rto->list);
-	write_unlock(&rtos_rwlock);
+// 	write_lock(&rtos_rwlock);
+// 	list_del(&loaded_rto->list);
+// 	write_unlock(&rtos_rwlock);
 
-	loaded_rto_put(loaded_rto);
-}
+// 	loaded_rto_put(loaded_rto);
+// }
 
-static int do_loader_ioctl(char *rto_path)
+static int load_rto(struct file *file, unsigned int flags)
 {
-	struct file *file;
-	struct inode *inode;
+	struct inode *inode = file->f_inode;
 	struct loaded_rto *loaded_rto;
-
-	file = filp_open(rto_path, O_LARGEFILE | O_RDONLY | __FMODE_EXEC, 0);
-	if (IS_ERR(file)) {
-		return PTR_ERR(file);
-	}
-	inode = file->f_inode;
+	int ret = 0;
 
 	spin_lock(&inode->i_lock);
-	if (IS_SYSBOOST_RTO_SYMBOLIC_LINK(inode)) {
-		iput(inode);
-		inode->i_flags &= ~S_SYSBOOST_RTO_SYMBOLIC_LINK;
-	} else {
+	if (!IS_SYSBOOST_RTO_SYMBOLIC_LINK(inode)) {
 		ihold(inode);
 		inode->i_flags |= S_SYSBOOST_RTO_SYMBOLIC_LINK;
 	}
@@ -216,39 +218,52 @@ static int do_loader_ioctl(char *rto_path)
 		inode, inode->i_flags, atomic_read(&inode->i_count));
 	spin_unlock(&inode->i_lock);
 
-
-	loaded_rto = find_loaded_rto(inode);
-	if (loaded_rto) {
-		pr_info("lyt find original rto, release it.\n");
-		unload_rto(inode);
-	} else {
-		load_rto(file);
+	if (flags & RTO_LOAD_FLAG_PRELOAD) {
+		loaded_rto = find_loaded_rto(inode);
+		if (!loaded_rto)
+			ret = preload_rto(file);
 	}
 
-	filp_close(file, NULL);
+	return ret;
+}
+
+static int unload_rto(struct file *file, unsigned int flags)
+{
+	struct inode *inode = file->f_inode;
+
+	spin_lock(&inode->i_lock);
+	if (IS_SYSBOOST_RTO_SYMBOLIC_LINK(inode)) {
+		iput(inode);
+		inode->i_flags &= ~S_SYSBOOST_RTO_SYMBOLIC_LINK;
+	}
+	pr_info("lyt inode: 0x%pK, i_flags: 0x%x, i_count: %d\n",
+		inode, inode->i_flags, atomic_read(&inode->i_count));
+	spin_unlock(&inode->i_lock);
 
 	return 0;
 }
 
 static long loader_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	int len = cmd;
+	unsigned int flags = _IOC_NR(cmd);
 	int ret = 0;
-	char *data = kmalloc(len + 1, GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
+	struct fd fd;
+	// struct file *rto_file;
 
-	ret = copy_from_user(data, (char *)arg, len);
-	if (ret)
+	fd = fdget(arg);
+	if (!fd.file) {
+		ret = -ENOENT;
 		goto out;
-	data[len] = '\0';
+	}
 
-	pr_info("lyt get ioctl, cmd: %d, arg: 0x%lx, data: %s\n", cmd, arg, data);
-
-	ret = do_loader_ioctl(data);
+	if (flags & RTO_LOAD_FLAG_LOAD) {
+		ret = load_rto(fd.file, flags);
+	} else {
+		ret = unload_rto(fd.file, flags);
+	}
 
 out:
-	kfree(data);
+	fdput(fd);
 	return ret;
 }
 
