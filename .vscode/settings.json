@@ -1,3 +1,10 @@
 {
-	"editor.tabSize": 8
+	"editor.tabSize": 8,
+	// rust不显示类型
+	"rust-analyzer.inlayHints.typeHints.enable": false,
+	"rust-analyzer.inlayHints.parameterHints.enable": false,
+	"rust-analyzer.hover.actions.debug.enable": false,
+	// rust不显示透镜按钮 Run Test等
+	"rust-analyzer.lens.debug.enable": false,
+	"rust-analyzer.lens.enable": false,
 }

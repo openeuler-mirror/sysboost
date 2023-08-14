@@ -250,5 +250,29 @@ mod tests {
 		let bak_path = "/usr/lib64/libtinfo.so.bak";
 		assert!(fs::metadata(bak_path).unwrap().is_file());
 	}
+
+	// cargo test --test test_sysboostd -- tests::test_symbolic_link --exact --nocapture
+	// 测试命令是否正确设置链接flag
+	// sysboost -s /usr/bin/bash
+	// 设置后, 执行 bash &
+	// 观察点: /proc/pid/maps 里面包含 bash.rto 文件路径
+	#[test]
+	fn test_symbolic_link() {
+		Command::new("sysboost").arg("-s").arg("/usr/bin/bash").output().expect("Failed to execute command");
+		let child = Command::new("bash").arg("&").spawn().expect("Failed to execute command");
+		let c_pid = child.id();
+		let maps_path = format!("/proc/{}/maps", c_pid);
+		let output = Command::new("cat").arg(maps_path).output().expect("Failed to execute command");
+		if output.status.success() {
+			let stdout = String::from_utf8_lossy(&output.stdout);
+			let maps_str = stdout.trim();
+			let is_con = maps_str.contains("bash.rto");
+			assert!(is_con, "contains bash.rto, \n{}", maps_str);
+		} else {
+			assert!(false, "output is fail");
+		}
+
+		Command::new("kill").arg("-9").arg(c_pid.to_string()).output().expect("Failed to execute command");
+	}
 }
 

@@ -1,7 +1,9 @@
 .PHONY: all clean test
 
-SYSBOOSTD=./target/debug/sysboostd
-SYSBOOST=../build/sysboost/sysboost
+ROOT_DIR=.
+SYSBOOSTD=$(ROOT_DIR)/target/debug/sysboostd
+BUILD_DIR=$(ROOT_DIR)/build
+SYSBOOST=$(BUILD_DIR)/src/sysboost
 SYSBOOSTD_INSTALL_PATH=/usr/bin/sysboostd
 SYSBOOST_INSTALL_PATH=/usr/bin/sysboost
 
@@ -36,10 +38,12 @@ format:
 	meson --internal clangformat ./ ./build
 	cargo fmt
 
-test: sysboostd
-	clear
+install:
 	cp -f $(SYSBOOSTD) $(SYSBOOSTD_INSTALL_PATH)
 	cp -f $(SYSBOOST) $(SYSBOOST_INSTALL_PATH)
+
+test: sysboostd install
+	clear
 	cargo test
 
 test-debug:
