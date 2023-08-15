@@ -58,6 +58,18 @@ impl FromStr for RtoConfig {
 	}
 }
 
+fn move_file(new_path: &String, old_path: &String) -> i32 {
+	match fs::rename(&new_path, &old_path) {
+		Ok(_) => {}
+		Err(e) => {
+			log::error!("move file failed: {}", e);
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
 fn is_symlink(path: &PathBuf) -> bool {
 	let file_type = match fs::symlink_metadata(path) {
 		Ok(metadata) => metadata.file_type(),
@@ -168,19 +180,29 @@ fn set_ko_rto_flag(is_set: bool) -> i32 {
 	return ret;
 }
 
+// 生成rto文件
+// rto文件先生成到临时文件, 然后mv到最终路径, 避免并发操作文件问题
+// sysboost --output=/usr/bin/bash.tmp.rto -static /usr/bin/bash lib1 lib2
 fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	if let Some(_p) = &conf.profile_path.clone() {
 		log::error!("Configuration file fail");
 		return -1;
 	}
+
 	let mut args: Vec<String> = Vec::new();
-	let arg_mode = format!("-{}", conf.mode);
-	args.push(arg_mode);
+	args.push(format!("--output={}.tmp.rto", conf.elf_path));
+	args.push(format!("-{}", conf.mode));
 	args.push(conf.elf_path.to_owned());
 	for lib in conf.libs.iter() {
 		args.push(lib.split_whitespace().collect());
 	}
-	return run_child(SYSBOOST_PATH, &args);
+	let mut ret = run_child(SYSBOOST_PATH, &args);
+	if ret != 0 {
+		return ret;
+	}
+
+	ret = move_file(&format!("{}.rto", conf.elf_path), &format!("{}.tmp.rto", conf.elf_path));
+	return ret;
 }
 
 fn bolt_optimize(conf: &RtoConfig) -> i32 {
@@ -433,7 +455,7 @@ fn find_libs(conf: &RtoConfig, elf: &Elf) -> Vec<String> {
 	}
 }
 
-//TODO: Supports hybrid mode, for example, use bolt to optimize dynamic library and then use static to merge them
+// TODO: use bolt to optimize dynamic library and then merge them
 fn sysboost_core_process(conf: &RtoConfig) -> i32 {
 	match conf.mode.as_str() {
 		"bolt" => {

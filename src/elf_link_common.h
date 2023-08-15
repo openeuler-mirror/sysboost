@@ -291,4 +291,7 @@ void append_symbol_mapping(elf_link_t *elf_link, const char *symbol_name, unsign
 unsigned long get_new_addr_by_symbol_mapping(elf_link_t *elf_link, char *symbol_name);
 void init_symbol_mapping(elf_link_t *elf_link);
 
+// common
+bool is_empty_path(const char *path);
+
 #endif /* _ELF_LINK_COMMON_H */

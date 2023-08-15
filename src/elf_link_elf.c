@@ -23,7 +23,7 @@
 
 #include <si_debug.h>
 #include <si_log.h>
-#include "si_array.h"
+#include <si_array.h>
 
 #include "elf_check_elf.h"
 #include "elf_hugepage.h"
@@ -139,7 +139,7 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode)
 
 static int elf_link_prepare(elf_link_t *elf_link)
 {
-	char name[PATH_MAX] = {0};
+	char path[PATH_MAX] = {0};
 
 	if (elf_link->link_mode == ELF_LINK_SHARE && elf_link->hook_func) {
 		elf_link->hook_func_ef = elf_link_add_infile(elf_link, RELOCATION_ROOT_DIR "/libhook.so.relocation");
@@ -152,10 +152,25 @@ static int elf_link_prepare(elf_link_t *elf_link)
 		return 0;
 	}
 
-	// out file name is app.rto (RunTime Optimization)
+	// sysboostd 指定ouput临时路径, 避免使用ELF文件的并发操作
+	bool is_empty = is_empty_path(elf_link->out_ef.file_name);
 	elf_file_t *main_ef = get_main_ef(elf_link);
-	(void)snprintf(name, sizeof(name) - 1, "%s.rto", main_ef->file_name);
-	return create_elf_file(name, &elf_link->out_ef);
+	if (is_empty) {
+		// out file name is app.rto (RunTime Optimization)
+		(void)snprintf(path, sizeof(path) - 1, "%s.rto", main_ef->file_name);
+	} else {
+		(void)strncpy(path, elf_link->out_ef.file_name, PATH_MAX - 1);
+	}
+
+	// mode and owner no change
+	struct stat sb;
+	int ret = fstat(main_ef->fd, &sb);
+	if (ret != 0) {
+		SI_LOG_ERR("fstat fail, %d\n", errno);
+		return -1;
+	}
+
+	return create_elf_file(path, &elf_link->out_ef, sb.st_mode, sb.st_uid, sb.st_gid);
 }
 
 elf_file_t *elf_link_add_infile(elf_link_t *elf_link, char *path)

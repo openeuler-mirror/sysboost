@@ -45,16 +45,18 @@ bash:
 	make -C $(ROOT_DIR)
 	$(SYSBOOSTD) --test-kmod
 	@echo ===rto===
-	$(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO) $(LIBC)
+	$(SYSBOOST) --output=bash.tmp.rto $(MODE) $(BASH) $(LIBTINFO) $(LIBC)
+	mv -f bash.tmp.rto $(BASH).rto
 	readelf -W -a $(BASH).rto > bash.rto.elf
 	objdump -d $(BASH).rto > bash.rto.asm
 	readelf -W -s $(BASH).rto > bash.rto.dynsym.elf
 	readelf -W -s $(LIBC_R) > libc.so.dynsym.elf
 	@echo ===run===
 	$(BASH).rto -c "echo 1"
+	$(BASH).rto -c "printenv LANG"
 
 rto:
-	gdb --args $(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO) $(LIBC)
+	gdb --args  $(SYSBOOST) --output=bash.tmp.rto $(MODE) $(BASH) $(LIBTINFO) $(LIBC)
 
 else
 
@@ -72,6 +74,7 @@ bash:
 	objdump -d $(BASH).rto > bash.rto.asm
 	@echo ===run===
 	$(BASH).rto -c "echo 1"
+	$(BASH).rto -c "printenv LANG"
 
 rto:
 	gdb --args $(SYSBOOST) $(MODE) $(BASH) $(LIBTINFO)
@@ -79,7 +82,7 @@ rto:
 endif
 
 run:
-	gdb --args $(BASH).rto -c "echo 1"
+	gdb --args $(BASH).rto -c "printenv LANG"
 
 env:
 	echo 0 > /proc/sys/kernel/randomize_va_space

@@ -39,7 +39,13 @@ int main(int argc, char *argv[])
 	bool debug = false;
 	enum RtoMode mode = ELF_LINK_SHARE;
 
+	if (elf_link == NULL) {
+		SI_LOG_ERR("no memory\n");
+		return -1;
+	}
+
 	static struct option long_options[] = {
+	    {"output", required_argument, NULL, 'o'},
 	    {"debug", no_argument, NULL, 'd'},
 	    {"set", required_argument, NULL, 's'},
 	    {"unset", required_argument, NULL, 'u'},
@@ -49,12 +55,16 @@ int main(int argc, char *argv[])
 	    {ELF_LINK_STATIC_S, no_argument, NULL, 'S'},
 	    {ELF_LINK_STATIC_NOLIBC_S, no_argument, NULL, 'N'},
 	    {ELF_LINK_STATIC_NOLD_S, no_argument, NULL, 'I'},
-	    {NULL, 0, NULL, 0}};
+	    {NULL, 0, NULL, 0}
+	};
 
 	int option_index = 0;
 	int c;
 	while ((c = getopt_long(argc, argv, "ds:u:hSNI", long_options, &option_index)) != -1) {
 		switch (c) {
+		case 'o':
+			elf_link->out_ef.file_name = optarg;
+			break;
 		case 'd':
 			debug = true;
 			break;

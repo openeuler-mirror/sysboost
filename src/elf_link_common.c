@@ -41,6 +41,19 @@
 #define INDEX_SIX   6
 #define INDEX_SEVEN 7
 
+bool is_empty_path(const char *path)
+{
+	if (path == NULL) {
+		return true;
+	}
+
+	if (path[0] == '\0') {
+		return true;
+	}
+
+	return false;
+}
+
 static char *special_dynsyms[] = {
     "__pointer_chk_guard",
     "_ITM_deregisterTMCloneTable",

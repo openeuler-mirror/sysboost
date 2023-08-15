@@ -526,15 +526,23 @@ void merge_data_relro_sections(elf_link_t *elf_link)
 	merge_got_section(elf_link);
 }
 
-int create_elf_file(char *file_name, elf_file_t *elf_file)
+int create_elf_file(char *file_name, elf_file_t *elf_file, mode_t mode, uid_t owner, gid_t group)
 {
+// max output file len
 #define MAX_ELF_FILE_LEN (0x100000 * 512)
+
 	size_t len = MAX_ELF_FILE_LEN;
-	int fd = open(file_name, O_CREAT | O_RDWR, 0744);
+	int fd = open(file_name, O_CREAT | O_RDWR, mode);
 	size_t ret;
 
 	if (fd == -1) {
 		si_panic("open fail %d\n ", errno);
+		return -1;
+	}
+
+	if (fchown(fd, owner, group) != 0) {
+		si_panic("fchown fail %d\n ", errno);
+		close(fd);
 		return -1;
 	}
 
