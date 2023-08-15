@@ -214,9 +214,10 @@ static int load_rto(struct file *file, unsigned int flags)
 		ihold(inode);
 		inode->i_flags |= S_SYSBOOST_RTO_SYMBOLIC_LINK;
 	}
+	spin_unlock(&inode->i_lock);
+
 	pr_info("lyt inode: 0x%pK, i_flags: 0x%x, i_count: %d\n",
 		inode, inode->i_flags, atomic_read(&inode->i_count));
-	spin_unlock(&inode->i_lock);
 
 	if (flags & RTO_LOAD_FLAG_PRELOAD) {
 		loaded_rto = find_loaded_rto(inode);

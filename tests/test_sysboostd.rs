@@ -251,6 +251,20 @@ mod tests {
 		assert!(fs::metadata(bak_path).unwrap().is_file());
 	}
 
+	fn kill_pid(pid: u32) {
+		match Command::new("kill").arg("-9").arg(pid.to_string()).output() {
+			Ok(_) => return,
+			Err(_) => return
+		}
+	}
+
+	fn read_file(path: &str) -> String {
+		match fs::read_to_string(path) {
+			Ok(content) => content,
+			Err(_) => String::new(),
+		}
+	}
+
 	// cargo test --test test_sysboostd -- tests::test_symbolic_link --exact --nocapture
 	// 测试命令是否正确设置链接flag
 	// sysboost -s /usr/bin/bash
@@ -258,21 +272,18 @@ mod tests {
 	// 观察点: /proc/pid/maps 里面包含 bash.rto 文件路径
 	#[test]
 	fn test_symbolic_link() {
-		Command::new("sysboost").arg("-s").arg("/usr/bin/bash").output().expect("Failed to execute command");
+		let mut child = Command::new("sysboost").arg("-s").arg("/usr/bin/bash").spawn().expect("Failed to execute command");
+		let ret = child.wait().expect("wait child fail").code().expect("get return value fail");
+		assert!(ret == 0, "command fail, ret={}", ret);
+
 		let child = Command::new("bash").arg("&").spawn().expect("Failed to execute command");
 		let c_pid = child.id();
-		let maps_path = format!("/proc/{}/maps", c_pid);
-		let output = Command::new("cat").arg(maps_path).output().expect("Failed to execute command");
-		if output.status.success() {
-			let stdout = String::from_utf8_lossy(&output.stdout);
-			let maps_str = stdout.trim();
-			let is_con = maps_str.contains("bash.rto");
-			assert!(is_con, "contains bash.rto, \n{}", maps_str);
-		} else {
-			assert!(false, "output is fail");
-		}
 
-		Command::new("kill").arg("-9").arg(c_pid.to_string()).output().expect("Failed to execute command");
+		let maps_path = format!("/proc/{}/maps", c_pid);
+		let contents = read_file(maps_path.as_str());
+		assert!(contents.contains("bash.rto"), "contains bash.rto, \n{}", contents);
+
+		kill_pid(c_pid);
 	}
 }
 
