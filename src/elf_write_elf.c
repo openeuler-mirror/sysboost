@@ -157,6 +157,29 @@ static Elf64_Shdr *add_tmp_section(elf_link_t *elf_link, elf_file_t *ef, Elf64_S
 	return dst_sec;
 }
 
+static Elf64_Shdr *find_sec_exclude_main_ef(elf_link_t *elf_link, const char *name, elf_file_t **lef)
+{
+	int in_ef_nr = elf_link->in_ef_nr;
+	elf_file_t *ef = NULL;
+	Elf64_Shdr *sec = NULL;
+	elf_file_t *main_ef = get_main_ef(elf_link);
+
+	for (int i = 0; i < in_ef_nr; i++) {
+		ef = &elf_link->in_efs[i];
+		if (ef == main_ef) {
+			continue;
+		}
+		sec = elf_find_section_by_name(ef, name);
+		if (sec == NULL) {
+			continue;
+		}
+		*lef = ef;
+		return sec;
+	}
+
+	return NULL;
+}
+
 static Elf64_Shdr *add_tmp_section_by_name(elf_link_t *elf_link, const char *name)
 {
 	int in_ef_nr = elf_link->in_ef_nr;
@@ -176,6 +199,19 @@ static Elf64_Shdr *add_tmp_section_by_name(elf_link_t *elf_link, const char *nam
 		}
 		// found
 		break;
+	}
+
+	// move _init_first to .preinit_array
+	if (is_need_preinit(elf_link) && is_preinit_name(name)) {
+		if (sec) {
+			si_panic(".preinit_array not supported\n");
+		}
+		sec = find_sec_exclude_main_ef(elf_link, ".init_array", &ef);
+		if (sec == NULL) {
+			return NULL;
+		}
+		elf_link->preinit_sec = add_tmp_section(elf_link, ef, sec);
+		return elf_link->preinit_sec;
 	}
 
 	if (sec == NULL) {
@@ -277,6 +313,10 @@ static bool is_merge_libc_first(elf_link_t *elf_link, Elf64_Shdr *tmp_sec, const
 		return true;
 	}
 
+	if (is_init_name(name)) {
+		return true;
+	}
+
 	return false;
 }
 
@@ -337,15 +377,15 @@ Elf64_Shdr *merge_all_ef_section(elf_link_t *elf_link, const char *name)
 	return elf_merge_section(elf_link, tmp_sec, name, false);
 }
 
-Elf64_Shdr *merge_libs_ef_section(elf_link_t *elf_link, const char *name)
+Elf64_Shdr *merge_libs_ef_section(elf_link_t *elf_link, const char *dst_name, const char *src_name)
 {
-	Elf64_Shdr *tmp_sec = add_tmp_section_by_name(elf_link, name);
+	Elf64_Shdr *tmp_sec = add_tmp_section_by_name(elf_link, dst_name);
 	if (tmp_sec == NULL) {
-		si_panic("section is not needed, %s\n", name);
+		si_panic("section is not needed, %s\n", dst_name);
 		return NULL;
 	}
 
-	return elf_merge_section(elf_link, tmp_sec, name, true);
+	return elf_merge_section(elf_link, tmp_sec, src_name, true);
 }
 
 static void append_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t *ef, Elf64_Shdr *sec)
@@ -478,6 +518,15 @@ static int foreach_merge_section_by_name(const void *item, void *pridata)
 {
 	const char *name = item;
 	elf_link_t *elf_link = pridata;
+
+	// add .preinit_array section for libc init func
+	if (is_need_preinit(elf_link) && is_init_name(name)) {
+		merge_libs_ef_section(elf_link, ".preinit_array", ".init_array");
+
+		// .init_array
+		merge_template_ef_section(elf_link, name);
+		return 0;
+	}
 
 	merge_all_ef_section(elf_link, name);
 	return 0;
