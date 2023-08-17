@@ -52,7 +52,7 @@ bash:
 	readelf -W -s $(BASH).rto > bash.rto.dynsym.elf
 	readelf -W -s $(LIBC_R) > libc.so.dynsym.elf
 	@echo ===run===
-	$(BASH).rto -c "echo 1"
+	#$(BASH).rto -c "echo 1"
 	$(BASH).rto -c "printenv LANG"
 
 rto:
@@ -96,6 +96,12 @@ env:
 	readelf -W -a $(LIBLD) > ld.so.elf
 	objdump -d $(LIBLD) > ld.so.asm
 	LD_DEBUG=all $(BASH) -c "echo 1" &> bash.ld.log
+
+testenv:
+	echo 0 > /proc/sys/kernel/randomize_va_space
+	cat /proc/sys/kernel/randomize_va_space
+	echo 0 > /sys/module/sysboost_loader/parameters/debug
+	cat /sys/module/sysboost_loader/parameters/debug
 
 # test dlopen load so
 ld:
