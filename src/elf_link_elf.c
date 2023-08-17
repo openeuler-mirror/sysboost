@@ -708,6 +708,31 @@ static int dynamic_merge_lib(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len
 	return len;
 }
 
+// .dynamic is merge all elf, so mem space is enough
+static int dynamic_add_preinit(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
+{
+	if (is_need_preinit(elf_link) == false) {
+		return len;
+	}
+
+	Elf64_Shdr *sec = elf_link->preinit_sec;
+	if (sec == NULL) {
+		si_panic("not found .preinit_array\n");
+	}
+
+	Elf64_Dyn *dst_dyn = &begin_dyn[len];
+	dst_dyn->d_tag = DT_PREINIT_ARRAY;
+	dst_dyn->d_un.d_val = sec->sh_addr;
+	len++;
+
+	dst_dyn++;
+	dst_dyn->d_tag = DT_PREINIT_ARRAYSZ;
+	dst_dyn->d_un.d_val = sec->sh_size;
+	len++;
+
+	return len;
+}
+
 static void dynamic_copy_dyn(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Dyn *src_dyn, Elf64_Dyn *dst_dyn)
 {
 	dst_dyn->d_tag = src_dyn->d_tag;
@@ -912,6 +937,9 @@ static void scan_dynamic(elf_link_t *elf_link)
 
 	// DT_SONAME
 	len = dynamic_add_obj_from_libc(elf_link, begin_dyn, len);
+
+	// DT_PREINIT_ARRAY
+	len = dynamic_add_preinit(elf_link, begin_dyn, len);
 
 	// new addr of INIT FINI  STRTAB  SYMTAB
 	len = dynamic_copy_obj(elf_link, begin_dyn, len);

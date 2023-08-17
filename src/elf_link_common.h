@@ -107,6 +107,9 @@ typedef struct {
 	bool hook_func;
 	unsigned long so_path_struct;
 
+	// .preinit_array can not find by name
+	Elf64_Shdr *preinit_sec;
+
 	//elf_sysboost_data_t *sysboost_data;
 	Elf64_Shdr *sysboost_data_sec;
 } elf_link_t;
@@ -159,7 +162,6 @@ static inline bool is_static_nolibc_mode(elf_link_t *elf_link)
 	return elf_link->link_mode == ELF_LINK_STATIC_NOLIBC;
 }
 
-// libc _init_first is in .init_array, must run before _start
 // libc __libc_early_init need init before .init_array
 // dl_main(phdr, phnum, user_entry, auxv)
 //     _dl_call_libc_early_init (GL(dl_ns)[LM_ID_BASE].libc_map, true);
@@ -173,6 +175,36 @@ static inline bool is_static_nolibc_mode(elf_link_t *elf_link)
 static inline bool is_static_nold_mode(elf_link_t *elf_link)
 {
 	return elf_link->link_mode == ELF_LINK_STATIC_NOLD;
+}
+
+// libc _init_first is in .init_array, must run before app _start
+// _init_first 中赋值libc的环境变量 __environ
+// _init_first 函数执行需要移动到 .preinit_array
+static inline bool is_need_preinit(elf_link_t *elf_link)
+{
+	if (is_static_nold_mode(elf_link)) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool is_init_name(const char *name)
+{
+	if (strcmp(name, ".init_array") == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static inline bool is_preinit_name(const char *name)
+{
+	if (strcmp(name, ".preinit_array") == 0) {
+		return true;
+	}
+
+	return false;
 }
 
 static inline bool is_hook_func(elf_link_t *elf_link)
