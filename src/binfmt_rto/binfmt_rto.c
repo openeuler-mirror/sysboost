@@ -572,15 +572,11 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 	*/
 	if (total_size) {
 		total_size = ELF_PAGEALIGN(total_size);
-		pr_info("vm_mmap, addr: %lx, total_size: %lx, off: %lx", 
-			addr, total_size, off);
 		map_addr = vm_mmap(filep, addr, total_size, prot, type, off);
 		if (!BAD_ADDR(map_addr))
 			vm_munmap(map_addr+size, total_size-size);
 	} else {
 		map_addr = vm_mmap(filep, addr, size, prot, type, off);
-		pr_info("vm_mmap, addr: %lx, size: %lx, off: %lx", 
-			addr, size, off);
 	}
 
 	if ((type & MAP_FIXED_NOREPLACE) &&
