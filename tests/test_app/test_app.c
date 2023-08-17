@@ -30,6 +30,24 @@ __thread int g_thread_count;
 __thread int g_thread_count2 = 2;
 __thread const int g_thread_count3 = 3;
 
+// Function to handle dlsym errors
+void handle_dlsym_error(const char *error)
+{
+        if (error != NULL) {
+            fprintf(stderr, "Error during dlsym: %s\n", error);
+            exit(EXIT_FAILURE);
+        }
+}
+
+// Function to handle dlopen errors
+void handle_dlopen_error(const char *error)
+{
+        if (error != NULL) {
+            fprintf(stderr, "Error during dlopen: %s\n", error);
+            exit(EXIT_FAILURE);
+        }
+}
+
 void *thread1(void *junk)
 {
 	(void)junk;
@@ -105,22 +123,14 @@ void test_dlsym_from_lib(void)
 	char *error;
 
 	handle = dlopen("./libutil1.so", RTLD_NOW);
-	if (!handle) {
-		fprintf(stderr, "%s\n", dlerror());
-		return;
-	}
-	dlerror();
+        handle_dlopen_error(dlerror());
 
-	// lookup function from lib
-	add_func = dlsym(handle, "lib1_add");
-	error = dlerror();
-	if (error != NULL) {
-		fprintf(stderr, "%s\n", error);
-		return;
-	}
+        add_func = dlsym(handle, "lib1_add");
+        handle_dlsym_error(dlerror());
 
-	printf("test_dlsym_from_lib: %d\n", add_func(1, 2));
-	dlclose(handle);
+        printf("test_dlsym_from_lib: %d\n", add_func(1, 2));
+
+        dlclose(handle);
 }
 
 void test_dlsym_any(void)
@@ -130,13 +140,9 @@ void test_dlsym_any(void)
 
 	// lookup function from anywhere
 	add_func = dlsym(RTLD_DEFAULT, "lib1_add");
-	error = dlerror();
-	if (error != NULL) {
-		fprintf(stderr, "%s\n", error);
-		return;
-	}
+	handle_dlsym_error(dlerror());
 
-	printf("test_dlsym_any: %d\n", add_func(1, 2));
+        printf("test_dlsym_any: %d\n", add_func(1, 2));
 }
 
 void test_dlsym(void)
