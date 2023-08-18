@@ -15,6 +15,10 @@ int debug = 0;
 module_param(debug, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "debug mode");
 
+bool populate = false;
+module_param(populate, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(populate, "populate memory");
+
 kallsyms_lookup_name_kprobe_t klookupf;
 
 static int init_kallsyms_lookup_name(void)

@@ -1623,7 +1623,8 @@ out_free_interp:
 		unsigned long pop_len = ELF_PAGEALIGN(elf_bss) - rto_layout_start_addr;
 		if (debug)
 			printk("sysboost: start 0x%lx end 0x%lx len 0x%lx\n", rto_layout_start_addr, ELF_PAGEALIGN(elf_bss), pop_len);
-		rto_sym.do_mm_populate(current->mm, rto_layout_start_addr, pop_len, 1);
+		if (populate)
+			rto_sym.do_mm_populate(current->mm, rto_layout_start_addr, pop_len, 1);
 	}
 #endif
 
