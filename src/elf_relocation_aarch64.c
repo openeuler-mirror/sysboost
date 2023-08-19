@@ -140,10 +140,22 @@ static inline bool is_adrp_instruction(unsigned binary)
 // |size |                 | opc |
 // For the 64-bit variant: the positive immediate byte offset is a multiple of 8 in the range 0 to 32760, defaulting to 0
 // and encoded in the "imm12" field as <pimm>/8.
+//
+// LDR (immediate, SIMD&FP)
+// Unsigned offset:
+// 64-bit (size == 11)
+// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
+// |x |x |1 |1 |1 |1 |0 |1 |x |1 |              imm12                |    Rn   |    Rt   |
+// |size |                 | opc |
+// 32-bit (size == 10 && opc == 01), 64-bit (size == 11 && opc == 01)
+// For the 64-bit variant: the positive immediate byte offset is a multiple of 8 in the range 0 to 32760, defaulting to 0
+// and encoded in the "imm12" field as <pimm>/8.
 
 #define REG_LEN_LDST (REG_LEN * 2)
 #define IMM_LEN_LDST 12
 #define IMM_MASK_LDST (((1UL << IMM_LEN_LDST) - 1) << REG_LEN_LDST)
+// LDR (immediate, SIMD&FP), Unsigned offset
+#define OPCODE_LDR_64_iSFU (0x3F5U << 22)
 #define OPCODE_LDR_64 (0x3E5U << 22)
 #define OPCODE_LDR_32 (0x2E5U << 22)
 #define OPCODE_LDR_16 (0x1E7U << 22)
@@ -167,7 +179,8 @@ static unsigned get_ldr_Rn(unsigned binary)
 static unsigned get_ldr_addr(unsigned binary)
 {
 	unsigned opcode = binary & OPCODE_LDST_MASK;
-	if (opcode != OPCODE_LDR_64 && opcode != OPCODE_STR_64 && opcode != OPCODE_LDRB && opcode != OPCODE_STRB) {
+	if (opcode != OPCODE_LDR_64 && opcode != OPCODE_STR_64 && opcode != OPCODE_LDRB && opcode != OPCODE_STRB &&
+	    opcode != OPCODE_LDR_64_iSFU) {
 		si_panic("this LD/ST is not unsigned 64bit mode, opcode %x binary %x\n", opcode, binary);
 		return 0;
 	}
@@ -182,7 +195,7 @@ static unsigned gen_ldst_binary_inpage(unsigned obj_addr, unsigned binary)
 {
 	obj_addr &= IN_PAGE;
 	unsigned opcode = binary & OPCODE_LDST_MASK;
-	if (opcode == OPCODE_LDR_64 || opcode == OPCODE_STR_64) {
+	if (opcode == OPCODE_LDR_64 || opcode == OPCODE_STR_64 || opcode == OPCODE_LDR_64_iSFU) {
 		obj_addr >>= THREE_BIT_LEN;
 	} else if (opcode == OPCODE_LDR_32 || opcode == OPCODE_STR_32) {
 		obj_addr >>= TWO_BIT_LEN;
@@ -590,6 +603,7 @@ static void modify_new_special_insn(elf_link_t *elf_link, elf_file_t *ef, Elf64_
 	unsigned long new_insn = 0;
 	switch (opcode) {
 	case OPCODE_LDR_64:
+	case OPCODE_LDR_64_iSFU:
 	case OPCODE_LDR_32:
 	case OPCODE_STR_64:
 	case OPCODE_STR_32:
@@ -813,7 +827,7 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		// 118e0:	f0000080 	adrp	x0, 24000 <_nc_tinfo_fkeys+0x1d0>
 		// 118ec:	3dc0bc00 	ldr	q0, [x0, #752]
 		if (is_special_symbol_redirection(ef, rela, sym)) {
-			 modify_new_special_insn(elf_link, ef, rela, sym);
+			modify_new_special_insn(elf_link, ef, rela, sym);
 		}
 		return 0;
 	case R_AARCH64_LD64_GOT_LO12_NC:
