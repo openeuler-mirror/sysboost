@@ -1360,7 +1360,7 @@ static void modify_init_and_fini(elf_link_t *elf_link)
 static void do_special_adapts(elf_link_t *elf_link)
 {
 	modify_init_and_fini(elf_link);
-	correct_stop_libc_atexit(elf_link);
+	// correct_stop_libc_atexit(elf_link);
 }
 
 // merge per section
