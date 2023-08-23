@@ -51,6 +51,8 @@
 #include <asm/page.h>
 #ifdef CONFIG_X86
 #include <asm/vdso.h>
+/* x86, 22.03 LTS map_vdso is undefine  */
+extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 #endif
 #include "main.h"
 #include "binfmt_rto.h"
@@ -65,11 +67,6 @@
 /* compat 22.03 LTS, 22.03 LTS SP2 */
 #ifndef MM_SAVED_AUXV
 #define MM_SAVED_AUXV(mm) mm->saved_auxv
-#endif
-
-/* x86, 22.03 LTS map_vdso is undefine  */
-#ifndef map_vdso
-extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 #endif
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
@@ -265,7 +262,7 @@ int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, un
 #define elf_check_fdpic(ex) false
 #endif
 
-static int load_elf_binary(struct linux_binprm *bprm);
+static int load_rto_binary(struct linux_binprm *bprm);
 
 #ifdef CONFIG_USELIB
 static int load_elf_library(struct file *);
@@ -289,7 +286,7 @@ static int elf_core_dump(struct coredump_params *cprm);
 
 static struct linux_binfmt elf_format = {
 	.module		= THIS_MODULE,
-	.load_binary	= load_elf_binary,
+	.load_binary	= load_rto_binary,
 	.load_shlib	= load_elf_library,
 	.core_dump	= elf_core_dump,
 	.min_coredump	= ELF_EXEC_PAGESIZE,
@@ -299,8 +296,14 @@ static struct linux_binfmt elf_format = {
 
 static int set_brk(unsigned long start, unsigned long end, int prot)
 {
-	start = ELF_PAGEALIGN(start);
-	end = ELF_PAGEALIGN(end);
+	// pr_info("enter set_brk, start: 0x%lx, end: 0x%lx\n", start, end);
+	if (use_hpage) {
+		start = ELF_HPAGEALIGN(start);
+		end = ELF_HPAGEALIGN(end);
+	} else {
+		start = ELF_PAGEALIGN(start);
+		end = ELF_PAGEALIGN(end);
+	}
 	if (end > start) {
 		/*
 		 * Map the last of the bss segment.
@@ -311,6 +314,7 @@ static int set_brk(unsigned long start, unsigned long end, int prot)
 				prot & PROT_EXEC ? VM_EXEC : 0);
 		if (error)
 			return error;
+		// pr_info("set_brk: 0x%lx-0x%lx\n", start, end);
 	}
 	current->mm->start_brk = current->mm->brk = end;
 	return 0;
@@ -325,9 +329,17 @@ static int padzero(unsigned long elf_bss)
 {
 	unsigned long nbyte;
 
-	nbyte = ELF_PAGEOFFSET(elf_bss);
+	if (use_hpage)
+		nbyte = ELF_HPAGEOFFSET(elf_bss);
+	else
+		nbyte = ELF_PAGEOFFSET(elf_bss);
+
 	if (nbyte) {
-		nbyte = ELF_MIN_ALIGN - nbyte;
+		if (use_hpage)
+			nbyte = HPAGE_SIZE - nbyte;
+		else
+			nbyte = ELF_MIN_ALIGN - nbyte;
+		// pr_info("padzero: 0x%lx-0x%lx\n", elf_bss, elf_bss + nbyte);
 		if (clear_user((void __user *) elf_bss, nbyte))
 			return -EFAULT;
 	}
@@ -549,13 +561,21 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 
 static unsigned long elf_map(struct file *filep, unsigned long addr,
 		const struct elf_phdr *eppnt, int prot, int type,
-		unsigned long total_size)
+		unsigned long total_size, bool use_pmd_mapping)
 {
-	unsigned long map_addr;
-	unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
-	unsigned long off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
-	addr = ELF_PAGESTART(addr);
-	size = ELF_PAGEALIGN(size);
+	unsigned long map_addr, size, off;
+
+	if (use_pmd_mapping) {
+		size = eppnt->p_filesz + ELF_HPAGEOFFSET(eppnt->p_vaddr);
+		off = eppnt->p_offset - ELF_HPAGEOFFSET(eppnt->p_vaddr);
+		addr = ELF_HPAGESTART(addr);
+		size = ELF_HPAGEALIGN(size);
+	} else {
+		size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
+		off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
+		addr = ELF_PAGESTART(addr);
+		size = ELF_PAGEALIGN(size);
+	}
 
 	/* mmap() will return -EINVAL if given a zero size, but a
 	 * segment with zero filesize is perfectly valid */
@@ -571,12 +591,19 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 	* the end. (which unmap is needed for ELF images with holes.)
 	*/
 	if (total_size) {
-		total_size = ELF_PAGEALIGN(total_size);
+		if (use_pmd_mapping)
+			total_size = ELF_HPAGEALIGN(total_size);
+		else
+			total_size = ELF_PAGEALIGN(total_size);
+		// pr_info("vm_mmap, addr: %lx, total_size: %lx, off: %lx", 
+			// addr, total_size, off);
 		map_addr = vm_mmap(filep, addr, total_size, prot, type, off);
 		if (!BAD_ADDR(map_addr))
 			vm_munmap(map_addr+size, total_size-size);
 	} else {
 		map_addr = vm_mmap(filep, addr, size, prot, type, off);
+		// pr_info("vm_mmap, addr: %lx, size: %lx, off: %lx", 
+			// addr, size, off);
 	}
 
 	if ((type & MAP_FIXED_NOREPLACE) &&
@@ -601,7 +628,11 @@ static unsigned long total_mapping_size(const struct elf_phdr *cmds, int nr)
 	if (first_idx == -1)
 		return 0;
 
-	return cmds[last_idx].p_vaddr + cmds[last_idx].p_memsz -
+	if (use_hpage)
+		return cmds[last_idx].p_vaddr + cmds[last_idx].p_memsz -
+				ELF_HPAGESTART(cmds[first_idx].p_vaddr);
+	else
+		return cmds[last_idx].p_vaddr + cmds[last_idx].p_memsz -
 				ELF_PAGESTART(cmds[first_idx].p_vaddr);
 }
 
@@ -836,7 +867,8 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 				load_addr = -vaddr;
 
 			map_addr = elf_map(interpreter, load_addr + vaddr,
-					eppnt, elf_prot, elf_type, total_size);
+					eppnt, elf_prot, elf_type, total_size, false);
+
 			total_size = 0;
 			error = map_addr;
 			if (BAD_ADDR(map_addr))
@@ -981,7 +1013,7 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 	if (!IS_ENABLED(CONFIG_ARCH_USE_GNU_PROPERTY) || !phdr)
 		return 0;
 
-	/* load_elf_binary() shouldn't call us unless this is true... */
+	/* load_rto_binary() shouldn't call us unless this is true... */
 	if (WARN_ON_ONCE(phdr->p_type != PT_GNU_PROPERTY))
 		return -ENOEXEC;
 
@@ -1111,7 +1143,18 @@ static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
 
 #endif /* CONFIG_ELF_SYSBOOST */
 
-static int load_elf_binary(struct linux_binprm *bprm)
+void print_vma(struct mm_struct *mm)
+{
+	struct vm_area_struct *vma;
+	down_read(&mm->mmap_lock);
+	printk(KERN_INFO "Virtual Memory Areas for mm %p:\n", mm);
+	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+		printk(KERN_INFO " 0x%lx - 0x%lx\n", vma->vm_start, vma->vm_end);
+	}
+	up_read(&mm->mmap_lock);
+}
+
+static int load_rto_binary(struct linux_binprm *bprm)
 {
 	struct file *interpreter = NULL; /* to shut gcc up */
 	unsigned long load_addr, load_bias = 0, phdr_addr = 0;
@@ -1133,7 +1176,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	struct mm_struct *mm;
 	struct pt_regs *regs;
-	struct dentry *dentry = d_find_alias(bprm->file->f_inode);
+	// struct dentry *dentry = d_find_alias(bprm->file->f_inode);
 
 #ifdef CONFIG_ELF_SYSBOOST
 	unsigned long rto_layout_start_addr = 0UL;
@@ -1159,16 +1202,18 @@ load_rto:
 
 	/* replace app.rto file, then use binfmt */
 	if (is_rto_symbolic_link && !is_rto_format) {
-		struct inode *inode = bprm->file->f_inode;
-		loaded_rto = find_loaded_rto(bprm->file->f_inode);
-		int ret = try_replace_file(bprm);
+		// struct inode *inode = bprm->file->f_inode;
+		int ret;
+		if (use_hpage)
+			loaded_rto = find_loaded_rto(bprm->file->f_inode);
+		ret = try_replace_file(bprm);
 		if (ret) {
 			/* limit print */
 			printk("replace rto file fail, %d\n", ret);
 			goto out;
 		}
-		pr_info("replace rto file success, loaded_rto: 0x%lx, inode: 0x%lx\n",
-			loaded_rto, inode);
+		// pr_info("replace rto file success, loaded_rto: 0x%lx, inode: 0x%lx\n",
+			// loaded_rto, inode);
 		goto load_rto;
 	}
 
@@ -1465,7 +1510,10 @@ out_free_interp:
 			 * ELF vaddrs will be correctly offset. The result
 			 * is then page aligned.
 			 */
-			load_bias = ELF_PAGESTART(load_bias - vaddr);
+			if (use_hpage)
+				load_bias = ELF_HPAGESTART(load_bias - vaddr);
+			else
+				load_bias = ELF_PAGESTART(load_bias - vaddr);
 
 			total_size = total_mapping_size(elf_phdata,
 							elf_ex->e_phnum);
@@ -1476,22 +1524,26 @@ out_free_interp:
 		}
 
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
-				elf_prot, elf_flags, total_size);
+				elf_prot, elf_flags, 0, use_hpage);
 		if (BAD_ADDR(error)) {
+			if (debug)
+				pr_info("lyt elf_map error: %ld\n", PTR_ERR((void*)error));
 			retval = IS_ERR((void *)error) ?
 				PTR_ERR((void*)error) : -EINVAL;
 			goto out_free_dentry;
 		}
-		if (preload_seg_pos) {
+		if (use_hpage && preload_seg_pos) {
 			preload_seg_pos = preload_seg_pos->next;
 			BUG_ON(preload_seg_pos == &loaded_rto->segs);
 			loaded_seg = list_entry(preload_seg_pos,
 						struct loaded_seg, list);
-			size = elf_ppnt->p_filesz + ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
-			off = elf_ppnt->p_offset - ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
-			pr_info("lyt vaddr: 0x%lx, vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
-				load_bias + vaddr, error, off, size);
-			// rto_populate(bprm->file, error, off, size, loaded_seg);
+			size = elf_ppnt->p_filesz + ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
+			off = elf_ppnt->p_offset - ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
+			size = ELF_HPAGEALIGN(size);
+			if (debug)
+				pr_info("lyt vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
+					error, off, size);
+			rto_populate(bprm->file, error, off, size, loaded_seg);
 		}
 
 		if (!load_addr_set) {
@@ -1685,6 +1737,11 @@ out_free_interp:
 
 	finalize_exec(bprm);
 	start_thread(regs, elf_entry, bprm->p);
+	if (debug)
+		pr_info("rto load successful, e_entry: %lx, elf_bss: %lx\n",
+			e_entry, elf_bss);
+	print_vma(current->mm);
+	
 	retval = 0;
 out:
 	return retval;

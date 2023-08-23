@@ -52,7 +52,7 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 		return -ENOMEM;
 	
 	for (; pos < end; ) {
-		page = alloc_pages(GFP_KERNEL | __GFP_ZERO, HUGETLB_PAGE_ORDER);
+		page = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP, HUGETLB_PAGE_ORDER);
 		if (!page) {
 			ret = -ENOMEM;
 			goto error;
@@ -68,11 +68,19 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 			break;
 		}
 
-		list_add(&page->lru, &loaded_seg->hpages);
-		pr_info("load_seg: load 1 hpage: 0x%lx\n", page);
+		if (loaded_rto->segs.next != &loaded_rto->segs) {
+				// && loaded_seg->hpages.next != &loaded_seg->hpages) {
+			SetPageNeedCopy(page);
+			// pr_info("load_seg: SetPageNeedCopy for page: %pK\n", page);
+		} else {
+			get_page(page);
+		}
+		list_add_tail(&page->lru, &loaded_seg->hpages);
+		// pr_info("load_seg: load 1 hpage: 0x%lx, compound_order(page): %d\n",
+			// page, compound_order(page));
 	}
 
-	list_add(&loaded_seg->list, &loaded_rto->segs);
+	list_add_tail(&loaded_seg->list, &loaded_rto->segs);
 	return 0;
 error:
 	loaded_seg_free(loaded_seg);
@@ -104,11 +112,11 @@ static void loaded_rto_free(struct loaded_rto *loaded_rto)
 	kfree(loaded_rto);
 }
 
-static void loaded_rto_put(struct loaded_rto *loaded_rto)
-{
-	if (atomic_dec_and_test(&loaded_rto->use_count))
-		loaded_rto_free(loaded_rto);
-}
+// static void loaded_rto_put(struct loaded_rto *loaded_rto)
+// {
+// 	if (atomic_dec_and_test(&loaded_rto->use_count))
+// 		loaded_rto_free(loaded_rto);
+// }
 
 static int preload_rto(struct file *file)
 {
@@ -146,9 +154,10 @@ static int preload_rto(struct file *file)
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
 
-		size = elf_ppnt->p_filesz + ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
-		offset = elf_ppnt->p_offset - ELF_PAGEOFFSET(elf_ppnt->p_vaddr);
-		pr_info("load_seg, offset: 0x%lx, size: 0x%lx\n", offset, size);
+		size = elf_ppnt->p_filesz + ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
+		offset = elf_ppnt->p_offset - ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
+		size = ELF_HPAGEALIGN(size);
+		// pr_info("load_seg, offset: 0x%lx, size: 0x%lx\n", offset, size);
 		ret = load_seg(rto_file, loaded_rto, offset, size);
 		if (ret)
 			goto error_seg;
@@ -214,10 +223,9 @@ static int load_rto(struct file *file, unsigned int flags)
 		ihold(inode);
 		inode->i_flags |= S_SYSBOOST_RTO_SYMBOLIC_LINK;
 	}
+	// pr_info("lyt inode: 0x%pK, i_flags: 0x%x, i_count: %d\n",
+		// inode, inode->i_flags, atomic_read(&inode->i_count));
 	spin_unlock(&inode->i_lock);
-
-	pr_info("lyt inode: 0x%pK, i_flags: 0x%x, i_count: %d\n",
-		inode, inode->i_flags, atomic_read(&inode->i_count));
 
 	if (flags & RTO_LOAD_FLAG_PRELOAD) {
 		loaded_rto = find_loaded_rto(inode);
@@ -237,8 +245,8 @@ static int unload_rto(struct file *file, unsigned int flags)
 		iput(inode);
 		inode->i_flags &= ~S_SYSBOOST_RTO_SYMBOLIC_LINK;
 	}
-	pr_info("lyt inode: 0x%pK, i_flags: 0x%x, i_count: %d\n",
-		inode, inode->i_flags, atomic_read(&inode->i_count));
+	// pr_info("lyt inode: 0x%pK, i_flags: 0x%x, i_count: %d\n",
+		// inode, inode->i_flags, atomic_read(&inode->i_count));
 	spin_unlock(&inode->i_lock);
 
 	return 0;
@@ -288,7 +296,7 @@ int __init loader_device_init(void)
 		goto out;
 	}
 
-	pr_info("sysboost_loader: init success.\n");
+	// pr_info("sysboost_loader: init success.\n");
 
 out:
 	return err;
@@ -297,5 +305,5 @@ out:
 void __exit loader_device_exit(void)
 {
 	misc_deregister(&loader_miscdev);
-	pr_info("sysboost_loader: exit!\n");
+	// pr_info("sysboost_loader: exit!\n");
 }

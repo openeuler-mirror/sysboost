@@ -27,3 +27,7 @@ int rto_populate_init(void);
 #define ELF_PAGESTART(_v) ((_v) & ~(unsigned long)(ELF_MIN_ALIGN-1))
 #define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
 #define ELF_PAGEALIGN(_v) (((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
+
+#define ELF_HPAGESTART(_v) ((_v) & ~(unsigned long)(HPAGE_SIZE - 1))
+#define ELF_HPAGEOFFSET(_v) ((_v) & (HPAGE_SIZE - 1))
+#define ELF_HPAGEALIGN(_v) (((_v) + HPAGE_SIZE - 1) & ~(HPAGE_SIZE - 1))

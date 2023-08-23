@@ -15,6 +15,21 @@ struct loaded_rto {
 	atomic_t		use_count;
 };
 
+static inline void SetPageNeedCopy(struct page *page)
+{
+	SetPageOwnerPriv1(page);
+}
+
+static inline void ClearPageNeedCopy(struct page *page)
+{
+	ClearPageOwnerPriv1(page);
+}
+
+static inline int TestPageNeedCopy(struct page *page)
+{
+	return PageOwnerPriv1(page);
+}
+
 struct loaded_rto *find_loaded_rto(struct inode *inode);
 int __init loader_device_init(void);
 void __exit loader_device_exit(void);

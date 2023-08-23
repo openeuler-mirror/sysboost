@@ -9,6 +9,7 @@
 extern bool use_rto;
 extern int debug;
 extern bool populate;
+extern bool use_hpage;
 
 typedef unsigned long (*kallsyms_lookup_name_kprobe_t)(const char *name);
 extern kallsyms_lookup_name_kprobe_t klookupf;

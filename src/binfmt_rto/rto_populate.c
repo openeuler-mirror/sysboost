@@ -49,6 +49,7 @@ struct follow_page_context {
 struct page *follow_page_mask(struct vm_area_struct *vma,
 			      unsigned long address, unsigned int flags,
 			      struct follow_page_context *ctx);
+vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page);
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
@@ -56,6 +57,7 @@ static struct global_symbols {
 	proc_symbol(__pud_alloc);
 	proc_symbol(__anon_vma_prepare);
 	proc_symbol(__pmd_alloc);
+	proc_symbol(do_set_pmd);
 #ifdef CONFIG_X86
 	proc_symbol(__p4d_alloc);
 	proc_symbol(pud_clear_bad);
@@ -68,6 +70,7 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(__pud_alloc),
 	proc_symbol_char(__anon_vma_prepare),
 	proc_symbol_char(__pmd_alloc),
+	proc_symbol_char(do_set_pmd),
 #ifdef CONFIG_X86
 	proc_symbol_char(__p4d_alloc),
 	proc_symbol_char(pud_clear_bad),
@@ -131,7 +134,11 @@ static vm_fault_t __rto_do_huge_pmd_anonymous_page(struct vm_fault *vmf,
 
 	VM_BUG_ON_PAGE(!PageCompound(page), page);
 
-	pr_info("enter __rto_do_huge_pmd_anonymous_page\n");
+	// pr_info("enter __rto_do_huge_pmd_anonymous_page\n");
+
+	ret = ppl_sym.do_set_pmd(vmf, page);
+	// pr_info("__rto_do_huge_pmd_anonymous_page return %d\n", ret);
+	return ret;
 
 	// if (mem_cgroup_charge(page, vma->vm_mm, gfp)) {
 	// 	put_page(page);
@@ -189,8 +196,8 @@ static vm_fault_t __rto_do_huge_pmd_anonymous_page(struct vm_fault *vmf,
 		// pgtable_trans_huge_deposit(vma->vm_mm, vmf->pmd, pgtable);
 
 		set_pmd_at(vma->vm_mm, haddr, vmf->pmd, entry);
-		pr_info("set_pmd_at entry: 0x%pK, entry_size: %d\n",
-			entry, sizeof(entry));
+		// pr_info("set_pmd_at entry: 0x%pK, entry_size: %d\n",
+			// entry, sizeof(entry));
 		// add_mm_counter(vma->vm_mm, MM_ANONPAGES, HPAGE_PMD_NR);
 		// reliable_page_counter(page, vma->vm_mm, HPAGE_PMD_NR);
 		mm_inc_nr_ptes(vma->vm_mm);
@@ -361,17 +368,22 @@ retry_pud:
 	// }
 
 	pmd = pmd_offset(vmf.pud, address);
-	if (pmd)
-		pr_info("pmd: %pK\n", pmd);
-	else
-		pr_info("pmd is null\n");
+	// if (pmd)
+		// pr_info("pmd: %pK\n", pmd);
+	// else
+		// pr_info("pmd is null\n");
 	vmf.pmd = rto_pmd_alloc(mm, vmf.pud, address);
-	if (vmf.pmd)
-		pr_info("vmf.pmd: %pK, value: 0x%lx\n", vmf.pmd, pmd_val(*vmf.pmd));
-	else
-		pr_info("vmf.pmd is null\n");
+	// if (vmf.pmd)
+		// pr_info("vmf.pmd: %pK, value: 0x%lx\n", vmf.pmd, pmd_val(*vmf.pmd));
+	// else
+		// pr_info("vmf.pmd is null\n");
 	if (!vmf.pmd)
 		return VM_FAULT_OOM;
+	
+	if (!pmd_none(*vmf.pmd)) {
+		// pr_info("vmf.pmd: %pK, value: 0x%lx, return\n", vmf.pmd, pmd_val(*vmf.pmd));
+		return VM_FAULT_OOM;
+	}
 
 	/* Huge pud page fault raced with pmd_alloc? */
 	if (pud_trans_unstable(vmf.pud))
@@ -568,10 +580,11 @@ static long rto_get_user_pages(struct mm_struct *mm,
 {
 	long ret = 0, i = 0;
 	struct vm_area_struct *vma = NULL;
-	struct follow_page_context ctx = { NULL };
+	// struct follow_page_context ctx = { NULL };
 	struct list_head *hpage_pos = hpages;
 
-	pr_info("start rto_get_user_pages\n");
+	// pr_info("start rto_get_user_pages, start: 0x%lx, nr_pages: 0x%lx\n",
+		// start, nr_pages);
 
 	if (!nr_pages)
 		return 0;
@@ -589,12 +602,12 @@ static long rto_get_user_pages(struct mm_struct *mm,
 		gup_flags |= FOLL_NUMA;
 
 	do {
-		struct page *page, *hpage;
+		struct page *page, *hpage, *new_hpage;
 		unsigned int foll_flags = gup_flags;
 		unsigned int page_increm;
 
 		hpage_pos = hpage_pos->next;
-		pr_info("hpage_pos: 0x%pK\n", hpage_pos);
+		// pr_info("hpage_pos: 0x%pK, addr: 0x%lx\n", hpage_pos, start);
 		BUG_ON(hpage_pos == hpages);
 
 		/* first iteration or cross vma bound */
@@ -644,14 +657,28 @@ retry:
 		cond_resched();
 
 		/* TODO try comment here to increase efficiency */
-		page = ppl_sym.follow_page_mask(vma, start, foll_flags, &ctx);
+		// page = ppl_sym.follow_page_mask(vma, start, foll_flags, &ctx);
 		hpage = list_entry(hpage_pos, struct page, lru);
-		pr_info("consume hpage 0x%pK, page: 0x%pK\n", hpage, page);
+		if (TestPageNeedCopy(hpage)) {
+			// pr_info("alloc new_hpage for page: 0x%pK\n", hpage);
+			new_hpage = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP,
+						HUGETLB_PAGE_ORDER);
+			if (!new_hpage)
+				BUG();
+			memcpy(page_to_virt(new_hpage), page_to_virt(hpage), HPAGE_SIZE);
+			hpage = new_hpage;
+		} else {
+			get_page(hpage);
+		}
+		if (debug)
+			pr_info("consume hpage 0x%pK, page: 0x%pK\n", hpage, page);
 		if (!page) {
 			ret = rto_faultin_page(vma, start, &foll_flags, locked, hpage);
 			switch (ret) {
 			case 0:
-				goto retry;
+				// pr_info("retry\n");
+				goto next_page;
+				// goto retry;
 			case -EBUSY:
 				ret = 0;
 				fallthrough;
@@ -685,9 +712,11 @@ next_page:
 		// 	vmas[i] = vma;
 		// 	ctx.page_mask = 0;
 		// }
-		page_increm = 1 + (~(start >> PAGE_SHIFT) & ctx.page_mask);
-		pr_info("page_increm: %d, ctx.page_mask: 0x%x, i: %ld, nr_pages: %ld",
-			page_increm, ctx.page_mask, i, nr_pages);
+
+		page_increm = 0x200;
+		// page_increm = 1 + (~(start >> PAGE_SHIFT) & ctx.page_mask);
+		// // pr_info("page_increm: %d, ctx.page_mask: 0x%x, i: %ld, nr_pages: %ld",
+		// 	page_increm, ctx.page_mask, i, nr_pages);
 		if (page_increm > nr_pages)
 			page_increm = nr_pages;
 		i += page_increm;
@@ -695,8 +724,8 @@ next_page:
 		nr_pages -= page_increm;
 	} while (nr_pages);
 out:
-	if (ctx.pgmap)
-		put_dev_pagemap(ctx.pgmap);
+	// if (ctx.pgmap)
+	// 	put_dev_pagemap(ctx.pgmap);
 	return i ? i : ret;
 }
 
@@ -763,7 +792,7 @@ int rto_populate(struct file *file, unsigned long vaddr,
 		 unsigned long offset, unsigned long size, struct loaded_seg *loaded_seg)
 {
 	struct mm_struct *mm = current->mm;
-	struct inode *inode = file->f_inode;
+	// struct inode *inode = file->f_inode;
 	struct vm_area_struct *vma;
 	int ret, locked = 1;
 
@@ -778,7 +807,8 @@ int rto_populate(struct file *file, unsigned long vaddr,
 
 	return 0;
 error:
-	pr_info("rto_populate fail, error: %d\n", ret);
+	if (debug)
+		pr_info("rto_populate fail, error: %d\n", ret);
 	return ret;
 }
 

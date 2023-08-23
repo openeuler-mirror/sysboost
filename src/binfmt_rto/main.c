@@ -19,6 +19,10 @@ bool populate = false;
 module_param(populate, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(populate, "populate memory");
 
+bool use_hpage = false;
+module_param(use_hpage, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(use_hpage, "use hugepage and preload");
+
 kallsyms_lookup_name_kprobe_t klookupf;
 
 static int init_kallsyms_lookup_name(void)
