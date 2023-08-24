@@ -1,7 +1,15 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 obj-m := sysboost_loader.o
-sysboost_loader-objs := main.o binfmt_rto.o loader_device.o rto_populate.o
+sysboost_loader-objs := main.o loader_device.o rto_populate.o
+
+# 5.10内核和6.4内核binfmt_elf.c差异较大, 因此拆分不同文件
+ifeq ($(findstring 5.10, $(KDIR)), 5.10)
+sysboost_loader-objs+=binfmt_rto.o
+else
+sysboost_loader-objs+=binfmt_rto_604.o
+endif
+
 PWD := $(shell pwd)
 
 modules:
