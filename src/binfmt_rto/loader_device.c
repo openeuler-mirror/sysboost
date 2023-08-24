@@ -46,6 +46,7 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 	loff_t pos = offset, end = offset + size;
 	ssize_t bytes;
 	struct inode *inode = file->f_inode;
+	int i;
 
 	loaded_seg = loaded_seg_alloc(inode);
 	if (!loaded_seg)
@@ -56,6 +57,9 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 		if (!page) {
 			ret = -ENOMEM;
 			goto error;
+		}
+		for (i = 0; i < 100000; i++) {
+			get_page(page);
 		}
 
 		bytes = kernel_read(file, page_to_virt(page), HPAGE_SIZE, &pos);
@@ -75,9 +79,12 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 		} else {
 			get_page(page);
 		}
-		list_add_tail(&page->lru, &loaded_seg->hpages);
-		// pr_info("load_seg: load 1 hpage: 0x%lx, compound_order(page): %d\n",
-			// page, compound_order(page));
+		// if (loaded_rto->segs.next == &loaded_rto->segs || 
+		// 		loaded_seg->hpages.next == &loaded_seg->hpages) {
+			list_add_tail(&page->lru, &loaded_seg->hpages);
+			pr_info("load_seg: load 1 hpage: 0x%lx, compound_order(page): %d\n",
+				page, compound_order(page));
+		// }
 	}
 
 	list_add_tail(&loaded_seg->list, &loaded_rto->segs);

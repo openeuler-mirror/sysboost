@@ -297,13 +297,13 @@ static struct linux_binfmt elf_format = {
 static int set_brk(unsigned long start, unsigned long end, int prot)
 {
 	// pr_info("enter set_brk, start: 0x%lx, end: 0x%lx\n", start, end);
-	if (use_hpage) {
-		start = ELF_HPAGEALIGN(start);
-		end = ELF_HPAGEALIGN(end);
-	} else {
+	// if (use_hpage) {
+	// 	start = ELF_HPAGEALIGN(start);
+	// 	end = ELF_HPAGEALIGN(end);
+	// } else {
 		start = ELF_PAGEALIGN(start);
 		end = ELF_PAGEALIGN(end);
-	}
+	// }
 	if (end > start) {
 		/*
 		 * Map the last of the bss segment.
@@ -314,7 +314,8 @@ static int set_brk(unsigned long start, unsigned long end, int prot)
 				prot & PROT_EXEC ? VM_EXEC : 0);
 		if (error)
 			return error;
-		// pr_info("set_brk: 0x%lx-0x%lx\n", start, end);
+		if (debug)
+			pr_info("set_brk: 0x%lx-0x%lx\n", start, end);
 	}
 	current->mm->start_brk = current->mm->brk = end;
 	return 0;
@@ -329,15 +330,15 @@ static int padzero(unsigned long elf_bss)
 {
 	unsigned long nbyte;
 
-	if (use_hpage)
-		nbyte = ELF_HPAGEOFFSET(elf_bss);
-	else
+	// if (use_hpage)
+	// 	nbyte = ELF_HPAGEOFFSET(elf_bss);
+	// else
 		nbyte = ELF_PAGEOFFSET(elf_bss);
 
 	if (nbyte) {
-		if (use_hpage)
-			nbyte = HPAGE_SIZE - nbyte;
-		else
+		// if (use_hpage)
+		// 	nbyte = HPAGE_SIZE - nbyte;
+		// else
 			nbyte = ELF_MIN_ALIGN - nbyte;
 		// pr_info("padzero: 0x%lx-0x%lx\n", elf_bss, elf_bss + nbyte);
 		if (clear_user((void __user *) elf_bss, nbyte))
@@ -561,7 +562,7 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 
 static unsigned long elf_map(struct file *filep, unsigned long addr,
 		const struct elf_phdr *eppnt, int prot, int type,
-		unsigned long total_size, bool use_pmd_mapping)
+		unsigned long total_size, bool use_pmd_mapping, bool is_exec_seg)
 {
 	unsigned long map_addr, size, off;
 
@@ -569,7 +570,10 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 		size = eppnt->p_filesz + ELF_HPAGEOFFSET(eppnt->p_vaddr);
 		off = eppnt->p_offset - ELF_HPAGEOFFSET(eppnt->p_vaddr);
 		addr = ELF_HPAGESTART(addr);
-		size = ELF_HPAGEALIGN(size);
+		if (is_exec_seg)
+			size = ELF_HPAGEALIGN(size);
+		else
+			size = ELF_PAGEALIGN(size);
 	} else {
 		size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
 		off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
@@ -595,15 +599,17 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 			total_size = ELF_HPAGEALIGN(total_size);
 		else
 			total_size = ELF_PAGEALIGN(total_size);
-		// pr_info("vm_mmap, addr: %lx, total_size: %lx, off: %lx", 
-			// addr, total_size, off);
+		if (debug)
+			pr_info("vm_mmap, addr: %lx, total_size: %lx, off: %lx", 
+				addr, total_size, off);
 		map_addr = vm_mmap(filep, addr, total_size, prot, type, off);
 		if (!BAD_ADDR(map_addr))
 			vm_munmap(map_addr+size, total_size-size);
 	} else {
+		if (debug)
+			pr_info("vm_mmap, addr: %lx, size: %lx, off: %lx", 
+				addr, size, off);
 		map_addr = vm_mmap(filep, addr, size, prot, type, off);
-		// pr_info("vm_mmap, addr: %lx, size: %lx, off: %lx", 
-			// addr, size, off);
 	}
 
 	if ((type & MAP_FIXED_NOREPLACE) &&
@@ -628,10 +634,10 @@ static unsigned long total_mapping_size(const struct elf_phdr *cmds, int nr)
 	if (first_idx == -1)
 		return 0;
 
-	if (use_hpage)
-		return cmds[last_idx].p_vaddr + cmds[last_idx].p_memsz -
-				ELF_HPAGESTART(cmds[first_idx].p_vaddr);
-	else
+	// if (use_hpage)
+	// 	return cmds[last_idx].p_vaddr + cmds[last_idx].p_memsz -
+	// 			ELF_HPAGESTART(cmds[first_idx].p_vaddr);
+	// else
 		return cmds[last_idx].p_vaddr + cmds[last_idx].p_memsz -
 				ELF_PAGESTART(cmds[first_idx].p_vaddr);
 }
@@ -867,7 +873,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 				load_addr = -vaddr;
 
 			map_addr = elf_map(interpreter, load_addr + vaddr,
-					eppnt, elf_prot, elf_type, total_size, false);
+					eppnt, elf_prot, elf_type, total_size, false, false);
 
 			total_size = 0;
 			error = map_addr;
@@ -1201,7 +1207,7 @@ load_rto:
 	}
 
 	/* replace app.rto file, then use binfmt */
-	if (is_rto_symbolic_link && !is_rto_format) {
+	if (is_rto_symbolic_link) {
 		// struct inode *inode = bprm->file->f_inode;
 		int ret;
 		if (use_hpage)
@@ -1219,7 +1225,8 @@ load_rto:
 
 	/* loading rto from now on */
 	if (debug) {
-		printk("exec in rto mode, is_rto_format %d\n", is_rto_format);
+		printk("exec in rto mode, filename: %s, is_rto_symbolic_link: %d, is_rto_format: %d\n",
+			bprm->file->f_path.dentry->d_iname, is_rto_symbolic_link, is_rto_format);
 	}
 #endif
 
@@ -1413,6 +1420,7 @@ out_free_interp:
 	   the correct location in memory. */
 	for(i = 0, elf_ppnt = elf_phdata;
 	    i < elf_ex->e_phnum; i++, elf_ppnt++) {
+		bool is_exec_seg = elf_ppnt->p_flags & PF_X;
 		int elf_prot, elf_flags;
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
@@ -1510,10 +1518,10 @@ out_free_interp:
 			 * ELF vaddrs will be correctly offset. The result
 			 * is then page aligned.
 			 */
-			if (use_hpage)
+			// if (use_hpage)
 				load_bias = ELF_HPAGESTART(load_bias - vaddr);
-			else
-				load_bias = ELF_PAGESTART(load_bias - vaddr);
+			// else
+			// 	load_bias = ELF_PAGESTART(load_bias - vaddr);
 
 			total_size = total_mapping_size(elf_phdata,
 							elf_ex->e_phnum);
@@ -1524,7 +1532,8 @@ out_free_interp:
 		}
 
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
-				elf_prot, elf_flags, 0, use_hpage);
+				elf_prot, elf_flags, total_size, true, is_exec_seg);
+				// elf_prot, elf_flags, 0, use_hpage);
 		if (BAD_ADDR(error)) {
 			if (debug)
 				pr_info("lyt elf_map error: %ld\n", PTR_ERR((void*)error));
@@ -1543,7 +1552,8 @@ out_free_interp:
 			if (debug)
 				pr_info("lyt vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
 					error, off, size);
-			rto_populate(bprm->file, error, off, size, loaded_seg);
+			if (is_exec_seg)
+				rto_populate(bprm->file, error, off, size, loaded_seg);
 		}
 
 		if (!load_addr_set) {
@@ -1551,7 +1561,7 @@ out_free_interp:
 			load_addr = (elf_ppnt->p_vaddr - elf_ppnt->p_offset);
 			if (elf_ex->e_type == ET_DYN) {
 				load_bias += error -
-				             ELF_PAGESTART(load_bias + vaddr);
+				             ELF_HPAGESTART(load_bias + vaddr);
 				load_addr += load_bias;
 				reloc_func_desc = load_bias;
 			}
@@ -1737,10 +1747,11 @@ out_free_interp:
 
 	finalize_exec(bprm);
 	start_thread(regs, elf_entry, bprm->p);
-	if (debug)
-		pr_info("rto load successful, e_entry: %lx, elf_bss: %lx\n",
-			e_entry, elf_bss);
-	print_vma(current->mm);
+	if (debug) {
+		pr_info("rto load successful, e_entry: %lx, elf_bss: %lx, mm->brk: %lx\n",
+			e_entry, elf_bss, mm->brk);
+		print_vma(current->mm);
+	}
 	
 	retval = 0;
 out:
