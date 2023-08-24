@@ -1228,7 +1228,11 @@ load_rto:
 		printk("exec in rto mode, filename: %s, is_rto_symbolic_link: %d, is_rto_format: %d\n",
 			bprm->file->f_path.dentry->d_iname, is_rto_symbolic_link, is_rto_format);
 	}
+#ifdef CONFIG_ARM64
+	/* close vdso optimization on arm64 in case of BUG */
+	is_rto_format = false;
 #endif
+#endif /* CONFIG_ELF_SYSBOOST */
 
 	/* First of all, some simple consistency checks */
 	if (memcmp(elf_ex->e_ident, ELFMAG, SELFMAG) != 0)
