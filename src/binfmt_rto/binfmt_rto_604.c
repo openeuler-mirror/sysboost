@@ -51,6 +51,7 @@
 #include <asm/param.h>
 #include <asm/page.h>
 #include "main.h"
+#include "binfmt_rto.h"
 
 #ifndef CONFIG_ELF_SYSBOOST
 #define CONFIG_ELF_SYSBOOST 1
@@ -68,7 +69,9 @@
 #define MM_SAVED_AUXV(mm) mm->saved_auxv
 #endif
 
+#ifdef CONFIG_X86
 extern int map_vdso(const struct vdso_image *image, unsigned long addr);
+#endif
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
@@ -133,57 +136,10 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(thread_group_cputime)
 };
 
-typedef unsigned long (*kallsyms_lookup_name_kprobe_t)(const char *name);
-kallsyms_lookup_name_kprobe_t klookupf;
-
-static int init_kallsyms_lookup_name(void)
-{
-	int ret;
-	struct kprobe kallsyms_kprobe_var =  {
-		.symbol_name = "kallsyms_lookup_name",
-	};
-
-	ret = register_kprobe(&kallsyms_kprobe_var);
-	if (ret) {
-		pr_err("register_kprobes returned %d\n", ret);
-		return ret;
-	}
-
-	klookupf = (kallsyms_lookup_name_kprobe_t)kallsyms_kprobe_var.addr;
-	unregister_kprobe(&kallsyms_kprobe_var);
-	if (!klookupf) {
-		pr_err("no kallsyms_lookup_name in kernel!\n");
-		return -EFAULT;
-	}
-
-	return 0;
-}
-
-int do_init_symbols(unsigned long *func_base, char *func[], unsigned int num)
-{
-	unsigned int i;
-	unsigned long *input_func_base = func_base;
-
-	for (i = 0; i < num; i++) {
-		*input_func_base = klookupf(func[i]);
-		if (!*input_func_base) {
-			pr_warn("get %s failed\n", func[i]);
-			return -EEXIST;
-		}
-		input_func_base++;
-	}
-
-	return 0;
-}
-
 int init_symbols(void)
 {
 	int ret;
 	unsigned long *func_base = (unsigned long *)&g_sym;
-
-	ret = init_kallsyms_lookup_name();
-	if (ret)
-		return ret;
 
 	ret = do_init_symbols(func_base, global_symbol_names, ARRAY_SIZE(global_symbol_names));
 	if (ret < 0)
@@ -339,10 +295,6 @@ static int elf_core_dump(struct coredump_params *cprm);
 #ifndef ELF_CORE_EFLAGS
 #define ELF_CORE_EFLAGS	0
 #endif
-
-#define ELF_PAGESTART(_v) ((_v) & ~(int)(ELF_MIN_ALIGN-1))
-#define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
-#define ELF_PAGEALIGN(_v) (((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
 
 static struct linux_binfmt elf_format = {
 	.module		= THIS_MODULE,
@@ -615,13 +567,24 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 
 static unsigned long elf_map(struct file *filep, unsigned long addr,
 		const struct elf_phdr *eppnt, int prot, int type,
-		unsigned long total_size)
+		unsigned long total_size, bool use_pmd_mapping, bool is_exec_seg)
 {
-	unsigned long map_addr;
-	unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
-	unsigned long off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
-	addr = ELF_PAGESTART(addr);
-	size = ELF_PAGEALIGN(size);
+	unsigned long map_addr, size, off;
+
+	if (use_pmd_mapping) {
+		size = eppnt->p_filesz + ELF_HPAGEOFFSET(eppnt->p_vaddr);
+		off = eppnt->p_offset - ELF_HPAGEOFFSET(eppnt->p_vaddr);
+		addr = ELF_HPAGESTART(addr);
+		if (is_exec_seg)
+			size = ELF_HPAGEALIGN(size);
+		else
+			size = ELF_PAGEALIGN(size);
+	} else {
+		size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
+		off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
+		addr = ELF_PAGESTART(addr);
+		size = ELF_PAGEALIGN(size);
+	}
 
 	/* mmap() will return -EINVAL if given a zero size, but a
 	 * segment with zero filesize is perfectly valid */
@@ -709,7 +672,7 @@ static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
  * header pointed to by elf_ex, into a newly allocated array. The caller is
  * responsible for freeing the allocated data. Returns NULL upon failure.
  */
-static struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
+struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
 				       struct file *elf_file)
 {
 	struct elf_phdr *elf_phdata = NULL;
@@ -894,7 +857,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 				load_addr = -vaddr;
 
 			map_addr = elf_map(interpreter, load_addr + vaddr,
-					eppnt, elf_prot, elf_type, total_size);
+					eppnt, elf_prot, elf_type, total_size, false, false);
 			total_size = 0;
 			error = map_addr;
 			if (BAD_ADDR(map_addr))
@@ -1080,7 +1043,7 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 }
 
 #ifdef CONFIG_ELF_SYSBOOST
-static struct file * try_get_rto_file(struct file *file)
+struct file *try_get_rto_file(struct file *file)
 {
 	char *buffer, *rto_path;
 	struct file *rto_file;
@@ -1094,29 +1057,38 @@ static struct file * try_get_rto_file(struct file *file)
 	return rto_file;
 }
 
-static int prepare_rto(struct linux_binprm *bprm)
+void *load_bprm_buf(struct file *file)
 {
+	ssize_t ret;
+	char *buffer;
 	loff_t pos = 0;
-	void *buffer;
-	long ret;
 
 	buffer = kmalloc(BINPRM_BUF_SIZE, GFP_KERNEL);
 	if (!buffer)
-		return -ENOMEM;
-	memcpy(buffer, bprm->buf, BINPRM_BUF_SIZE);
+		return ERR_PTR(-ENOMEM);
 
-	memset(bprm->buf, 0, BINPRM_BUF_SIZE);
-	ret = kernel_read(bprm->file, bprm->buf, BINPRM_BUF_SIZE, &pos);
+	ret = kernel_read(file, buffer, BINPRM_BUF_SIZE, &pos);
 	if (ret != BINPRM_BUF_SIZE) {
-		memcpy(bprm->buf, buffer, BINPRM_BUF_SIZE);
-		if (ret >= 0)
-			ret = -ENOENT;
-	} else {
-		ret = 0;
+		kfree(buffer);
+		if (ret < 0)
+			return ERR_PTR(ret);
+		return ERR_PTR(-EIO);
 	}
 
+	return buffer;
+}
+
+static int prepare_rto(struct linux_binprm *bprm)
+{
+	void *buffer;
+
+	buffer = load_bprm_buf(bprm->file);
+	if (IS_ERR(buffer))
+		return PTR_ERR(buffer);
+
+	memcpy(bprm->buf, buffer, BINPRM_BUF_SIZE);
 	kfree(buffer);
-	return ret;
+	return 0;
 }
 
 static inline int try_replace_file(struct linux_binprm *bprm)
@@ -1215,16 +1187,52 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct pt_regs *regs;
 
 #ifdef CONFIG_ELF_SYSBOOST
-	bool is_rto_format = false;
+	// unsigned long rto_layout_start_addr = 0UL;
+	bool is_rto_format, is_rto_symbolic_link;
+	struct loaded_rto *loaded_rto = NULL;
+	struct list_head *preload_seg_pos = NULL;
+	struct loaded_seg *loaded_seg;
 
 load_rto:
+	elf_ex = (struct elfhdr *)bprm->buf;
 	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
+	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
 	retval = -ENOEXEC;
 
 	/* close feature to rmmod this ko */
 	if (!use_rto) {
 		goto out;
 	}
+	if (!is_rto_format && !is_rto_symbolic_link) {
+		goto out;
+	}
+
+	/* replace app.rto file, then use binfmt */
+	if (is_rto_symbolic_link) {
+		// struct inode *inode = bprm->file->f_inode;
+		int ret;
+		if (use_hpage)
+			loaded_rto = find_loaded_rto(bprm->file->f_inode);
+		ret = try_replace_file(bprm);
+		if (ret) {
+			/* limit print */
+			printk("replace rto file fail, %d\n", ret);
+			goto out;
+		}
+		// pr_info("replace rto file success, loaded_rto: 0x%lx, inode: 0x%lx\n",
+			// loaded_rto, inode);
+		goto load_rto;
+	}
+
+	/* loading rto from now on */
+	if (debug) {
+		printk("exec in rto mode, filename: %s, is_rto_symbolic_link: %d, is_rto_format: %d\n",
+			bprm->file->f_path.dentry->d_iname, is_rto_symbolic_link, is_rto_format);
+	}
+#ifdef CONFIG_ARM64
+	/* close vdso optimization on arm64 in case of BUG */
+	is_rto_format = false;
+#endif
 #endif
 
 	/* First of all, some simple consistency checks */
@@ -1438,10 +1446,12 @@ out_free_interp:
 	   the correct location in memory. */
 	for(i = 0, elf_ppnt = elf_phdata;
 	    i < elf_ex->e_phnum; i++, elf_ppnt++) {
+		bool is_exec_seg = elf_ppnt->p_flags & PF_X;
 		int elf_prot, elf_flags;
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
 		unsigned long alignment;
+		unsigned long size, off;
 
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
@@ -1540,7 +1550,10 @@ out_free_interp:
 			 * ELF vaddrs will be correctly offset. The result
 			 * is then page aligned.
 			 */
-			load_bias = ELF_PAGESTART(load_bias - vaddr);
+			if (use_hpage)
+				load_bias = ELF_HPAGESTART(load_bias - vaddr);
+			else
+				load_bias = ELF_PAGESTART(load_bias - vaddr);
 
 			/*
 			 * Calculate the entire size of the ELF mapping
@@ -1569,18 +1582,38 @@ out_free_interp:
 		}
 
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
-				elf_prot, elf_flags, total_size);
+				elf_prot, elf_flags, total_size, true, is_exec_seg);
 		if (BAD_ADDR(error)) {
+			if (debug)
+				pr_info("lyt elf_map error: %ld\n", PTR_ERR((void*)error));
 			retval = IS_ERR_VALUE(error) ?
 				PTR_ERR((void*)error) : -EINVAL;
 			goto out_free_dentry;
+		}
+		if (use_hpage && preload_seg_pos) {
+			preload_seg_pos = preload_seg_pos->next;
+			BUG_ON(preload_seg_pos == &loaded_rto->segs);
+			loaded_seg = list_entry(preload_seg_pos,
+						struct loaded_seg, list);
+			size = elf_ppnt->p_filesz + ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
+			off = elf_ppnt->p_offset - ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
+			size = ELF_HPAGEALIGN(size);
+			if (debug)
+				pr_info("lyt vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
+					error, off, size);
+			if (is_exec_seg)
+				rto_populate(bprm->file, error, off, size, loaded_seg);
 		}
 
 		if (first_pt_load) {
 			first_pt_load = 0;
 			if (elf_ex->e_type == ET_DYN) {
-				load_bias += error -
-				             ELF_PAGESTART(load_bias + vaddr);
+				if (use_hpage)
+					load_bias += error -
+						ELF_HPAGESTART(load_bias + vaddr);
+				else
+					load_bias += error -
+						ELF_PAGESTART(load_bias + vaddr);
 				reloc_func_desc = load_bias;
 			}
 		}
@@ -2129,7 +2162,6 @@ static int fill_files_note(struct memelfnote *note, struct coredump_params *cprm
 	return 0;
 }
 
-#ifdef CORE_DUMP_USE_REGSET
 #include <linux/regset.h>
 
 struct elf_thread_core_info {
@@ -2406,197 +2438,6 @@ static void free_note_info(struct elf_note_info *info)
 	kfree(info->psinfo.data);
 	kvfree(info->files.data);
 }
-
-#else
-
-/* Here is the structure in which status of each thread is captured. */
-struct elf_thread_status
-{
-	struct list_head list;
-	struct elf_prstatus prstatus;	/* NT_PRSTATUS */
-	elf_fpregset_t fpu;		/* NT_PRFPREG */
-	struct task_struct *thread;
-	struct memelfnote notes[3];
-	int num_notes;
-};
-
-/*
- * In order to add the specific thread information for the elf file format,
- * we need to keep a linked list of every threads pr_status and then create
- * a single section for them in the final core file.
- */
-static int elf_dump_thread_status(long signr, struct elf_thread_status *t)
-{
-	int sz = 0;
-	struct task_struct *p = t->thread;
-	t->num_notes = 0;
-
-	fill_prstatus(&t->prstatus, p, signr);
-	elf_core_copy_task_regs(p, &t->prstatus.pr_reg);	
-	
-	fill_note(&t->notes[0], "CORE", NT_PRSTATUS, sizeof(t->prstatus),
-		  &(t->prstatus));
-	t->num_notes++;
-	sz += notesize(&t->notes[0]);
-
-	if ((t->prstatus.pr_fpvalid = elf_core_copy_task_fpregs(p, NULL,
-								&t->fpu))) {
-		fill_note(&t->notes[1], "CORE", NT_PRFPREG, sizeof(t->fpu),
-			  &(t->fpu));
-		t->num_notes++;
-		sz += notesize(&t->notes[1]);
-	}
-	return sz;
-}
-
-struct elf_note_info {
-	struct memelfnote *notes;
-	struct memelfnote *notes_files;
-	struct elf_prstatus *prstatus;	/* NT_PRSTATUS */
-	struct elf_prpsinfo *psinfo;	/* NT_PRPSINFO */
-	struct list_head thread_list;
-	elf_fpregset_t *fpu;
-	user_siginfo_t csigdata;
-	int thread_status_size;
-	int numnote;
-};
-
-static int elf_note_info_init(struct elf_note_info *info)
-{
-	memset(info, 0, sizeof(*info));
-	INIT_LIST_HEAD(&info->thread_list);
-
-	/* Allocate space for ELF notes */
-	info->notes = kmalloc_array(8, sizeof(struct memelfnote), GFP_KERNEL);
-	if (!info->notes)
-		return 0;
-	info->psinfo = kmalloc(sizeof(*info->psinfo), GFP_KERNEL);
-	if (!info->psinfo)
-		return 0;
-	info->prstatus = kmalloc(sizeof(*info->prstatus), GFP_KERNEL);
-	if (!info->prstatus)
-		return 0;
-	info->fpu = kmalloc(sizeof(*info->fpu), GFP_KERNEL);
-	if (!info->fpu)
-		return 0;
-	return 1;
-}
-
-static int fill_note_info(struct elfhdr *elf, int phdrs,
-			  struct elf_note_info *info,
-			  struct coredump_params *cprm)
-{
-	struct core_thread *ct;
-	struct elf_thread_status *ets;
-
-	if (!elf_note_info_init(info))
-		return 0;
-
-	for (ct = current->mm->core_state->dumper.next;
-					ct; ct = ct->next) {
-		ets = kzalloc(sizeof(*ets), GFP_KERNEL);
-		if (!ets)
-			return 0;
-
-		ets->thread = ct->task;
-		list_add(&ets->list, &info->thread_list);
-	}
-
-	list_for_each_entry(ets, &info->thread_list, list) {
-		int sz;
-
-		sz = elf_dump_thread_status(cprm->siginfo->si_signo, ets);
-		info->thread_status_size += sz;
-	}
-	/* now collect the dump for the current */
-	memset(info->prstatus, 0, sizeof(*info->prstatus));
-	fill_prstatus(info->prstatus, current, cprm->siginfo->si_signo);
-	elf_core_copy_regs(&info->prstatus->pr_reg, cprm->regs);
-
-	/* Set up header */
-	fill_elf_header(elf, phdrs, ELF_ARCH, ELF_CORE_EFLAGS);
-
-	/*
-	 * Set up the notes in similar form to SVR4 core dumps made
-	 * with info from their /proc.
-	 */
-
-	fill_note(info->notes + 0, "CORE", NT_PRSTATUS,
-		  sizeof(*info->prstatus), info->prstatus);
-	fill_psinfo(info->psinfo, current->group_leader, current->mm);
-	fill_note(info->notes + 1, "CORE", NT_PRPSINFO,
-		  sizeof(*info->psinfo), info->psinfo);
-
-	fill_siginfo_note(info->notes + 2, &info->csigdata, cprm->siginfo);
-	fill_auxv_note(info->notes + 3, current->mm);
-	info->numnote = 4;
-
-	if (fill_files_note(info->notes + info->numnote, cprm) == 0) {
-		info->notes_files = info->notes + info->numnote;
-		info->numnote++;
-	}
-
-	/* Try to dump the FPU. */
-	info->prstatus->pr_fpvalid =
-		elf_core_copy_task_fpregs(current, cprm->regs, info->fpu);
-	if (info->prstatus->pr_fpvalid)
-		fill_note(info->notes + info->numnote++,
-			  "CORE", NT_PRFPREG, sizeof(*info->fpu), info->fpu);
-	return 1;
-}
-
-static size_t get_note_info_size(struct elf_note_info *info)
-{
-	int sz = 0;
-	int i;
-
-	for (i = 0; i < info->numnote; i++)
-		sz += notesize(info->notes + i);
-
-	sz += info->thread_status_size;
-
-	return sz;
-}
-
-static int write_note_info(struct elf_note_info *info,
-			   struct coredump_params *cprm)
-{
-	struct elf_thread_status *ets;
-	int i;
-
-	for (i = 0; i < info->numnote; i++)
-		if (!writenote(info->notes + i, cprm))
-			return 0;
-
-	/* write out the thread status notes section */
-	list_for_each_entry(ets, &info->thread_list, list) {
-		for (i = 0; i < ets->num_notes; i++)
-			if (!writenote(&ets->notes[i], cprm))
-				return 0;
-	}
-
-	return 1;
-}
-
-static void free_note_info(struct elf_note_info *info)
-{
-	while (!list_empty(&info->thread_list)) {
-		struct list_head *tmp = info->thread_list.next;
-		list_del(tmp);
-		kfree(list_entry(tmp, struct elf_thread_status, list));
-	}
-
-	/* Free data possibly allocated by fill_files_note(): */
-	if (info->notes_files)
-		kvfree(info->notes_files->data);
-
-	kfree(info->prstatus);
-	kfree(info->psinfo);
-	kfree(info->notes);
-	kfree(info->fpu);
-}
-
-#endif
 
 static void fill_extnum_info(struct elfhdr *elf, struct elf_shdr *shdr4extnum,
 			     elf_addr_t e_shoff, int segs)
