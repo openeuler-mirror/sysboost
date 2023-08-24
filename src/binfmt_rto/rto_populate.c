@@ -132,10 +132,14 @@ static vm_fault_t __rto_do_huge_pmd_anonymous_page(struct vm_fault *vmf,
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
 	vm_fault_t ret = 0;
 
+// vma_set_anonymous(vma);
+
 	VM_BUG_ON_PAGE(!PageCompound(page), page);
 
 	// pr_info("enter __rto_do_huge_pmd_anonymous_page\n");
-
+	if (debug)
+		pr_info("vma->vm_start: %lx, vma->vm_end: %lx, vma->vm_pgoff: %lx\n",
+			vma->vm_start, vma->vm_end, vma->vm_pgoff);
 	ret = ppl_sym.do_set_pmd(vmf, page);
 	// pr_info("__rto_do_huge_pmd_anonymous_page return %d\n", ret);
 	return ret;
@@ -373,10 +377,6 @@ retry_pud:
 	// else
 		// pr_info("pmd is null\n");
 	vmf.pmd = rto_pmd_alloc(mm, vmf.pud, address);
-	// if (vmf.pmd)
-		// pr_info("vmf.pmd: %pK, value: 0x%lx\n", vmf.pmd, pmd_val(*vmf.pmd));
-	// else
-		// pr_info("vmf.pmd is null\n");
 	if (!vmf.pmd)
 		return VM_FAULT_OOM;
 	
@@ -391,9 +391,18 @@ retry_pud:
 
 	// if (pmd_none(*vmf.pmd) && __transparent_hugepage_enabled(vma)) {
 		ret = create_huge_pmd(&vmf, hpage);
+		if (debug) {
+			if (vmf.pmd) {
+				pr_info("vmf.pmd: %pK, value: 0x%llx, pmd_trans_huge: 0x%d\n",
+					vmf.pmd, pmd_val(*vmf.pmd), pmd_trans_huge(*pmd));
+			} else {
+				pr_info("vmf.pmd is null\n");
+			}
+		}
 		if (!(ret & VM_FAULT_FALLBACK))
 			return ret;
 	// }
+	
 
 	BUG();
 	return 0;
@@ -608,7 +617,11 @@ static long rto_get_user_pages(struct mm_struct *mm,
 
 		hpage_pos = hpage_pos->next;
 		// pr_info("hpage_pos: 0x%pK, addr: 0x%lx\n", hpage_pos, start);
-		BUG_ON(hpage_pos == hpages);
+		if (hpage_pos == hpages) {
+			if (debug)
+				pr_info("hpage used up\n");
+			return 0;
+		}
 
 		/* first iteration or cross vma bound */
 		if (!vma || start >= vma->vm_end) {
@@ -645,7 +658,7 @@ static long rto_get_user_pages(struct mm_struct *mm,
 			// 	continue;
 			// }
 		}
-retry:
+// retry:
 		/*
 		 * If we have a pending SIGKILL, don't keep faulting pages and
 		 * potentially allocating memory.
@@ -660,11 +673,15 @@ retry:
 		// page = ppl_sym.follow_page_mask(vma, start, foll_flags, &ctx);
 		hpage = list_entry(hpage_pos, struct page, lru);
 		if (TestPageNeedCopy(hpage)) {
+			int i;
 			// pr_info("alloc new_hpage for page: 0x%pK\n", hpage);
 			new_hpage = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP,
 						HUGETLB_PAGE_ORDER);
 			if (!new_hpage)
 				BUG();
+			for (i = 0; i < 1000; i++) {
+				get_page(new_hpage);
+			}
 			memcpy(page_to_virt(new_hpage), page_to_virt(hpage), HPAGE_SIZE);
 			hpage = new_hpage;
 		} else {
