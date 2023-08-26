@@ -9,10 +9,11 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-4-20
 
+mod lib;
 mod daemon;
 mod coredump_monitor;
 
-use crate::daemon::run_child;
+use crate::lib::process_ext::run_child;
 use crate::daemon::daemon_loop;
 use crate::coredump_monitor::coredump_monitor_loop;
 

@@ -9,14 +9,15 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-4-20
 
+use crate::lib::fs_ext;
+use crate::lib::process_ext::run_child;
+
 use inotify::{EventMask, Inotify, WatchMask};
 use log::{self};
 use serde::Deserialize;
 use std::{fs, env};
-use std::io::{BufRead, BufReader};
 use std::os::unix::fs as UnixFs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
@@ -58,42 +59,6 @@ impl FromStr for RtoConfig {
 	}
 }
 
-fn move_file(new_path: &String, old_path: &String) -> i32 {
-	match fs::rename(&new_path, &old_path) {
-		Ok(_) => {}
-		Err(e) => {
-			log::error!("move file failed: {}", e);
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
-fn is_symlink(path: &PathBuf) -> bool {
-	let file_type = match fs::symlink_metadata(path) {
-		Ok(metadata) => metadata.file_type(),
-		Err(_) => {
-			log::error!("get file type fail: {:?}", path.file_name());
-			return false;
-		}
-	};
-
-	return file_type.is_symlink();
-}
-
-fn find_file_in_dirs(file_name: &str, dirs: &str) -> Option<String> {
-	let dir_entries = fs::read_dir(dirs).ok()?;
-	for entry in dir_entries {
-		let entry = entry.ok()?;
-		let path = entry.path();
-		if path.is_file() && path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default() == file_name {
-			return Some(path.to_string_lossy().into_owned());
-		}
-	}
-	None
-}
-
 fn db_add_link(conf: &RtoConfig) -> i32 {
 	// symlink app.link to app, different modes correspond to different directories
 	let file_name = Path::new(&conf.elf_path).file_name().unwrap().to_str().unwrap();
@@ -118,52 +83,6 @@ pub fn db_remove_link(path: &String) {
 			log::error!("remove link fail: {}", e);
 		}
 	};
-}
-
-pub fn run_child(cmd: &str, args: &Vec<String>) -> i32 {
-	log::info!("run child: {}, {}", cmd, args.join(" ").to_string());
-	let mut child = match Command::new(cmd).args(args).stdout(Stdio::piped()).spawn() {
-		Ok(child) => child,
-		Err(e) => {
-			log::error!("Failed to execute command: {}", e);
-			return -1;
-		}
-	};
-	let stdout = match child.stdout.take() {
-		Some(stdout) => stdout,
-		None => {
-			log::error!("Failed to capture stdout");
-			return -1;
-		}
-	};
-	let reader = BufReader::new(stdout);
-
-	for line in reader.lines() {
-		let line = line.unwrap_or_else(|_| "<read error>".to_owned());
-		log::info!("output: {}", line);
-	}
-
-	let status = match child.wait() {
-		Ok(status) => status,
-		Err(e) => {
-			log::error!("Failed to wait on child: {}", e);
-			return -1;
-		}
-	};
-
-	let exit_code = match status.code() {
-		Some(code) => code,
-		None => {
-			log::error!("Terminated by signal");
-			return -1;
-		}
-	};
-
-	if exit_code != 0 {
-		log::error!("Command exited with code: {}", exit_code);
-	}
-
-	exit_code
 }
 
 // echo 1 > /sys/module/sysboost_loader/parameters/use_rto
@@ -201,7 +120,7 @@ fn gen_app_rto(conf: &RtoConfig) -> i32 {
 		return ret;
 	}
 
-	ret = move_file(&format!("{}.rto", conf.elf_path), &format!("{}.tmp.rto", conf.elf_path));
+	ret = fs_ext::move_file(&format!("{}.rto", conf.elf_path), &format!("{}.tmp.rto", conf.elf_path));
 	return ret;
 }
 
@@ -257,7 +176,7 @@ fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
 		args.push(format!("{}{}", "-data=".to_string(), profile_path_str));
 
 	} else {
-		if let Some(find_file_str) = find_file_in_dirs(&profile_str, &SYSBOOST_BOLT_PROFILE) {
+		if let Some(find_file_str) = fs_ext::find_file_in_dirs(&profile_str, &SYSBOOST_BOLT_PROFILE) {
 			args.push(format!("{}{}", "-data=".to_string(), find_file_str));
 		}
 	}
@@ -387,28 +306,28 @@ fn read_config(path: &PathBuf) -> Option<RtoConfig> {
 fn get_lib_full_path(lib: &str, confpaths:Vec<&str>, rpaths: Vec<&str>, paths: Vec<&str>) -> Option<String> {
 	if !(confpaths.is_empty()) {
 		for confpath in confpaths {
-			let full_dir = find_file_in_dirs(&lib, &confpath);
+			let full_dir = fs_ext::find_file_in_dirs(&lib, &confpath);
 			if let Some(ref _n) = full_dir {
 				return full_dir;
 			}
 		}
 	} else if !(rpaths.is_empty()) {
 		for rpath in rpaths {
-			let full_dir = find_file_in_dirs(&lib, &rpath);
+			let full_dir = fs_ext::find_file_in_dirs(&lib, &rpath);
 			if let Some(ref _n) = full_dir {
 				return full_dir;
 			}
 		}
 	} else if !(paths.is_empty()) {
 		for path in paths {
-			let full_dir = find_file_in_dirs(&lib, &path);
+			let full_dir = fs_ext::find_file_in_dirs(&lib, &path);
 			if let Some(ref _n) = full_dir {
 				return full_dir;
 			}
 		}
 	} else {
 		let d = "./";
-		let full_dir = find_file_in_dirs(&lib, &d);
+		let full_dir = fs_ext::find_file_in_dirs(&lib, &d);
 		if let Some(ref _n) = full_dir {
 			return full_dir;
 		}
@@ -596,7 +515,7 @@ fn clean_last_rto() {
 		if path.file_name() == None {
 			continue;
 		}
-		if is_symlink(&path) == false {
+		if fs_ext::is_symlink(&path) == false {
 			continue;
 		}
 		let file_name = path.file_name().unwrap();
