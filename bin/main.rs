@@ -10,12 +10,15 @@
 // Create: 2023-4-20
 
 mod lib;
+mod common;
 mod config;
+mod kmod_util;
+mod aot;
 mod bolt;
 mod daemon;
 mod coredump_monitor;
 
-use crate::lib::process_ext::run_child;
+use crate::kmod_util::test_kmod;
 use crate::daemon::daemon_loop;
 use crate::coredump_monitor::coredump_monitor_loop;
 
@@ -26,19 +29,6 @@ use std::env;
 use std::thread;
 
 const APP_NAME: &str = "sysboostd";
-
-fn test_kmod() -> i32 {
-	let mut args: Vec<String> = Vec::new();
-	args.push("-c".to_string());
-	args.push("lsmod | grep sysboost_loader".to_string());
-	let ret = run_child("/usr/bin/bash", &args);
-	if ret == 0 {
-		println!("sysboost_loader.ko is ready");
-	} else {
-		println!("sysboost_loader.ko is not ready");
-	}
-	return ret;
-}
 
 fn main() {
 	let args: Vec<String> = env::args().collect();
