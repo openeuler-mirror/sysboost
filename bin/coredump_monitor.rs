@@ -9,6 +9,7 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-7-13
 
+use crate::aot::set_app_aot_flag;
 use crate::daemon;
 
 use log::{self};
@@ -59,7 +60,7 @@ fn process_exec_event(pid: i32) {
 
 fn do_bash_rollback() -> i32 {
     // unset flag
-    let ret = daemon::set_app_aot_flag(&BASH_PATH.to_string(), false);
+    let ret = set_app_aot_flag(&BASH_PATH.to_string(), false);
     if ret != 0 {
         log::error!("Failed to unset flag for bash!");
         return ret;

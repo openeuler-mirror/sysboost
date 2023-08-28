@@ -9,8 +9,12 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-8-28
 
+use crate::common::SYSBOOST_PATH;
+
 use serde::Deserialize;
 use std::str::FromStr;
+use std::path::PathBuf;
+use std::fs;
 
 #[derive(Debug, Deserialize)]
 pub struct RtoConfig {
@@ -32,4 +36,45 @@ impl FromStr for RtoConfig {
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		toml::from_str(s)
 	}
+}
+
+// elf_path = "/usr/bin/bash"
+// mode = "static"
+// libs = "/usr/lib64/libtinfo.so.6"
+fn parse_config(contents: String) -> Option<RtoConfig> {
+	let conf_e = contents.parse::<RtoConfig>();
+	match conf_e {
+		Ok(ref c) => log::info!("parse config: {:?}", c),
+		Err(_) => {
+			log::error!("parse config fail");
+			return None;
+		}
+	};
+
+	let conf = conf_e.unwrap();
+	if conf.mode != "static" && conf.mode != "static-nolibc" && conf.mode != "share" && conf.mode != "bolt" {
+		return None;
+	}
+	if conf.elf_path == SYSBOOST_PATH {
+		// the tool can not renew self code
+		return None;
+	}
+
+	return Some(conf);
+}
+
+pub fn read_config(path: &PathBuf) -> Option<RtoConfig> {
+	let ext = path.extension();
+	if ext == None || ext.unwrap() != "toml" {
+		return None;
+	}
+
+	let contents = match fs::read_to_string(path) {
+		Ok(c) => c,
+		Err(e) => {
+			log::error!("reading file fail {}", e);
+			return None;
+		}
+	};
+	return parse_config(contents);
 }
