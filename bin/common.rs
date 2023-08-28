@@ -10,3 +10,9 @@
 // Create: 2023-8-26
 
 pub const SYSBOOST_PATH: &str = "/usr/bin/sysboost";
+
+#[cfg(target_arch = "x86_64")]
+pub const ARCH: &str = "x86_64";
+
+#[cfg(target_arch = "aarch64")]
+pub const ARCH: &str = "aarch64";

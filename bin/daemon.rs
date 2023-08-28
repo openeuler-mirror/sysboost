@@ -320,6 +320,8 @@ pub fn daemon_loop() {
 mod tests {
 	use super::*;
 	use basic::logger::{self};
+	use std::process::Command;
+	use crate::lib::process_ext::run_child;
 
 	#[test]
 	fn test_check_elf_files_modify_1() {
