@@ -608,8 +608,7 @@ fn clean_last_rto() {
 
 fn watch_old_files_perapp(conf: &RtoConfig, inotify: &mut Inotify) {
 	for entry in &conf.watch_paths {
-		let file_path = Path::new(entry);
-		match inotify.add_watch(file_path, WatchMask::MODIFY) {
+		match inotify.add_watch(entry, WatchMask::MODIFY) {
 			Ok(_) => {}
 			Err(e) => {
 				log::error!("add_watch fail {}", e);
@@ -640,6 +639,9 @@ fn check_files_modify(inotify: &mut Inotify) -> bool {
 			// The name field is present only when watch dir
 			// https://man7.org/linux/man-pages/man7/inotify.7.html
 			return true;
+		} else if event.mask.contains(EventMask::IGNORED) {
+			println!("{:?}", event);
+			return true;
 		}
 	}
 	return false;
@@ -651,15 +653,42 @@ fn start_service() {
 
 	let mut rto_configs: Vec<RtoConfig> = Vec::new();
 	refresh_all_config(&mut rto_configs);
+	let mut inotify = Inotify::init().unwrap();
+	let mut try_again = true;
+	match inotify.add_watch("/etc/sysboost.d/bash.toml", WatchMask::MODIFY) {
+		Ok(_) => {
+			try_again = false;
+		}
+		Err(e) => {
+			log::info!("init watch bash.toml failed {}", e);
+		}
+	};
+	let mut buffer = [0; 1024];
 
 	let mut file_inotify = watch_old_files(&rto_configs);
 
 	loop {
 		// wait some time
 		thread::sleep(Duration::from_secs(MIN_SLEEP_TIME));
-
+		if try_again {
+			match inotify.add_watch("/etc/sysboost.d/bash.toml", WatchMask::MODIFY) {
+				Ok(_) => {
+					try_again = false;
+					return;
+				}
+				Err(e) => {
+					log::info!("init watch bash.toml failed {}", e);
+				}
+			};
+		}
 		// do not support config dynamic modify, need restart service
-
+		let events = inotify.read_events(&mut buffer).unwrap();
+		for event in events {
+			if event.mask.contains(EventMask::IGNORED) {
+				println!("{:?}", event);
+				return;
+			}
+		}
 		// check config file and ELF file modify,
 		// if they have changed, we need to renew rto
 		let is_elf_modify = check_files_modify(&mut file_inotify);
