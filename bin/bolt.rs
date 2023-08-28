@@ -11,6 +11,7 @@
 
 use crate::lib::process_ext::run_child;
 use crate::common::ARCH;
+use crate::common::set_thp;
 use crate::config::RtoConfig;
 
 use std::fs;
@@ -116,6 +117,18 @@ fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
 	return ret;
 }
 
+fn is_mysqld(conf: &RtoConfig) -> bool {
+	match Path::new(&conf.elf_path).file_name() {
+		Some(app_file_name) => {
+			if app_file_name == "mysqld" {
+				return true;
+			}
+		},
+		None => {},
+	}
+	return false;
+}
+
 pub fn bolt_optimize(conf: &RtoConfig) -> i32 {
 	if let Some(_p) = &conf.path.clone() {
 		log::error!("Configuration file fail");
@@ -126,6 +139,10 @@ pub fn bolt_optimize(conf: &RtoConfig) -> i32 {
 			return ret;
 		} else {
 			let ret = bolt_optimize_bin(&conf);
+			// 如果优化程序是mysqld, 则开启透明大页
+			if is_mysqld(conf) {
+				set_thp();
+			}
 			return ret;
 		}
 	}
