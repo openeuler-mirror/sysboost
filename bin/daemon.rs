@@ -11,14 +11,14 @@
 
 use crate::lib::fs_ext;
 use crate::lib::process_ext::run_child;
+use crate::config::RtoConfig;
+use crate::bolt::bolt_optimize;
 
 use inotify::{EventMask, Inotify, WatchMask};
 use log::{self};
-use serde::Deserialize;
 use std::{fs, env};
 use std::os::unix::fs as UnixFs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 use goblin::elf::Elf;
@@ -27,7 +27,6 @@ const SYSBOOST_PATH: &str = "/usr/bin/sysboost";
 const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
 const KO_PATH: &str = "/lib/modules/sysboost/sysboost_loader.ko";
 const KO_RTO_PARAM_PATH: &str = "/sys/module/sysboost_loader/parameters/use_rto";
-const SYSBOOST_BOLT_PROFILE: &str = "/usr/lib/sysboost.d/profile/";
 const LDSO: &str = "ld-";
 const LIBCSO: &str = "libc.so";
 
@@ -36,28 +35,6 @@ const MIN_SLEEP_TIME: u64 = 10;
 
 // only 10 program can use boost
 const MAX_BOOST_PROGRAM: u32 = 10;
-
-#[derive(Debug, Deserialize)]
-pub struct RtoConfig {
-	pub elf_path: String,
-	pub mode: String,
-	pub libs: Vec<String>,
-	// Absolute path of the profile
-	pub profile_path: Option<String>,
-
-	#[serde(rename = "PATH")]
-	pub path: Option<String>,
-
-	#[serde(skip)]
-	watch_paths: Vec<String>,
-}
-
-impl FromStr for RtoConfig {
-	type Err = toml::de::Error;
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		toml::from_str(s)
-	}
-}
 
 fn db_add_link(conf: &RtoConfig) -> i32 {
 	// symlink app.link to app, different modes correspond to different directories
@@ -121,104 +98,6 @@ fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	}
 
 	ret = fs_ext::move_file(&format!("{}.rto", conf.elf_path), &format!("{}.tmp.rto", conf.elf_path));
-	return ret;
-}
-
-fn bolt_optimize(conf: &RtoConfig) -> i32 {
-	if let Some(_p) = &conf.path.clone() {
-		log::error!("Configuration file fail");
-		return -1;
-	} else {
-		if conf.elf_path.is_empty() {
-			let ret = bolt_optimize_so(&conf);
-			return ret;
-		} else {
-			let ret = bolt_optimize_bin(&conf);
-			return ret;
-		}
-	}
-}
-
-// support profile
-fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
-	let mut args: Vec<String> = Vec::new();
-
-	args.push("-reorder-blocks=ext-tsp".to_string());
-	args.push("-reorder-functions=hfsort".to_string());
-	args.push("-split-functions".to_string());
-	args.push("-split-all-cold".to_string());
-	args.push("-split-eh".to_string());
-	args.push("-dyno-stats".to_string());
-
-	let elf = conf.elf_path.clone();
-
-	let elf_path = Path::new(&elf);
-	let elf_path = match fs::canonicalize(elf_path) {
-		Ok(p) => p,
-		Err(e) => {
-			log::error!("bolt_optimize_bin: get realpath failed: {}", e);
-			return -1;
-		}
-	};
-	let elf_bak_path = elf_path.with_extension("bak");
-	match fs::copy(&elf_path, &elf_bak_path) {
-		Ok(_) => {}
-		Err(e) => {
-			log::error!("Copy failed: {}", e);
-			return -1;
-		}
-	}
-	args.push(elf_bak_path.to_str().unwrap().to_string());
-	args.push("-o".to_string());
-	args.push(elf.split_whitespace().collect());
-	let profile_str = format!("{}{}", elf, ".profile");
-	if let Some(profile_path_str) = conf.profile_path.clone() {
-		args.push(format!("{}{}", "-data=".to_string(), profile_path_str));
-
-	} else {
-		if let Some(find_file_str) = fs_ext::find_file_in_dirs(&profile_str, &SYSBOOST_BOLT_PROFILE) {
-			args.push(format!("{}{}", "-data=".to_string(), find_file_str));
-		}
-	}
-	let ret = run_child("/usr/bin/llvm-bolt", &args);
-
-	return ret;
-}
-
-fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
-	let mut args: Vec<String> = Vec::new();
-	let mut ret = 1;
-	// change layout of basic blocks in a function
-	args.push("-reorder-blocks=ext-tsp".to_string());
-	// Sorting functions by using hfsort+ a Hash-based function sorting algorithm
-	args.push("-reorder-functions=hfsort+".to_string());
-	args.push("-split-functions=true".to_string());
-	args.push("-split-all-cold".to_string());
-	args.push("-dyno-stats".to_string());
-	args.push("-icf=1".to_string());
-
-	for lib in conf.libs.iter() {
-		let lib_path = Path::new(&lib);
-		let lib_path = match fs::canonicalize(lib_path) {
-			Ok(p) => p,
-			Err(e) => {
-				log::error!("bolt_optimize_so: get realpath failed: {}", e);
-				return -1;
-			}
-		};
-		let lib_bak_path = lib_path.with_extension("bak");
-		match fs::copy(&lib_path, &lib_bak_path) {
-			Ok(_) => {}
-			Err(e) => {
-				log::error!("Copy failed: {}", e);
-				return -1;
-			}
-		}
-		args.push(lib_bak_path.to_str().unwrap().to_string());
-		args.push("-o".to_string());
-		args.push(lib.split_whitespace().collect());
-		ret = run_child("/usr/bin/llvm-bolt", &args);
-	}
 	return ret;
 }
 
