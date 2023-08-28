@@ -1129,38 +1129,6 @@ static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
 	regs->sp = sp;
 }
 #endif /* CONFIG_ARM64 */
-
-static bool check_elf_xattr(struct linux_binprm *bprm)
-{
-	char *xattr = NULL;
-	int xattr_size = 0;
-
-	return false;
-
-	// try to get attr from bprm
-	xattr_size = vfs_getxattr(mnt_idmap(bprm->file->f_path.mnt), bprm->file->f_path.dentry,
-				  "trusted.flags", NULL, 0);
-	if (xattr_size < 0) {
-		return false;
-	}
-
-	xattr = kvmalloc(xattr_size, GFP_KERNEL);
-	if (xattr == NULL) {
-		return false;
-	}
-	xattr_size = vfs_getxattr(mnt_idmap(bprm->file->f_path.mnt), bprm->file->f_path.dentry,
-				  "trusted.flags", xattr, xattr_size);
-	if (xattr_size <= 0) {
-		kvfree(xattr);
-		return false;
-	}
-
-	if (memcmp(xattr, "true", xattr_size)) {
-		return false;
-	}
-	return true;
-}
-
 #endif /* CONFIG_ELF_SYSBOOST */
 
 static int load_elf_binary(struct linux_binprm *bprm)
@@ -1193,22 +1161,23 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct list_head *preload_seg_pos = NULL;
 	struct loaded_seg *loaded_seg;
 
-load_rto:
-	elf_ex = (struct elfhdr *)bprm->buf;
-	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
-	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
-	retval = -ENOEXEC;
-
 	/* close feature to rmmod this ko */
 	if (!use_rto) {
 		goto out;
 	}
+	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
+
+load_rto:
+	elf_ex = (struct elfhdr *)bprm->buf;
+	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
+	retval = -ENOEXEC;
+
 	if (!is_rto_format && !is_rto_symbolic_link) {
 		goto out;
 	}
 
 	/* replace app.rto file, then use binfmt */
-	if (is_rto_symbolic_link) {
+	if (is_rto_symbolic_link && !is_rto_format) {
 		// struct inode *inode = bprm->file->f_inode;
 		int ret;
 		if (use_hpage)
@@ -1224,10 +1193,16 @@ load_rto:
 		goto load_rto;
 	}
 
+	if (!is_rto_format || !is_rto_symbolic_link) {
+		if (debug)
+			pr_info("directly load rto file is not supported now\n");
+		goto out;
+	}
+
 	/* loading rto from now on */
 	if (debug) {
-		printk("exec in rto mode, filename: %s, is_rto_symbolic_link: %d, is_rto_format: %d\n",
-			bprm->file->f_path.dentry->d_iname, is_rto_symbolic_link, is_rto_format);
+		printk("exec in rto mode, filename: %s, loaded_rto: %pK\n",
+			bprm->file->f_path.dentry->d_iname, loaded_rto);
 	}
 #ifdef CONFIG_ARM64
 	/* close vdso optimization on arm64 in case of BUG */
@@ -1251,29 +1226,6 @@ load_rto:
 	elf_phdata = load_elf_phdrs(elf_ex, bprm->file);
 	if (!elf_phdata)
 		goto out;
-
-#ifdef CONFIG_ELF_SYSBOOST
-	/* replace app.rto file, then use binfmt */
-	if (check_elf_xattr(bprm)) {
-		int ret = try_replace_file(bprm);
-		if (!ret) {
-			if (elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO) {
-				goto load_rto;
-			} else {
-				goto out;
-			}
-		} else {
-			/* limit print */
-			printk("replace rto file fail, %d\n", ret);
-			goto out;
-		}
-	}
-	if (!is_rto_format && !(elf_ex->e_flags & OS_SPECIFIC_FLAG_HUGEPAGE))
-		goto out;
-	if (debug) {
-		printk("exec in rto mode, is_rto_format %d\n", is_rto_format);
-	}
-#endif
 
 	elf_ppnt = elf_phdata;
 	for (i = 0; i < elf_ex->e_phnum; i++, elf_ppnt++) {
@@ -1442,6 +1394,8 @@ out_free_interp:
 	start_data = 0;
 	end_data = 0;
 
+	if (loaded_rto)
+		preload_seg_pos = &loaded_rto->segs;
 	/* Now we do a little grungy work by mmapping the ELF image into
 	   the correct location in memory. */
 	for(i = 0, elf_ppnt = elf_phdata;

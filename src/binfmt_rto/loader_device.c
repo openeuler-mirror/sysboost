@@ -82,8 +82,8 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 		// if (loaded_rto->segs.next == &loaded_rto->segs || 
 		// 		loaded_seg->hpages.next == &loaded_seg->hpages) {
 			list_add_tail(&page->lru, &loaded_seg->hpages);
-			pr_info("load_seg: load 1 hpage: 0x%lx, compound_order(page): %d\n",
-				page, compound_order(page));
+			pr_info("load_seg: load 1 hpage: 0x%pK\n",
+				page);
 		// }
 	}
 
