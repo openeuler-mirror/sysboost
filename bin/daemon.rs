@@ -215,6 +215,13 @@ fn clean_last_rto() {
 		set_app_aot_flag(&p, false);
 		db_remove_link(&p);
 	}
+	let ret = fs::remove_file("/usr/bin/bash.rto");
+	match ret {
+		Ok(_) => return,
+		Err(e) => {
+			log::info!("remove bash.rto failed: {}", e);
+		}
+	};
 }
 
 fn watch_old_files_perapp(conf: &RtoConfig, inotify: &mut Inotify) {
