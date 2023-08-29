@@ -139,8 +139,8 @@ pub fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	}
 
 	let mut args: Vec<String> = Vec::new();
-	args.push(format!("--output={}.tmp.rto", conf.elf_path));
-	args.push(format!("-{}", conf.mode));
+	//args.push(format!("--output={}.tmp.rto", conf.elf_path));
+	args.push(format!("--{}", conf.mode));
 	args.push(conf.elf_path.to_owned());
 	for lib in conf.libs.iter() {
 		args.push(lib.split_whitespace().collect());
@@ -149,7 +149,13 @@ pub fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	if ret != 0 {
 		return ret;
 	}
-
-	ret = fs_ext::move_file(&format!("{}.rto", conf.elf_path), &format!("{}.tmp.rto", conf.elf_path));
+	let mut set: Vec<String> = Vec::new();
+	set.push("--set-rto".to_string());
+	set.push("/usr/bin/bash.rto".to_string());
+	ret = run_child(SYSBOOST_PATH, &set);
+	if ret != 0 {
+		return ret;
+	}
+	//ret = fs_ext::move_file(&format!("{}.rto", conf.elf_path), &format!("{}.tmp.rto", conf.elf_path));
 	return ret;
 }

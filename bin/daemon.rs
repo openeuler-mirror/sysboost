@@ -11,6 +11,7 @@
 
 use crate::lib::fs_ext;
 use crate::kmod_util::set_ko_rto_flag;
+use crate::kmod_util::set_hpage_rto_flag;
 use crate::kmod_util::insmod_sysboost_ko;
 use crate::config::RtoConfig;
 use crate::config::read_config;
@@ -108,22 +109,22 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 		None => return None,
 	};
 
-	let elf = match parse_elf_file(&conf.elf_path) {
-		Some(elf) => elf,
-		None => return None,
-	};
+	//let elf = match parse_elf_file(&conf.elf_path) {
+	//	Some(elf) => elf,
+	//	None => return None,
+	//};
 
 	// auto get lib path
 	// In static-nolibc mode, ld and libc need to be deleted after detection.
 	// In share mode, no detection is performed based on libs.
 	if conf.mode == "static" {
-		let libs = find_libs(&conf, &elf);
-		conf.libs = libs;
+		//let libs = find_libs(&conf, &elf);
+		//conf.libs = libs;
 	} else if conf.mode == "static-nolibc" {
-		let mut libs = find_libs(&conf, &elf);
-		libs.retain(|s| !s.contains(LDSO));
-		libs.retain(|s| !s.contains(LIBCSO));
-		conf.libs = libs;
+		//let mut libs = find_libs(&conf, &elf);
+		//libs.retain(|s| !s.contains(LDSO));
+		//libs.retain(|s| !s.contains(LIBCSO));
+		//conf.libs = libs;
 	}
 
 	// add elf file to watch list
@@ -182,6 +183,7 @@ fn refresh_all_config(rto_configs: &mut Vec<RtoConfig>) {
 
 	if rto_configs.len() > 0 {
 		set_ko_rto_flag(true);
+		set_hpage_rto_flag(true);
 	}
 }
 
@@ -257,7 +259,8 @@ fn check_files_modify(inotify: &mut Inotify) -> bool {
 }
 
 fn start_service() {
-	set_ko_rto_flag(false);
+	set_ko_rto_flag(true);
+	set_hpage_rto_flag(true);
 	clean_last_rto();
 
 	let mut rto_configs: Vec<RtoConfig> = Vec::new();
