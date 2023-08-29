@@ -1166,9 +1166,9 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	if (!use_rto) {
 		goto out;
 	}
-	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
 
 load_rto:
+	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
 	elf_ex = (struct elfhdr *)bprm->buf;
 	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
 
@@ -1193,11 +1193,11 @@ load_rto:
 		goto load_rto;
 	}
 
-	if (!is_rto_format || !is_rto_symbolic_link) {
-		if (debug)
-			pr_info("directly load rto file is not supported now\n");
-		goto out;
-	}
+	// if (!is_rto_format || !is_rto_symbolic_link) {
+	// 	if (debug)
+	// 		pr_info("directly load rto file is not supported now\n");
+	// 	goto out;
+	// }
 
 	/* loading rto from now on */
 	if (debug) {
