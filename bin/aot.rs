@@ -156,6 +156,13 @@ pub fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	if ret != 0 {
 		return ret;
 	}
+	let mut set_bash: Vec<String> = Vec::new();
+	set_bash.push("--set".to_string());
+	set_bash.push("/usr/bin/bash".to_string());
+	ret = run_child(SYSBOOST_PATH, &set_bash);
+	if ret != 0 {
+		return ret;
+	}
 	//ret = fs_ext::move_file(&format!("{}.rto", conf.elf_path), &format!("{}.tmp.rto", conf.elf_path));
 	return ret;
 }
