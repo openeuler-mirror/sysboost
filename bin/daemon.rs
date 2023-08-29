@@ -11,6 +11,7 @@
 
 use crate::lib::fs_ext;
 use crate::kmod_util::set_ko_rto_flag;
+use crate::kmod_util::set_hpage_rto_flag;
 use crate::kmod_util::insmod_sysboost_ko;
 use crate::config::RtoConfig;
 use crate::config::read_config;
@@ -182,6 +183,7 @@ fn refresh_all_config(rto_configs: &mut Vec<RtoConfig>) {
 
 	if rto_configs.len() > 0 {
 		set_ko_rto_flag(true);
+		set_hpage_rto_flag(true);
 	}
 }
 
@@ -258,6 +260,7 @@ fn check_files_modify(inotify: &mut Inotify) -> bool {
 
 fn start_service() {
 	set_ko_rto_flag(false);
+	set_hpage_rto_flag(false);
 	clean_last_rto();
 
 	let mut rto_configs: Vec<RtoConfig> = Vec::new();

@@ -741,9 +741,9 @@ static int read_relocation_file(char *file_name, elf_file_t *ef)
 	}
 
 	// Compare the value with the build ID in the ELF file, the length of the build ID is 40 characters.
+	// In the future, you need to modify related packages to ensure that the build ID of the relocation file is the same as that of the elf file.
 	if (memcmp(ef->build_id, old_build_id, BUILD_ID_LEN) != 0) {
-		SI_LOG_ERR("build id mismatch for %s\n", rel_file_name);
-		return -1;
+		SI_LOG_INFO("build id mismatch for %s\n", rel_file_name);
 	}
 
 	return 0;
