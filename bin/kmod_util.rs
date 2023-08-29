@@ -10,6 +10,7 @@
 // Create: 2023-8-26
 
 use crate::lib::process_ext::run_child;
+use std::fs;
 
 const KO_RTO_PARAM_PATH: &str = "/sys/module/sysboost_loader/parameters/use_rto";
 const HPAGE_RTO_PARAM_PATH: &str = "/sys/module/sysboost_loader/parameters/use_hpage";
@@ -17,30 +18,42 @@ const KO_PATH: &str = "/lib/modules/sysboost/sysboost_loader.ko";
 
 // echo 1 > /sys/module/sysboost_loader/parameters/use_rto
 pub fn set_ko_rto_flag(is_set: bool) -> i32 {
-	let mut args: Vec<String> = Vec::new();
+	let mut args;
 	if is_set {
-		args.push("1".to_string());
+		args = "1".to_string();
 	} else {
-		args.push("0".to_string());
+		args= "0".to_string();
 	}
-	args.push(">".to_string());
-	args.push(KO_RTO_PARAM_PATH.to_string());
-	let ret = run_child("/usr/bin/echo", &args);
-	return ret;
+	match fs::write(KO_RTO_PARAM_PATH.to_string(), args) {
+		Ok(_) => {
+			return 0;
+		}
+		Err(e) => {
+			log::error!("Error writing use_rto");
+			return -1;
+		}
+	}
+	0
 }
 
 // echo 1 > /sys/module/sysboost_loader/parameters/use_hpage
 pub fn set_hpage_rto_flag(is_set: bool) -> i32 {
-	let mut args: Vec<String> = Vec::new();
+	let mut args;
 	if is_set {
-		args.push("1".to_string());
+		args = "1".to_string();
 	} else {
-		args.push("0".to_string());
+		args= "0".to_string();
 	}
-	args.push(">".to_string());
-	args.push(HPAGE_RTO_PARAM_PATH.to_string());
-	let ret = run_child("/usr/bin/echo", &args);
-	return ret;
+	match fs::write(HPAGE_RTO_PARAM_PATH.to_string(), args) {
+		Ok(_) => {
+			return 0;
+		}
+		Err(e) => {
+			log::error!("Error writing use_hpage");
+			return -1;
+		}
+	}
+	0
 }
 
 fn insmod_ko(path: &String) {

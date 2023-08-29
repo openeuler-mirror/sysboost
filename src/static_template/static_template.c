@@ -113,6 +113,7 @@ int main(void)
 	NO_COMPILE_OPTIMIZE("sigfillset");
 	NO_COMPILE_OPTIMIZE("siglongjmp");
 	NO_COMPILE_OPTIMIZE("vfprintf");
+	NO_COMPILE_OPTIMIZE("arc4random");
 
 #ifdef __aarch64__
 	// The __stack_chk_guard and __stack_chk_fail symbols are normally supplied by a GCC library called libssp
