@@ -139,7 +139,8 @@ pub fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	}
 
 	let mut args: Vec<String> = Vec::new();
-	//args.push(format!("--output={}.tmp.rto", conf.elf_path));
+	args.push("--output".to_string());
+	args.push(format!("{}.tmp.rto", conf.elf_path));
 	args.push(format!("--{}", conf.mode));
 	args.push(conf.elf_path.to_owned());
 	for lib in conf.libs.iter() {
@@ -149,20 +150,24 @@ pub fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	if ret != 0 {
 		return ret;
 	}
+	ret = fs_ext::move_file(&format!("{}.tmp.rto", conf.elf_path), &format!("{}.rto", conf.elf_path));
+	if ret != 0 {
+		return ret;
+	}
 	let mut set: Vec<String> = Vec::new();
 	set.push("--set-rto".to_string());
-	set.push("/usr/bin/bash.rto".to_string());
+	set.push(format!("{}.rto", conf.elf_path));
 	ret = run_child(SYSBOOST_PATH, &set);
 	if ret != 0 {
 		return ret;
 	}
 	let mut set_bash: Vec<String> = Vec::new();
 	set_bash.push("--set".to_string());
-	set_bash.push("/usr/bin/bash".to_string());
+	set_bash.push(format!("{}", conf.elf_path));
 	ret = run_child(SYSBOOST_PATH, &set_bash);
 	if ret != 0 {
 		return ret;
 	}
-	//ret = fs_ext::move_file(&format!("{}.rto", conf.elf_path), &format!("{}.tmp.rto", conf.elf_path));
+
 	return ret;
 }

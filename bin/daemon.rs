@@ -13,6 +13,7 @@ use crate::lib::fs_ext;
 use crate::kmod_util::set_ko_rto_flag;
 use crate::kmod_util::set_hpage_rto_flag;
 use crate::kmod_util::insmod_sysboost_ko;
+use crate::kmod_util::test_kmod;
 use crate::config::RtoConfig;
 use crate::config::read_config;
 use crate::aot::gen_app_rto;
@@ -177,7 +178,7 @@ fn refresh_all_config(rto_configs: &mut Vec<RtoConfig>) {
 			Some(conf) => rto_configs.push(conf),
 			None => {}
 		}
-		log::error!("refresh all config {}", i);
+		log::info!("refresh all config {}", i);
 		i += 1;
 	}
 
@@ -318,7 +319,9 @@ fn start_service() {
 }
 
 pub fn daemon_loop() {
-	insmod_sysboost_ko();
+	if test_kmod() == 1 {
+		insmod_sysboost_ko();
+	}
 
 	// When rebooting, you should clean up the backup environment
 	loop {

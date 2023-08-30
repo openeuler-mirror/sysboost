@@ -72,9 +72,9 @@ pub fn test_kmod() -> i32 {
 	args.push("lsmod | grep sysboost_loader".to_string());
 	let ret = run_child("/usr/bin/bash", &args);
 	if ret == 0 {
-		println!("sysboost_loader.ko is ready");
+		log::info!("sysboost_loader.ko is ready");
 	} else {
-		println!("sysboost_loader.ko is not ready");
+		log::info!("sysboost_loader.ko is not ready");
 	}
 	return ret;
 }
