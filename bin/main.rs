@@ -73,9 +73,9 @@ fn main() {
 	}
 
         // start up coredump monitor
-        let _coredump_monitor_handle = thread::spawn(||{
-                coredump_monitor_loop();
-        });
+        // let _coredump_monitor_handle = thread::spawn(||{
+        //         coredump_monitor_loop();
+        // });
 
 	// daemon service gen rto ELF with config
 	daemon_loop();
