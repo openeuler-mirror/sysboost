@@ -62,20 +62,27 @@ error_elf:
 	return ret;
 }
 
-static int _elf_set_flags(char *path, unsigned int flags)
+static int _elf_write_read_flags(char *path, unsigned int *flags, bool set)
 {
+	bool is_readonly = !*flags;
 	elf_file_t *ef = malloc(sizeof(elf_file_t));
 	if (ef == NULL) {
 		SI_LOG_ERR("malloc fail\n");
-		return -1;
+		return -12;
 	}
 
-	int ret = elf_read_file(path, ef, false);
+	int ret = elf_read_file(path, ef, is_readonly);
 	if (ret != 0) {
-		return -1;
+		return ret;
 	}
 
-	ef->hdr->e_flags |= flags;
+	if (!is_readonly) {
+		if (set)
+			ef->hdr->e_flags |= *flags;
+		else
+			ef->hdr->e_flags &= (0xffffffffU ^ *flags);
+	}
+	*flags = ef->hdr->e_flags;
 
 	elf_close_file(ef);
 	free(ef);
@@ -83,25 +90,33 @@ static int _elf_set_flags(char *path, unsigned int flags)
 	return 0;
 }
 
+static int _elf_set_flags(char *path, unsigned int flags)
+{
+	if (!flags)
+		return -22;
+	return _elf_write_read_flags(path, &flags, true);
+}
+
 static int _elf_unset_flags(char *path, unsigned int flags)
 {
-	elf_file_t *ef = malloc(sizeof(elf_file_t));
-	if (ef == NULL) {
-		SI_LOG_ERR("malloc fail\n");
-		return -1;
-	}
+	if (!flags)
+		return -22;
+	return _elf_write_read_flags(path, &flags, false);
+}
 
-	int ret = elf_read_file(path, ef, false);
-	if (ret != 0) {
-		return -1;
-	}
+/*
+ * return 1 means flags are set, 0 means flags are *not all* set;
+ *          negative means error.
+*/
+static int _elf_test_flags(char *path, unsigned int flags)
+{
+	unsigned int all_flags = 0;
+	int ret;
+	ret = _elf_write_read_flags(path, &all_flags, 0);
+	if (ret)
+		return ret;
 
-	ef->hdr->e_flags &= (0xffffffffU ^ flags);
-
-	elf_close_file(ef);
-	free(ef);
-	ef = NULL;
-	return 0;
+	return ((all_flags & flags) == flags);
 }
 
 int elf_set_rto(char *path, bool state)
@@ -110,6 +125,19 @@ int elf_set_rto(char *path, bool state)
 		return _elf_set_flags(path, OS_SPECIFIC_FLAG_RTO);
 	}
 	return _elf_unset_flags(path, OS_SPECIFIC_FLAG_RTO);
+}
+
+int elf_get_rto(char *path)
+{
+	int ret = _elf_test_flags(path, OS_SPECIFIC_FLAG_RTO);
+	if (ret < 0)
+		return ret;
+	
+	if (ret)
+		SI_LOG_INFO("%s FLAG RTO is set\n", path);
+	else
+		SI_LOG_INFO("%s FLAG RTO is not set\n", path);
+	return 0;
 }
 
 void elf_set_hugepage(elf_link_t *elf_link)

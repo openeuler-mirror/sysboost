@@ -45,17 +45,19 @@ int main(int argc, char *argv[])
 	}
 
 	static struct option long_options[] = {
-	    {"output", required_argument, NULL, 'o'},
-	    {"debug", no_argument, NULL, 'd'},
-	    {"set", required_argument, NULL, 's'},
-	    {"unset", required_argument, NULL, 'u'},
-	    {"set-rto", required_argument, NULL, '1'},
-	    {"unset-rto", required_argument, NULL, '0'},
-	    {"hook", no_argument, NULL, 'h'},
-	    {ELF_LINK_STATIC_S, no_argument, NULL, 'S'},
-	    {ELF_LINK_STATIC_NOLIBC_S, no_argument, NULL, 'N'},
-	    {ELF_LINK_STATIC_NOLD_S, no_argument, NULL, 'I'},
-	    {NULL, 0, NULL, 0}
+		{"output", 			required_argument, 	NULL, 	'o'},
+		{"debug", 			no_argument, 		NULL, 	'd'},
+		{"set", 			required_argument, 	NULL, 	's'},
+		{"unset", 			required_argument, 	NULL, 	'u'},
+		{"get", 			required_argument, 	NULL, 	'g'},
+		{"set-rto", 			required_argument, 	NULL, 	'1'},
+		{"unset-rto", 			required_argument, 	NULL, 	'0'},
+		{"get-rto", 			required_argument, 	NULL, 	'2'},
+		{"hook", 			no_argument, 		NULL, 	'h'},
+		{ELF_LINK_STATIC_S, 		no_argument, 		NULL, 	'S'},
+		{ELF_LINK_STATIC_NOLIBC_S, 	no_argument, 		NULL, 	'N'},
+		{ELF_LINK_STATIC_NOLD_S, 	no_argument, 		NULL, 	'I'},
+		{NULL, 				0, 			NULL, 	0}
 	};
 
 	int option_index = 0;
@@ -82,6 +84,9 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 			return elf_set_symbolic_link(tmp, false);
+		case 'g':
+			SI_LOG_ERR("not supported now, fix me\n");
+			return -1;
 		case '1':
 			str_ret = realpath(optarg, tmp);
 			if (!str_ret) {
@@ -96,6 +101,13 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 			return elf_set_rto(tmp, false);
+		case '2':
+			str_ret = realpath(optarg, tmp);
+			if (!str_ret) {
+				SI_LOG_ERR("get realpath fail: %s\n", optarg);
+				return -1;
+			}
+			return elf_get_rto(tmp);
 		case 'h':
 			elf_link->hook_func = true;
 			SI_LOG_INFO("hook func\n");
