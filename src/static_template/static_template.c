@@ -114,6 +114,32 @@ int main(void)
 	NO_COMPILE_OPTIMIZE("siglongjmp");
 	NO_COMPILE_OPTIMIZE("vfprintf");
 	NO_COMPILE_OPTIMIZE("arc4random");
+	NO_COMPILE_OPTIMIZE("optarg");
+	NO_COMPILE_OPTIMIZE("getopt_long");
+	NO_COMPILE_OPTIMIZE("error");
+	NO_COMPILE_OPTIMIZE("fwrite_unlocked");
+	NO_COMPILE_OPTIMIZE("__assert_fail");
+	NO_COMPILE_OPTIMIZE("fputs_unlocked");
+	NO_COMPILE_OPTIMIZE("clearerr_unlocked");
+	NO_COMPILE_OPTIMIZE("__fread_unlocked_chk");
+	NO_COMPILE_OPTIMIZE("__freading");
+	NO_COMPILE_OPTIMIZE("fputc_unlocked");
+	NO_COMPILE_OPTIMIZE("reallocarray");
+	NO_COMPILE_OPTIMIZE("__fpending");
+	NO_COMPILE_OPTIMIZE("unlinkat");
+	NO_COMPILE_OPTIMIZE("fstatfs");
+	NO_COMPILE_OPTIMIZE("fchdir");
+	NO_COMPILE_OPTIMIZE("dirfd");
+	NO_COMPILE_OPTIMIZE("rpmatch");
+	NO_COMPILE_OPTIMIZE("rawmemchr");
+	NO_COMPILE_OPTIMIZE("feof");
+	NO_COMPILE_OPTIMIZE("posix_fadvise");
+	NO_COMPILE_OPTIMIZE("signal");
+	NO_COMPILE_OPTIMIZE("fflush_unlocked");
+	NO_COMPILE_OPTIMIZE("obstack_vprintf");
+	NO_COMPILE_OPTIMIZE("__isoc99_fscanf");
+	NO_COMPILE_OPTIMIZE("__vsprintf_chk");
+	NO_COMPILE_OPTIMIZE("__isoc99_sscanf");
 
 #ifdef __aarch64__
 	// The __stack_chk_guard and __stack_chk_fail symbols are normally supplied by a GCC library called libssp
