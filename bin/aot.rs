@@ -161,6 +161,13 @@ pub fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	if ret != 0 {
 		return ret;
 	}
+	let mut set_mod: Vec<String> = Vec::new();
+	set_mod.push("755".to_string());
+	set_mod.push(format!("{}.rto", conf.elf_path));
+	ret = run_child("/usr/bin/chmod", &set_mod);
+	if ret != 0 {
+		return ret;
+	} 
 	let mut set_bash: Vec<String> = Vec::new();
 	set_bash.push("--set".to_string());
 	set_bash.push(format!("{}", conf.elf_path));
