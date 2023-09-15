@@ -65,6 +65,7 @@ static char *special_dynsyms[] = {
     "__pthread_unwind",
     "__mq_notify_fork_subprocess",
     "__timer_fork_subprocess",
+    "getentropy",
 };
 #define SPECIAL_DYNSYMS_LEN (sizeof(special_dynsyms) / sizeof(special_dynsyms[0]))
 

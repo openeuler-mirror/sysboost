@@ -140,6 +140,46 @@ int main(void)
 	NO_COMPILE_OPTIMIZE("__isoc99_fscanf");
 	NO_COMPILE_OPTIMIZE("__vsprintf_chk");
 	NO_COMPILE_OPTIMIZE("__isoc99_sscanf");
+	NO_COMPILE_OPTIMIZE("getentropy");
+        NO_COMPILE_OPTIMIZE("pthread_mutex_init");
+        NO_COMPILE_OPTIMIZE("pthread_cond_init");
+        NO_COMPILE_OPTIMIZE("pthread_mutex_destroy");
+        NO_COMPILE_OPTIMIZE("pthread_cond_destroy");
+        NO_COMPILE_OPTIMIZE("__stpcpy_chk");
+        NO_COMPILE_OPTIMIZE("ftruncate");
+        NO_COMPILE_OPTIMIZE("strxfrm");
+        NO_COMPILE_OPTIMIZE("execlp");
+        NO_COMPILE_OPTIMIZE("pthread_cond_signal");
+        NO_COMPILE_OPTIMIZE("pthread_cond_wait");
+        NO_COMPILE_OPTIMIZE("pthread_create");
+        NO_COMPILE_OPTIMIZE("pthread_join");
+        NO_COMPILE_OPTIMIZE("sched_getaffinity");
+        NO_COMPILE_OPTIMIZE("pipe2");
+        NO_COMPILE_OPTIMIZE("__explicit_bzero_chk");
+        NO_COMPILE_OPTIMIZE("mkostemp");
+        NO_COMPILE_OPTIMIZE("pause");
+        NO_COMPILE_OPTIMIZE("getauxval");
+        NO_COMPILE_OPTIMIZE("getcontext");
+        NO_COMPILE_OPTIMIZE("makecontext");
+        NO_COMPILE_OPTIMIZE("getnameinfo");
+        NO_COMPILE_OPTIMIZE("usleep");
+        NO_COMPILE_OPTIMIZE("getsockopt");
+        NO_COMPILE_OPTIMIZE("gethostbyname");
+        NO_COMPILE_OPTIMIZE("listen");
+        NO_COMPILE_OPTIMIZE("accept");
+        NO_COMPILE_OPTIMIZE("shutdown");
+        NO_COMPILE_OPTIMIZE("perror");
+	NO_COMPILE_OPTIMIZE("__memset_chk");
+	NO_COMPILE_OPTIMIZE("__strcat_chk");
+	NO_COMPILE_OPTIMIZE("chmod");
+	NO_COMPILE_OPTIMIZE("setbuf");
+	NO_COMPILE_OPTIMIZE("pthread_rwlock_destroy");
+	NO_COMPILE_OPTIMIZE("gmtime_r");
+	NO_COMPILE_OPTIMIZE("__xpg_strerror_r");
+	NO_COMPILE_OPTIMIZE("mlock");
+	NO_COMPILE_OPTIMIZE("syscall");
+	NO_COMPILE_OPTIMIZE("closelog");
+	NO_COMPILE_OPTIMIZE("ftell");
 
 #ifdef __aarch64__
 	// The __stack_chk_guard and __stack_chk_fail symbols are normally supplied by a GCC library called libssp
