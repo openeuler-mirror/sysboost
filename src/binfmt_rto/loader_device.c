@@ -170,7 +170,7 @@ static int preload_rto(struct file *file)
 			goto error_seg;
 	}
 
-	list_add(&loaded_rtos, &loaded_rto->list);
+	list_add(&loaded_rto->list, &loaded_rtos);
 
 	kfree(elf_phdata);
 	kfree(elf_ex);
