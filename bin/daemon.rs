@@ -35,7 +35,7 @@ const LDSO: &str = "ld-";
 const LIBCSO: &str = "libc.so";
 
 // sleep some time wait for next event
-const MIN_SLEEP_TIME: u64 = 10;
+const MIN_SLEEP_TIME: u64 = 10000;
 
 // only 10 program can use boost
 const MAX_BOOST_PROGRAM: u32 = 10;
