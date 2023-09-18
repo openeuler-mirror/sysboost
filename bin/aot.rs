@@ -90,44 +90,44 @@ pub fn find_libs(conf: &RtoConfig, elf: &Elf) -> Vec<String> {
 	}
 }
 
-pub fn set_app_aot_flag(old_path: &String, is_set: bool) -> i32 {
-	let mut args: Vec<String> = Vec::new();
-	let setfattr = "setfattr".to_string();
-	args.push("-n".to_string());
-	args.push("trusted.sysboost_flags".to_string());
-	args.push("-v".to_string());
-	if is_set {
-		args.push("true".to_string());
-	} else {
-		args.push("false".to_string());
-	}
-	let old_path = Path::new(old_path);
-	let old_path = match fs::canonicalize(old_path) {
-		Ok(p) => p,
-		Err(e) => {
-			log::error!("get realpath failed: {}", e);
-			return -1;
-		}
-	};
-	let new_path = old_path.with_extension("bak");
-	match fs::copy(&old_path, &new_path) {
-		Ok(_) => {}
-		Err(e) => {
-			log::error!("Copy failed: {}", e);
-			return -1;
-		}
-	}
-	args.push(new_path.to_str().unwrap().to_string());
-	let ret = run_child(&setfattr, &args);
-	match fs::rename(&new_path, &old_path) {
-		Ok(_) => {}
-		Err(e) => {
-			log::error!("Mv failed: {}", e);
-			return -1;
-		}
-	}
-	return ret;
-}
+// pub fn set_app_aot_flag(old_path: &String, is_set: bool) -> i32 {
+// 	let mut args: Vec<String> = Vec::new();
+// 	let setfattr = "setfattr".to_string();
+// 	args.push("-n".to_string());
+// 	args.push("trusted.sysboost_flags".to_string());
+// 	args.push("-v".to_string());
+// 	if is_set {
+// 		args.push("true".to_string());
+// 	} else {
+// 		args.push("false".to_string());
+// 	}
+// 	let old_path = Path::new(old_path);
+// 	let old_path = match fs::canonicalize(old_path) {
+// 		Ok(p) => p,
+// 		Err(e) => {
+// 			log::error!("get realpath failed: {}", e);
+// 			return -1;
+// 		}
+// 	};
+// 	let new_path = old_path.with_extension("bak");
+// 	match fs::copy(&old_path, &new_path) {
+// 		Ok(_) => {}
+// 		Err(e) => {
+// 			log::error!("Copy failed: {}", e);
+// 			return -1;
+// 		}
+// 	}
+// 	args.push(new_path.to_str().unwrap().to_string());
+// 	let ret = run_child(&setfattr, &args);
+// 	match fs::rename(&new_path, &old_path) {
+// 		Ok(_) => {}
+// 		Err(e) => {
+// 			log::error!("Mv failed: {}", e);
+// 			return -1;
+// 		}
+// 	}
+// 	return ret;
+// }
 
 // 生成rto文件
 // rto文件先生成到临时文件, 然后mv到最终路径, 避免并发操作文件问题
