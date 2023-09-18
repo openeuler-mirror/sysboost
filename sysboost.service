@@ -7,6 +7,7 @@ After=sysboost.service
 Type=forking
 ExecStart=/usr/bin/sysboostd --daemon
 Restart=always
+ExecStart=sh  /etc/systemd/system/sysboostd_exec_stop.sh
 
 [Install]
 WantedBy=multi-user.target
