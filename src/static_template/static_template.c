@@ -113,7 +113,12 @@ int main(void)
 	NO_COMPILE_OPTIMIZE("sigfillset");
 	NO_COMPILE_OPTIMIZE("siglongjmp");
 	NO_COMPILE_OPTIMIZE("vfprintf");
+
+#ifdef GLIBC236
+	// arc4random@@GLIBC_2.36
 	NO_COMPILE_OPTIMIZE("arc4random");
+#endif
+
 	NO_COMPILE_OPTIMIZE("optarg");
 	NO_COMPILE_OPTIMIZE("getopt_long");
 	NO_COMPILE_OPTIMIZE("error");
