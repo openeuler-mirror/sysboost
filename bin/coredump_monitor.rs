@@ -9,7 +9,7 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-7-13
 
-//use crate::aot::set_app_aot_flag;
+use crate::aot::set_app_link_flag;
 use crate::daemon;
 
 use log::{self};
@@ -60,11 +60,11 @@ fn process_exec_event(pid: i32) {
 
 fn do_bash_rollback() -> i32 {
     // unset flag
-    // let ret = set_app_aot_flag(&BASH_PATH.to_string(), false);
-    // if ret != 0 {
-    //     log::error!("Failed to unset flag for bash!");
-    //     return ret;
-    // }
+    let ret = set_app_link_flag(&BASH_PATH.to_string(), false);
+    if ret != 0 {
+        log::error!("Failed to unset link flag for bash!");
+        return ret;
+    }
     // remove link
     daemon::db_remove_link(&BASH_LINK_PATH.to_string());
     // remove bash.rto
@@ -111,13 +111,13 @@ fn process_coredump_event(pid: i32) {
         log::info!("{} is not exist in PID_INFOS!", pid);
         return;
     }
-   
+
     if let Some(file_path) = PID_INFOS.lock().unwrap().get(&pid) {
         log::info!("{} has create a coredump!", file_path);
         if MERGE_FILES.lock().unwrap().contains(&file_path) == false {
             return;
         }
-        
+
         if file_path == BASH_PATH {
             let ret = do_bash_rollback();
             if ret != 0 {
@@ -186,7 +186,7 @@ mod tests {
         let source_file_exist = source_file.exists();
         assert!(source_file_exist == true, "coredump source file does not exist!");
         let excute_file = Path::new(EXCUTE_TEST_PATH);
-        
+
         let output = Command::new("gcc").args(&["-o", &excute_file.to_str().unwrap(), &source_file.to_str().unwrap()])
                 .output().expect("Faild to execute command!");
         if !output.status.success() {
@@ -198,14 +198,14 @@ mod tests {
                 panic!("Failed to get realpath: {}", e);
             }
         };
-        
+
         let excute_file_exist = real_excute_file.exists();
         assert!(excute_file_exist == true, "excute file is not exist!");
-        
+
         add_merge_file(real_excute_file.to_str().unwrap().to_string());
         // do coredump monitor
         let _coredump_monitor = thread::spawn(|| {
-            coredump_monitor_loop();                
+            coredump_monitor_loop();
         });
 
 
@@ -281,7 +281,7 @@ mod tests {
         let bash_rto_path: &str = "/usr/bin/bash.rto";
         let bash_rto_backup: &str = "/usr/bin/bash.rtobak";
         create_or_backup_file(bash_rto_path, bash_rto_backup);
-        
+
         // start sysboost
         let output = Command::new("systemctl").args(&["start", "sysboost.service"]).output().expect("Failed to start sysboost");
         if !output.status.success() {
@@ -301,7 +301,7 @@ mod tests {
         if output.status.success() {
             panic!("Coredump has not created!");
         }
-        
+
         let bash_link_file = Path::new(bash_link_path);
         let bash_link_exist = bash_link_file.exists();
         assert_eq!(bash_link_exist, false);

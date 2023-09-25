@@ -13,8 +13,8 @@ use log::{self};
 use std::fs;
 use std::path::PathBuf;
 
-pub fn move_file(new_path: &String, old_path: &String) -> i32 {
-	match fs::rename(&new_path, &old_path) {
+pub fn move_file(from: &String, to: &String) -> i32 {
+	match fs::rename(&from, &to) {
 		Ok(_) => {}
 		Err(e) => {
 			log::error!("move file failed: {}", e);
