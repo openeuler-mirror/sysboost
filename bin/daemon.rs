@@ -31,8 +31,8 @@ use std::thread;
 use std::time::Duration;
 
 const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
-const LDSO: &str = "ld-";
-const LIBCSO: &str = "libc.so";
+//const LDSO: &str = "ld-";
+//const LIBCSO: &str = "libc.so";
 
 // sleep some time wait for next event
 const MIN_SLEEP_TIME: u64 = 10000;
@@ -110,17 +110,17 @@ fn process_config(path: PathBuf) -> Option<RtoConfig> {
 		None => return None,
 	};
 
-	//let elf = match parse_elf_file(&conf.elf_path) {
-	//	Some(elf) => elf,
-	//	None => return None,
-	//};
+	let elf = match parse_elf_file(&conf.elf_path) {
+		Some(elf) => elf,
+		None => return None,
+	};
 
 	// auto get lib path
 	// In static-nolibc mode, ld and libc need to be deleted after detection.
 	// In share mode, no detection is performed based on libs.
 	if conf.mode == "static" {
-		//let libs = find_libs(&conf, &elf);
-		//conf.libs = libs;
+		let libs = find_libs(&conf, &elf);
+		conf.libs = libs;
 	} else if conf.mode == "static-nolibc" {
 		//let mut libs = find_libs(&conf, &elf);
 		//libs.retain(|s| !s.contains(LDSO));
@@ -275,6 +275,7 @@ fn start_service() {
 	refresh_all_config(&mut rto_configs);
 	let mut inotify = Inotify::init().unwrap();
 	let mut try_again = true;
+	// TODO: 为什么写死路径? 这些代码都要重写;
 	match inotify.add_watch("/etc/sysboost.d/bash.toml", WatchMask::MODIFY) {
 		Ok(_) => {
 			try_again = false;
@@ -293,7 +294,6 @@ fn start_service() {
 		if try_again {
 			match inotify.add_watch("/etc/sysboost.d/bash.toml", WatchMask::MODIFY) {
 				Ok(_) => {
-					try_again = false;
 					return;
 				}
 				Err(e) => {
