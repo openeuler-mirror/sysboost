@@ -9,18 +9,18 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-4-20
 
-use crate::lib::fs_ext;
-use crate::kmod_util::set_ko_rto_flag;
-use crate::kmod_util::set_hpage_rto_flag;
-use crate::kmod_util::insmod_sysboost_ko;
-use crate::kmod_util::test_kmod;
-use crate::config::RtoConfig;
-use crate::config::read_config;
-use crate::aot::gen_app_rto;
-use crate::aot::set_app_link_flag;
-use crate::aot::parse_elf_file;
 use crate::aot::find_libs;
+use crate::aot::gen_app_rto;
+use crate::aot::parse_elf_file;
+use crate::aot::set_app_link_flag;
 use crate::bolt::bolt_optimize;
+use crate::config::read_config;
+use crate::config::RtoConfig;
+use crate::kmod_util::insmod_sysboost_ko;
+use crate::kmod_util::set_hpage_rto_flag;
+use crate::kmod_util::set_ko_rto_flag;
+use crate::kmod_util::test_kmod;
+use crate::lib::fs_ext;
 
 use inotify::{EventMask, Inotify, WatchMask};
 use log::{self};
@@ -75,14 +75,14 @@ fn sysboost_core_process(conf: &RtoConfig) -> i32 {
 				log::error!("Error: bolt mode start fault.");
 				return ret;
 			}
-		},
+		}
 		"static" | "static-nolibc" | "share" => {
 			let ret = gen_app_rto(&conf);
 			if ret != 0 {
 				log::error!("Error: generate rto start fault.");
 				return ret;
 			}
-		},
+		}
 		_ => {
 			log::info!("Warning: read elf file fault, please check config.");
 			// handle other cases
@@ -332,9 +332,9 @@ pub fn daemon_loop() {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::lib::process_ext::run_child;
 	use basic::logger::{self};
 	use std::process::Command;
-	use crate::lib::process_ext::run_child;
 
 	#[test]
 	fn test_check_elf_files_modify_1() {
@@ -429,13 +429,10 @@ mod tests {
 			String::from("/lib/ld-linux-aarch64.so.1"),
 		];
 
-		let bash_libs_nolibc = vec![
-			String::from("/usr/lib64/libtinfo.so.6"),
-		];
+		let bash_libs_nolibc = vec![String::from("/usr/lib64/libtinfo.so.6")];
 
 		assert_eq!(libs, bash_libs);
 		assert_eq!(libs_nolibc, bash_libs_nolibc);
-
 	}
 
 	#[test]
@@ -475,13 +472,9 @@ mod tests {
 			String::from("/lib64/ld-linux-x86-64.so.2"),
 		];
 
-		let bash_libs_nolibc = vec![
-			String::from("/usr/lib64/libtinfo.so.6"),
-		];
+		let bash_libs_nolibc = vec![String::from("/usr/lib64/libtinfo.so.6")];
 
 		assert_eq!(libs, bash_libs);
 		assert_eq!(libs_nolibc, bash_libs_nolibc);
-
 	}
-
 }

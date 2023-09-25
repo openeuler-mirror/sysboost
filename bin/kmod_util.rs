@@ -22,7 +22,7 @@ pub fn set_ko_rto_flag(is_set: bool) -> i32 {
 	if is_set {
 		args = "1".to_string();
 	} else {
-		args= "0".to_string();
+		args = "0".to_string();
 	}
 	match fs::write(KO_RTO_PARAM_PATH.to_string(), args) {
 		Ok(_) => {
@@ -42,7 +42,7 @@ pub fn set_hpage_rto_flag(is_set: bool) -> i32 {
 	if is_set {
 		args = "1".to_string();
 	} else {
-		args= "0".to_string();
+		args = "0".to_string();
 	}
 	match fs::write(HPAGE_RTO_PARAM_PATH.to_string(), args) {
 		Ok(_) => {

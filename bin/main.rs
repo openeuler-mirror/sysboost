@@ -9,18 +9,18 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-4-20
 
-mod lib;
-mod common;
-mod config;
-mod kmod_util;
 mod aot;
 mod bolt;
-mod daemon;
+mod common;
+mod config;
 mod coredump_monitor;
+mod daemon;
+mod kmod_util;
+mod lib;
 
-use crate::kmod_util::test_kmod;
-use crate::daemon::daemon_loop;
 use crate::coredump_monitor::coredump_monitor_loop;
+use crate::daemon::daemon_loop;
+use crate::kmod_util::test_kmod;
 
 use basic::logger::{self};
 use daemonize::Daemonize;
@@ -72,10 +72,10 @@ fn main() {
 		}
 	}
 
-        // start up coredump monitor
-        // let _coredump_monitor_handle = thread::spawn(||{
-        //         coredump_monitor_loop();
-        // });
+	// start up coredump monitor
+	// let _coredump_monitor_handle = thread::spawn(||{
+	//         coredump_monitor_loop();
+	// });
 
 	// daemon service gen rto ELF with config
 	daemon_loop();
