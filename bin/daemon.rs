@@ -17,7 +17,7 @@ use crate::kmod_util::test_kmod;
 use crate::config::RtoConfig;
 use crate::config::read_config;
 use crate::aot::gen_app_rto;
-//use crate::aot::set_app_aot_flag;
+use crate::aot::set_app_link_flag;
 use crate::aot::parse_elf_file;
 use crate::aot::find_libs;
 use crate::bolt::bolt_optimize;
@@ -95,11 +95,11 @@ fn sysboost_core_process(conf: &RtoConfig) -> i32 {
 		return ret;
 	}
 
-	// let ret = set_app_aot_flag(&conf.elf_path, true);
-	// if ret != 0 {
-	// 	log::error!("Error: set app aot flag fault.");
-	// 	return ret;
-	// }
+	let ret = set_app_link_flag(&conf.elf_path, true);
+	if ret != 0 {
+		log::error!("Error: set app link flag fail.");
+		return ret;
+	}
 	return ret;
 }
 
@@ -213,7 +213,7 @@ fn clean_last_rto() {
 		}
 		let file_name = path.file_name().unwrap();
 		let p = format!("{}{}", SYSBOOST_DB_PATH, file_name.to_string_lossy());
-		//set_app_aot_flag(&p, false);
+		set_app_link_flag(&p, false);
 		db_remove_link(&p);
 	}
 	let ret = fs::remove_file("/usr/bin/bash.rto");
