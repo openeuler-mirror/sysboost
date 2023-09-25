@@ -9,17 +9,17 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-8-26
 
-use crate::lib::fs_ext;
-use crate::lib::process_ext::run_child;
 use crate::common::SYSBOOST_PATH;
 use crate::config::RtoConfig;
+use crate::lib::fs_ext;
+use crate::lib::process_ext::run_child;
 
-use std::{fs, env};
-use std::path::Path;
 use goblin::elf::Elf;
+use std::path::Path;
+use std::{env, fs};
 
 // Obtain the full path from real path, environment variable PATH, current dir
-fn get_lib_full_path(lib: &str, confpaths:Vec<&str>, rpaths: Vec<&str>, paths: Vec<&str>) -> Option<String> {
+fn get_lib_full_path(lib: &str, confpaths: Vec<&str>, rpaths: Vec<&str>, paths: Vec<&str>) -> Option<String> {
 	if !(confpaths.is_empty()) {
 		for confpath in confpaths {
 			let full_dir = fs_ext::find_file_in_dirs(&lib, &confpath);
@@ -57,7 +57,7 @@ pub fn parse_elf_file(elf_path: &str) -> Option<Elf> {
 		Ok(elf_bytes) => elf_bytes,
 		Err(_e) => {
 			log::info!("Error: read elf file fault, please check config.");
-			return None
+			return None;
 		}
 	};
 	match Elf::parse(&elf_bytes) {

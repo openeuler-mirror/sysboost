@@ -9,8 +9,8 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-8-26
 
-use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 
 pub fn run_child(cmd: &str, args: &Vec<String>) -> i32 {
 	log::info!("run child: {}, {}", cmd, args.join(" ").to_string());

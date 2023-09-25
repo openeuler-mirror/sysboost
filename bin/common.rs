@@ -21,7 +21,7 @@ pub const ARCH: &str = "aarch64";
 
 // echo always > /sys/kernel/mm/transparent_hugepage/enabled
 pub fn set_thp() -> i32 {
-        let args: Vec<String> = Vec::new();
+	let args: Vec<String> = Vec::new();
 	let ret = run_child("echo always > /sys/kernel/mm/transparent_hugepage/enabled", &args);
 	return ret;
 }

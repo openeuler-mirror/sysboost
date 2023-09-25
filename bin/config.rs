@@ -12,9 +12,9 @@
 use crate::common::SYSBOOST_PATH;
 
 use serde::Deserialize;
-use std::str::FromStr;
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
+use std::str::FromStr;
 
 #[derive(Debug, Deserialize)]
 pub struct RtoConfig {

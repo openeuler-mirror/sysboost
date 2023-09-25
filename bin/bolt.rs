@@ -9,10 +9,10 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-8-28
 
-use crate::lib::process_ext::run_child;
-use crate::common::ARCH;
 use crate::common::set_thp;
+use crate::common::ARCH;
 use crate::config::RtoConfig;
+use crate::lib::process_ext::run_child;
 
 use std::fs;
 use std::path::Path;
@@ -29,8 +29,8 @@ fn get_profile_path(conf: &RtoConfig) -> String {
 		match Path::new(&conf.elf_path).file_name() {
 			Some(app_file_name) => {
 				return format!("{}{}.profile.{}", SYSBOOST_BOLT_PROFILE, app_file_name.to_string_lossy(), ARCH);
-			},
-			None => {},
+			}
+			None => {}
 		}
 	}
 	return "".to_string();
@@ -72,7 +72,6 @@ fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
 	let real_profile_path = get_profile_path(conf);
 	if real_profile_path != "" {
 		args.push(format!("-data={}", real_profile_path));
-
 	}
 
 	let ret = run_child("/usr/bin/llvm-bolt", &args);
@@ -123,8 +122,8 @@ fn is_mysqld(conf: &RtoConfig) -> bool {
 			if app_file_name == "mysqld" {
 				return true;
 			}
-		},
-		None => {},
+		}
+		None => {}
 	}
 	return false;
 }

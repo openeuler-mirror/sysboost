@@ -9,7 +9,6 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-5-17
 
-
 // test all sysboostd modes and features
 #[cfg(test)]
 mod tests {
@@ -17,11 +16,11 @@ mod tests {
 	use std::fs::File;
 	use std::io::Read;
 	use std::io::Write;
-	use std::process::Command;
 	use std::io::{BufRead, BufReader};
-	use std::{thread, time};
+	use std::process::Command;
 	use std::thread::sleep;
 	use std::time::Duration;
+	use std::{thread, time};
 
 	// Normal Scenarios
 	// 1. try to start sysboostd, if sysboostd
@@ -61,7 +60,7 @@ mod tests {
 		let bash_rto_path = "/usr/bin/bash.rto";
 		if std::path::Path::new(bash_rto_path).exists() {
 			match std::fs::remove_file(bash_rto_path) {
-				Ok(_) => {},
+				Ok(_) => {}
 				Err(e) => {
 					panic!("Failed to remove old bash.rto file: {}", e);
 				}
@@ -130,34 +129,23 @@ mod tests {
 			.expect("Failed to execute command");
 
 		// Check the status code of the command
-		assert!(
-			output.status.success(),
-			"Failed to replace bash.rto with Python: {}",
-			String::from_utf8_lossy(&output.stderr)
-		);
+		assert!(output.status.success(), "Failed to replace bash.rto with Python: {}", String::from_utf8_lossy(&output.stderr));
 
 		// Restart Bash and check if it's running Python
-		let output = Command::new("bash")
-			.args(&["-c", "\"print('Python is running')\""])
-			.output()
-			.expect("Failed to execute command");
+		let output = Command::new("bash").args(&["-c", "\"print('Python is running')\""]).output().expect("Failed to execute command");
 
 		// Check the output of the Python program
 		let stdout = String::from_utf8_lossy(&output.stdout);
 		let stderr = String::from_utf8_lossy(&output.stderr);
-		assert!(
-			stdout.trim() == "Python is running",
-			"Bash is not running Python: {}",
-			stderr.trim()
-		);
+		assert!(stdout.trim() == "Python is running", "Bash is not running Python: {}", stderr.trim());
 	}
 
-	fn is_contain_log_message(message : &str) -> bool {
+	fn is_contain_log_message(message: &str) -> bool {
 		let file_name = "/var/log/messages";
 		let file = File::open(file_name).unwrap();
 		let lines = BufReader::new(file).lines();
 
-		for line in lines{
+		for line in lines {
 			if let Ok(data) = line {
 				if data.contains(message) {
 					return true;
@@ -170,7 +158,7 @@ mod tests {
 
 	fn clear_log_message() {
 		let cmd_string = "> /var/log/messages".to_string();
-		let output =  Command::new("bash").arg("-c").arg(cmd_string).output().expect("Failed to execute command");
+		let output = Command::new("bash").arg("-c").arg(cmd_string).output().expect("Failed to execute command");
 		if !output.status.success() {
 			panic!("Failed to clear file");
 		}
@@ -212,10 +200,10 @@ mod tests {
 		// check log message
 		let sleep_millis = time::Duration::from_millis(1000);
 		thread::sleep(sleep_millis);
-		let has_message =  is_contain_log_message("Started Run sysboost for Kunpeng CPU");
+		let has_message = is_contain_log_message("Started Run sysboost for Kunpeng CPU");
 		assert!(has_message, "log info is not print in message!");
-                let has_daemon_message =  is_contain_log_message("On Daemon");
-                assert!(has_daemon_message, "log info is not print in message!");
+		let has_daemon_message = is_contain_log_message("On Daemon");
+		assert!(has_daemon_message, "log info is not print in message!");
 	}
 
 	// Unnormal Scenarios
@@ -234,11 +222,7 @@ mod tests {
 		fs::remove_file(toml_path).unwrap();
 
 		// Restart sysboostd service using systemctl
-		let output = Command::new("systemctl")
-			.arg("restart")
-			.arg("sysboostd")
-			.output()
-			.unwrap();
+		let output = Command::new("systemctl").arg("restart").arg("sysboostd").output().unwrap();
 		assert!(output.status.success());
 
 		// Check if /var/lib/sysboost directory exists and has files
@@ -254,7 +238,7 @@ mod tests {
 	fn kill_pid(pid: u32) {
 		match Command::new("kill").arg("-9").arg(pid.to_string()).output() {
 			Ok(_) => return,
-			Err(_) => return
+			Err(_) => return,
 		}
 	}
 
@@ -286,4 +270,3 @@ mod tests {
 		kill_pid(c_pid);
 	}
 }
-
