@@ -18,7 +18,7 @@ const KO_PATH: &str = "/lib/modules/sysboost/sysboost_loader.ko";
 
 // echo 1 > /sys/module/sysboost_loader/parameters/use_rto
 pub fn set_ko_rto_flag(is_set: bool) -> i32 {
-	let mut args;
+	let args;
 	if is_set {
 		args = "1".to_string();
 	} else {
@@ -28,17 +28,16 @@ pub fn set_ko_rto_flag(is_set: bool) -> i32 {
 		Ok(_) => {
 			return 0;
 		}
-		Err(e) => {
+		Err(_) => {
 			log::error!("Error writing use_rto");
 			return -1;
 		}
 	}
-	0
 }
 
 // echo 1 > /sys/module/sysboost_loader/parameters/use_hpage
 pub fn set_hpage_rto_flag(is_set: bool) -> i32 {
-	let mut args;
+	let args;
 	if is_set {
 		args = "1".to_string();
 	} else {
@@ -48,12 +47,11 @@ pub fn set_hpage_rto_flag(is_set: bool) -> i32 {
 		Ok(_) => {
 			return 0;
 		}
-		Err(e) => {
+		Err(_) => {
 			log::error!("Error writing use_hpage");
 			return -1;
 		}
 	}
-	0
 }
 
 fn insmod_ko(path: &String) {

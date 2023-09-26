@@ -73,9 +73,12 @@ fn main() {
 	}
 
 	// start up coredump monitor
-	// let _coredump_monitor_handle = thread::spawn(||{
-	//         coredump_monitor_loop();
-	// });
+	// TODO: 监控性能有问题, 需要重新设计; 先用debug判断包住,避免编译告警
+	if is_debug {
+		let _coredump_monitor_handle = thread::spawn(||{
+			coredump_monitor_loop();
+		});
+	}
 
 	// daemon service gen rto ELF with config
 	daemon_loop();

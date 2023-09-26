@@ -15,7 +15,6 @@ use crate::lib::fs_ext;
 use crate::lib::process_ext::run_child;
 
 use goblin::elf::Elf;
-use std::path::Path;
 use std::{env, fs};
 
 // Obtain the full path from real path, environment variable PATH, current dir
