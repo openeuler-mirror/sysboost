@@ -9,6 +9,7 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-5-17
 
+// TODO: rust开发测试用例效率太低, 用Python开发测试用例, 该文件代码逐渐废弃
 // test all sysboostd modes and features
 #[cfg(test)]
 mod tests {

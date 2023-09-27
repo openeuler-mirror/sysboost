@@ -12,16 +12,18 @@
 use crate::lib::process_ext::run_child;
 
 pub const SYSBOOST_PATH: &str = "/usr/bin/sysboost";
-
-#[cfg(target_arch = "x86_64")]
-pub const ARCH: &str = "x86_64";
-
-#[cfg(target_arch = "aarch64")]
-pub const ARCH: &str = "aarch64";
+pub const SYSBOOST_CONFIG_PATH: &str = "/etc/sysboost.d";
 
 // echo always > /sys/kernel/mm/transparent_hugepage/enabled
 pub fn set_thp() -> i32 {
 	let args: Vec<String> = Vec::new();
 	let ret = run_child("echo always > /sys/kernel/mm/transparent_hugepage/enabled", &args);
 	return ret;
+}
+
+pub fn is_arch_x86_64() -> bool {
+	if std::env::consts::ARCH == "x86_64" {
+		return true;
+	}
+	return false;
 }

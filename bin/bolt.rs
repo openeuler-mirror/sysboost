@@ -10,12 +10,14 @@
 // Create: 2023-8-28
 
 use crate::common::set_thp;
-use crate::common::ARCH;
+use crate::common::is_arch_x86_64;
 use crate::config::RtoConfig;
 use crate::lib::process_ext::run_child;
+use crate::config::get_config;
 
 use std::fs;
 use std::path::Path;
+use std::env::consts::ARCH;
 
 // 因为sysboost限制最多只有10个APP可以做优化, 因此假设app名称不会冲突
 // 为了避免不同架构profile误用, 因此名称中带arch信息
@@ -147,10 +149,66 @@ pub fn bolt_optimize(conf: &RtoConfig) -> i32 {
 	}
 }
 
+fn gen_app_profile(name: &str, elf_path: &String) -> i32 {
+	// 抓取热点
+	// perf record -e cycles:u -j any,u -a -o mysqld.perf.data -- sleep 10
+	// 生成bolt profile文件
+	// perf2bolt -p=mysqld.perf.data -o mysqld.profile xxx
+
+	// ARM不支持-j参数
+	// perf record -e cycles:u -a -o mysqld.perf.data -- sleep 10
+	// 没有-j参数收集的分支跳转信息, 则-nl关闭分支预测
+	// perf2bolt -nl -p=mysqld.perf.data -o mysqld.profile xxx
+
+	let mut args: Vec<String> = Vec::new();
+	let mut ret;
+	let perf_data_path = format!("{}{}.perf.data", SYSBOOST_BOLT_PROFILE, name);
+	args.push("record".to_string());
+	args.push("-e".to_string());
+	args.push("cycles:u".to_string());
+	if is_arch_x86_64() {
+		args.push("-j".to_string());
+		args.push("any,u".to_string());
+	}
+	args.push("-a".to_string());
+	args.push("-o".to_string());
+	args.push(perf_data_path.clone());
+	args.push("--".to_string());
+	args.push("sleep".to_string());
+	args.push("10".to_string());
+	ret = run_child("perf", &args);
+	if ret != 0 {
+		return ret;
+	}
+
+	args = Vec::new();
+	if is_arch_x86_64() == false {
+		args.push("-nl".to_string());
+	}
+	args.push(format!("-p={}", perf_data_path));
+	args.push("-o".to_string());
+	args.push(format!("{}{}.profile.now", SYSBOOST_BOLT_PROFILE, name));
+	args.push(elf_path.to_string());
+	ret = run_child("perf2bolt", &args);
+	return ret;
+}
+
+// profile文件与ELF文件不配套的时候, 影响BOLT优化性能
+pub fn gen_profile(name: &str) -> i32 {
+	// 获得app路径
+	let conf_e = get_config(name);
+	let conf = match conf_e {
+		Some(conf) => conf,
+		None => return -1,
+	};
+
+	return gen_app_profile(name, &conf.elf_path);
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::common::ARCH;
+	use std::env::consts::ARCH;
 
 	// cargo test -- tests::test_get_profile_path --nocapture
 	// 测试profile路径是否正确
