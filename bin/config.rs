@@ -17,14 +17,18 @@ use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+// 选型toml格式作为配置文件格式, toml格式可读性最佳
 #[derive(Debug, Deserialize)]
 pub struct RtoConfig {
+	// 目标程序的全路径
 	pub elf_path: String,
+	// 优化模式
 	pub mode: String,
-	pub libs: Vec<String>,
-	// Absolute path of the profile
+	// 依赖的动态库路径
+	pub libs: Vec<String>,  // TODO: 修改为字符串, 列表形式影响可读性
+	// profile文件路径
 	pub profile_path: Option<String>,
-
+	// 环境变量
 	#[serde(rename = "PATH")]
 	pub path: Option<String>,
 
@@ -46,8 +50,8 @@ fn parse_config(contents: String) -> Option<RtoConfig> {
 	let conf_e = contents.parse::<RtoConfig>();
 	match conf_e {
 		Ok(ref c) => log::info!("parse config: {:?}", c),
-		Err(_) => {
-			log::error!("parse config fail");
+		Err(e) => {
+			log::error!("parse config fail: {}", e);
 			return None;
 		}
 	};
