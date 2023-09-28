@@ -21,6 +21,7 @@ mod lib;
 use crate::coredump_monitor::coredump_monitor_loop;
 use crate::daemon::daemon_loop;
 use crate::kmod_util::test_kmod;
+use crate::bolt::gen_profile;
 
 use basic::logger::{self};
 use daemonize::Daemonize;
@@ -37,6 +38,16 @@ fn main() {
 
 	// arg0 is program name, parameter is from arg1
 	for i in 1..args.len() {
+		if args[i].contains("--gen-profile=") {
+			if let Some(index) = args[i].find('=') {
+				let sub_str = &args[i][index + 1..];
+				std::process::exit(gen_profile(sub_str));
+			} else {
+				println!("parameter is wrong");
+				std::process::exit(-1);
+			}
+		}
+
 		match args[i].as_str() {
 			"--debug" => {
 				is_debug = true;

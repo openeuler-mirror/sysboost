@@ -436,7 +436,7 @@ mod tests {
 	}
 
 	#[test]
-	#[cfg(target_arch = "x86")]
+	#[cfg(target_arch = "x86_64")]
 	fn test_process_config_x86() {
 		// Create a temporary directory for testing
 		let temp_dir = tempfile::tempdir().unwrap();

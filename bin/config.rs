@@ -10,6 +10,7 @@
 // Create: 2023-8-28
 
 use crate::common::SYSBOOST_PATH;
+use crate::common::SYSBOOST_CONFIG_PATH;
 
 use serde::Deserialize;
 use std::fs;
@@ -77,4 +78,9 @@ pub fn read_config(path: &PathBuf) -> Option<RtoConfig> {
 		}
 	};
 	return parse_config(contents);
+}
+
+pub fn get_config(name: &str) -> Option<RtoConfig> {
+	let conf_path = format!("{}/{}.toml", SYSBOOST_CONFIG_PATH, name);
+	return read_config(&PathBuf::from(conf_path));
 }

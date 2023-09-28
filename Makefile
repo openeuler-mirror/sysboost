@@ -44,7 +44,7 @@ install:
 
 test: sysboostd install
 	clear
-	cargo test
+	./tests/test_sysboostd.py
 
-test-debug:
+unittest:
 	cargo test -- --nocapture
