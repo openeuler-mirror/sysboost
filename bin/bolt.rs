@@ -149,7 +149,7 @@ pub fn bolt_optimize(conf: &RtoConfig) -> i32 {
 	}
 }
 
-fn gen_app_profile(name: &str, elf_path: &String) -> i32 {
+fn gen_app_profile(name: &str, elf_path: &String, timeout: u32) -> i32 {
 	// 抓取热点
 	// perf record -e cycles:u -j any,u -a -o mysqld.perf.data -- sleep 10
 	// 生成bolt profile文件
@@ -175,7 +175,7 @@ fn gen_app_profile(name: &str, elf_path: &String) -> i32 {
 	args.push(perf_data_path.clone());
 	args.push("--".to_string());
 	args.push("sleep".to_string());
-	args.push("10".to_string());
+	args.push(timeout.to_string());
 	ret = run_child("perf", &args);
 	if ret != 0 {
 		return ret;
@@ -194,15 +194,18 @@ fn gen_app_profile(name: &str, elf_path: &String) -> i32 {
 }
 
 // profile文件与ELF文件不配套的时候, 影响BOLT优化性能
-pub fn gen_profile(name: &str) -> i32 {
+pub fn gen_profile(name: &str, timeout: u32) -> i32 {
 	// 获得app路径
 	let conf_e = get_config(name);
 	let conf = match conf_e {
 		Some(conf) => conf,
-		None => return -1,
+		None => {
+			println!("get {} config fail", name);
+			return -1;
+		}
 	};
 
-	return gen_app_profile(name, &conf.elf_path);
+	return gen_app_profile(name, &conf.elf_path, timeout);
 }
 
 #[cfg(test)]
