@@ -38,36 +38,73 @@ def write_file(file_path, s):
     file.close()
 
 
+def write_config_toml(elf_path, mode):
+    # 生成toml
+    run_cmd("mkdir -p /etc/sysboost.d")
+    run_cmd("rm -f /etc/sysboost.d/mysqld.toml")
+    s = f'''elf_path = "{elf_path}"
+mode = "{mode}"
+libs = []
+'''
+    write_file("/etc/sysboost.d/mysqld.toml", s)
+
+
+def restart_sysboostd():
+    run_cmd("killall -9 sysboostd")
+    run_cmd("/usr/bin/sysboostd --daemon &")
+    #run_cmd("systemctl restart sysboost")
+
+
+def is_text_hugepage(s):
+    # 不是0的时候, 说明是大页
+    # ShmemPmdMapped:        0 kB
+    # TODO: 实现判断
+    pass
+
+
 class TestSysboostd(unittest.TestCase):
-    ''' 测试在线生成profile文件
+    def test_gen_profile(self):
+        """
+        测试在线生成profile文件
         sysboostd --gen-profile=mysqld
         观察点: /usr/lib/sysboost.d/profile/mysqld.profile.now 是否正确生成
-    '''
-    def test_gen_profile(self):
+        """
         # 测试环境需要安装perf, llvm-bolt
         # yum install perf llvm-bolt
-
+        # 防止profile目录不存在
         run_cmd("mkdir -p /usr/lib/sysboost.d/profile")
         # 不是每个测试环境都有mysql, 用小程序模拟测试, 目标程序需要有重定位信息
         run_cmd("mkdir -p /home/test_sysboost")
         run_cmd("cp -f build/tests/test_simple/simple_app /home/test_sysboost/mysqld")
         # 生成toml
-        run_cmd("mkdir -p /etc/sysboost.d")
-        run_cmd("rm -f /etc/sysboost.d/mysqld.toml")
-        s = '''elf_path = "/home/test_sysboost/mysqld"
-mode = "bolt"
-libs = []
-'''
-        write_file("/etc/sysboost.d/mysqld.toml", s)
+        write_config_toml("/home/test_sysboost/mysqld", "bolt")
 
         # 测试
         file_path = "/usr/lib/sysboost.d/profile/mysqld.profile.now"
         run_cmd("rm -f {}".format(file_path))
         ret,output = run_cmd("sysboostd --gen-profile=mysqld --timeout=1")
+        # 虚拟机perf无法抓取相关事件
         # TODO: 目标程序需要被采集到, 否则perf2bolt会报错, 返回1
         self.assertEqual(ret, 1, msg=output)
         #self.assertEqual(os.path.exists(file_path), True)
 
 
+    def test_hugepage_mode(self):
+        """
+        测试代码大页
+        观察点: /proc/xxx/smaps 是否代码大页
+        """
+        run_cmd("mkdir -p /home/test_sysboost")
+        run_cmd("cd tests/test_hugepage; make")
+        run_cmd("cp -f tests/test_hugepage/test_hugepage /home/test_sysboost/")
+        run_cmd("sysboost -s /home/test_sysboost/test_hugepage")
+        _,output = run_cmd("/home/test_sysboost/test_hugepage")
+        ret = is_text_hugepage(output)
+        self.assertEqual(ret, True, msg=output)
+
+
 if __name__ == '__main__':
+    # python3 -m unittest test_sysboostd.TestSysboostd.test_hugepage_mode
+    # suite = unittest.TestLoader().loadTestsFromName('test_hugepage_mode')
+    # unittest.TextTestRunner().run(suite)
     unittest.main(verbosity=2)
