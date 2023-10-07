@@ -158,7 +158,7 @@ int main(int argc, char *argv[])
 	if (ret < 0) {
 		return -1;
 	}
-
+        free(elf_link);
 	SI_LOG_INFO("OK\n");
 	return 0;
 }
