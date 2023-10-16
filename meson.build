@@ -17,7 +17,6 @@ cc = meson.get_compiler('c')
 si_source_root = meson.current_source_dir()
 si_build_root = meson.current_build_dir()
 si_static_libraries = []
-abi_version_file = files('ABI_VERSION')
 
 if host_machine.cpu_family().startswith('x86')
     arch_subdir = 'x86'
