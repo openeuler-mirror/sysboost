@@ -59,7 +59,7 @@
 
 #ifdef CONFIG_ELF_SYSBOOST
 #include <linux/kprobes.h>
-#include "../elf_ext.h"
+#include "../elfmerge/elf_ext.h"
 
 #define AT_RSEQ_FEATURE_SIZE	27	/* rseq supported feature size */
 #define AT_RSEQ_ALIGN		28	/* rseq allocation alignment */
