@@ -1,23 +1,20 @@
 .PHONY: all clean test
 
-ROOT_DIR=.
-SYSBOOSTD=$(ROOT_DIR)/target/debug/sysboostd
-BUILD_DIR=$(ROOT_DIR)/build
-SYSBOOST=$(BUILD_DIR)/src/sysboost
-SYSBOOSTD_INSTALL_PATH=/usr/bin/sysboostd
-SYSBOOST_INSTALL_PATH=/usr/bin/sysboost
+BUILD_DIR=build
+ELFMERGE=$(BUILD_DIR)/src/elfmerge/elfmerge
+ELFMERGE_INSTALL_PATH=/usr/bin/elfmerge
 
-all: sysboostd sysboost binfmt_rto
+all: sysboostd elfmerge sysboost_loader
 
 sysboostd:
-	clear
-	cargo build
+	cd src/sysboostd && cargo build
 
-sysboost:
+elfmerge:
+	meson build --buildtype=debug
 	ninja -C build -v
 
-binfmt_rto:
-	make -C src/binfmt_rto || true
+sysboost_loader:
+	cd src/sysboost_loader && make -j8
 
 release:
 	rm -rf Cargo.lock
@@ -30,17 +27,26 @@ debug:
 	meson build --buildtype=debug
 
 clean:
-	rm -rf Cargo.lock
-	ninja -C build clean
-	cargo clean
+	rm -rf build
+	rm -rf src/sysboostd/Cargo.lock
+	cd src/sysboostd && cargo clean
+	cd src/sysboost_loader && make clean
 
 format:
 	meson --internal clangformat ./ ./build
 	cargo fmt
 
 install:
-	cp -f $(SYSBOOSTD) $(SYSBOOSTD_INSTALL_PATH)
-	cp -f $(SYSBOOST) $(SYSBOOST_INSTALL_PATH)
+	cp -f src/sysboostd/target/debug/sysboostd /usr/bin/
+	cp -f $(ELFMERGE) $(ELFMERGE_INSTALL_PATH)
+	mkdir -p /lib/modules/sysboost/
+	cp -f src/sysboost_loader/sysboost_loader.ko /lib/modules/sysboost/
+	cp -f src/sysboost.service/sysboostd_exec_stop.sh /etc/systemd/system/
+	cp -f src/sysboost.service/sysboost.service /usr/lib/systemd/system/
+	mkdir -p /etc/sysboost.d
+	mkdir -p /usr/lib/relocation
+	xz -k $(BUILD_DIR)/src/static_template/sysboost_static_template
+	mv -f $(BUILD_DIR)/src/static_template/sysboost_static_template.xz /usr/lib/relocation/
 
 test: sysboostd install
 	clear
