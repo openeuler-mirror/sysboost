@@ -6,7 +6,6 @@ target
 ~*
 .vscode/
 .idea/
-libs
 vendor
 Cargo.lock
 
