@@ -17,6 +17,7 @@ mod coredump_monitor;
 mod daemon;
 mod kmod_util;
 mod lib;
+mod netlink_client;
 
 use crate::coredump_monitor::coredump_monitor_loop;
 use crate::daemon::daemon_loop;
@@ -104,13 +105,12 @@ fn main() {
 	}
 
 	// start up coredump monitor
-	// TODO: 监控性能有问题, 需要重新设计; 先用debug判断包住,避免编译告警
-	if is_debug {
-		let _coredump_monitor_handle = thread::spawn(||{
+	let _coredump_monitor_handle = thread::spawn(||{
 			coredump_monitor_loop();
-		});
-	}
-
+	});
+	
 	// daemon service gen rto ELF with config
 	daemon_loop();
+	
+	_coredump_monitor_handle.join().unwrap()
 }
