@@ -70,9 +70,13 @@ static int __init sysboost_loader_init(void)
 	ret = loader_device_init();
 	if (ret)
 		goto error_device;
-	
+	ret = nl_trans_init();
+	if (ret) 
+		goto error_nl;
 	return 0;
 
+error_nl:
+	loader_device_exit();
 error_device:
 	exit_rto_binfmt();
 error_rto:
@@ -83,6 +87,7 @@ static void __exit sysboost_loader_exit(void)
 {
 	loader_device_exit();
 	exit_rto_binfmt();
+	nl_trans_exit();
 }
 
 module_init(sysboost_loader_init);

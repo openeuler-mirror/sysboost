@@ -105,6 +105,7 @@ static struct global_symbols {
 	proc_symbol(elf_core_extra_data_size);
 	proc_symbol(elf_core_write_extra_phdrs);
 	proc_symbol(elf_core_write_extra_data);
+	proc_symbol(get_mm_exe_file);
 } g_sym;
 
 #define proc_symbol_char(x) #x
@@ -133,7 +134,12 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(dump_user_range),
 	proc_symbol_char(arch_align_stack),
 	proc_symbol_char(task_cputime),
-	proc_symbol_char(thread_group_cputime)
+	proc_symbol_char(thread_group_cputime),
+	proc_symbol_char(elf_core_extra_phdrs),
+	proc_symbol_char(elf_core_extra_data_size),
+	proc_symbol_char(elf_core_write_extra_phdrs),
+	proc_symbol_char(elf_core_write_extra_data),
+	proc_symbol_char(get_mm_exe_file),
 };
 
 int init_symbols(void)
@@ -2409,6 +2415,21 @@ static void fill_extnum_info(struct elfhdr *elf, struct elf_shdr *shdr4extnum,
 	shdr4extnum->sh_info = segs;
 }
 
+static int set_crash_info(struct file *exe_file, struct crash_info *msg)
+{
+	char *path;
+	char *buf = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!buf) {
+		pr_info("send binary path to sysboostd failed: kmalloc buf failed.\n");
+		return -ENOMEM;
+	}
+	path = file_path(exe_file, buf, PATH_MAX);
+	msg->len = strlen(path);
+	strncpy(msg->path, path, msg->len);
+	kfree(buf);
+	return msg->len;
+}
+
 /*
  * Actual dumper
  *
@@ -2427,7 +2448,37 @@ static int elf_core_dump(struct coredump_params *cprm)
 	struct elf_shdr *shdr4extnum = NULL;
 	Elf_Half e_phnum;
 	elf_addr_t e_shoff;
+	struct crash_info *msg;
+	struct file *exe_file;
+	struct mm_struct *mm;
 
+	/* send binary path to sysboostd */
+	msg = kmalloc(sizeof(struct crash_info), GFP_KERNEL);
+	if (!msg) {
+		pr_info("send binary path to sysboostd failed: kmalloc struct crash_info failed.\n");
+		goto core_dump;
+	}
+	mm = get_task_mm(current);
+	if (!mm) {
+		pr_info("send binary path to sysboostd failed: get task mm failed.\n");
+		goto mm_error;
+	}
+	exe_file = g_sym.get_mm_exe_file(mm);
+	mmput(mm);
+	if (!exe_file) {
+		pr_info("send binary path to sysboostd failed: get mm exe file failed.\n");
+		goto mm_error;
+	}
+	if (set_crash_info(exe_file, msg) <= 0) {
+		pr_info("send binary path to sysboostd failed: set_crash_info failed.\n");
+		goto crashinfo_error;
+	}
+	send_to_user(msg);
+crashinfo_error:
+	fput(exe_file);
+mm_error:
+	kfree(msg);
+core_dump:
 	/*
 	 * The number of segs are recored into ELF header as 16bit value.
 	 * Please check DEFAULT_MAX_MAP_COUNT definition when you modify here.

@@ -5,6 +5,7 @@
 
 #include <linux/file.h>
 #include "loader_device.h"
+#include "netlink_kernel.h"
 
 int rto_populate(struct file *file, unsigned long vaddr,
                  unsigned long offset, unsigned long size, struct loaded_seg *loaded_seg);

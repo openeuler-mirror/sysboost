@@ -1,7 +1,7 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 obj-m := sysboost_loader.o
-sysboost_loader-objs := main.o loader_device.o
+sysboost_loader-objs := main.o loader_device.o netlink_kernel.o
 
 # 5.10内核和6.4内核binfmt_elf.c差异较大, 因此拆分不同文件
 ifeq ($(findstring 5.10, $(KDIR)), 5.10)
