@@ -1,0 +1,31 @@
+{
+    "env": {
+        "KERNEL_VERSION": "6.4.0-10.1.0.20.oe2309.aarch64",
+        "compilerPath": "/usr/bin/gcc",
+    },
+    "configurations": [
+        {
+            "name": "sysboost_loader",
+            "includePath": [
+                "/usr/src/kernels/${KERNEL_VERSION}/include",
+                "/usr/src/kernels/${KERNEL_VERSION}/include/generated",
+                "/usr/src/kernels/${KERNEL_VERSION}/arch/arm64/include",
+                "/usr/src/kernels/${KERNEL_VERSION}/arch/arm64/include/generated",
+                "${workspaceFolder}/src/sysboost_loader",
+            ],
+            "defines": [
+                "CONFIG_ELF_CORE",
+                "CONFIG_COREDUMP",
+                "CONFIG_PGTABLE_LEVELS=4",
+            ],
+        },
+        {
+            "name": "elfmerge",
+            "includePath": [
+            ],
+            "defines": [],
+        },
+    ],
+    "version": 4,
+    "enableConfigurationSquiggles": true
+}

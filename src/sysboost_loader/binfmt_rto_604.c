@@ -10,6 +10,7 @@
  * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
 
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/log2.h>
@@ -46,8 +47,6 @@
 #include <linux/dax.h>
 #include <linux/uaccess.h>
 #include <linux/rseq.h>
-#include <linux/xattr.h>
-#include <linux/dcache.h>
 #include <asm/param.h>
 #include <asm/page.h>
 #include "main.h"
@@ -60,17 +59,6 @@
 #ifdef CONFIG_ELF_SYSBOOST
 #include <linux/kprobes.h>
 #include "../elfmerge/elf_ext.h"
-
-#define AT_RSEQ_FEATURE_SIZE	27	/* rseq supported feature size */
-#define AT_RSEQ_ALIGN		28	/* rseq allocation alignment */
-
-/* compat 22.03 LTS, 22.03 LTS SP2 */
-#ifndef MM_SAVED_AUXV
-#define MM_SAVED_AUXV(mm) mm->saved_auxv
-#endif
-
-#ifdef CONFIG_X86
-extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 #endif
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
@@ -154,20 +142,6 @@ int init_symbols(void)
 	return 0;
 }
 
-#ifdef ELF_HWCAP
-#undef ELF_HWCAP
-#define ELF_HWCAP (__cpu_get_elf_hwcap())
-static inline unsigned long __cpu_get_elf_hwcap(void)
-{
-#ifdef CONFIG_ARM64
-	return g_sym.cpu_get_elf_hwcap();
-#else
-	// x86 boot_cpu_data is export
-	return (boot_cpu_data.x86_capability[CPUID_1_EDX]);
-#endif
-}
-#endif
-
 #ifdef ELF_HWCAP2
 #undef ELF_HWCAP2
 #define ELF_HWCAP2 (__cpu_get_elf_hwcap2())
@@ -178,6 +152,38 @@ static inline unsigned long __cpu_get_elf_hwcap2(void)
 #else
 	// x86 is global val elf_hwcap2, not export
 	return *(u32 *)g_sym.elf_hwcap2;
+#endif
+}
+#endif
+
+#ifdef CONFIG_ARM64
+#ifdef start_thread
+#undef start_thread
+#endif
+
+#define start_thread ___start_thread
+
+// arm64 start_thread is inline function, so copy it
+static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
+				    unsigned long sp)
+{
+	start_thread_common(regs, pc);
+	regs->pstate = PSR_MODE_EL0t;
+	g_sym.spectre_v4_enable_task_mitigation(current);
+	regs->sp = sp;
+}
+#endif /* CONFIG_ARM64 */
+
+#ifdef ELF_HWCAP
+#undef ELF_HWCAP
+#define ELF_HWCAP (__cpu_get_elf_hwcap())
+static inline unsigned long __cpu_get_elf_hwcap(void)
+{
+#ifdef CONFIG_ARM64
+	return g_sym.cpu_get_elf_hwcap();
+#else
+	// x86 boot_cpu_data is export
+	return (boot_cpu_data.x86_capability[CPUID_1_EDX]);
 #endif
 }
 #endif
@@ -205,12 +211,6 @@ do {									\
 
 // TODO: vdso layout for ARM64
 #define __arch_setup_additional_pages(bprm, uses_interp, load_bias, is_rto_format) (g_sym.arch_setup_additional_pages(bprm, uses_interp))
-
-#ifdef arch_elf_adjust_prot
-#undef arch_elf_adjust_prot
-#endif
-
-#define arch_elf_adjust_prot g_sym.arch_elf_adjust_prot
 
 #else
 // x86
@@ -254,6 +254,21 @@ int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, un
 #endif
 #define SET_PERSONALITY2(ex, state) (g_sym.set_personality_64bit())
 
+#endif
+
+
+#ifdef CONFIG_ELF_SYSBOOST
+
+#define AT_RSEQ_FEATURE_SIZE	27	/* rseq supported feature size */
+#define AT_RSEQ_ALIGN		28	/* rseq allocation alignment */
+
+/* compat 22.03 LTS, 22.03 LTS SP2 */
+#ifndef MM_SAVED_AUXV
+#define MM_SAVED_AUXV(mm) mm->saved_auxv
+#endif
+
+#ifdef CONFIG_X86
+extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 #endif
 
 #endif /* CONFIG_ELF_SYSBOOST */
@@ -571,11 +586,20 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 	return 0;
 }
 
+#ifdef CONFIG_ELF_SYSBOOST
 static unsigned long elf_map(struct file *filep, unsigned long addr,
 		const struct elf_phdr *eppnt, int prot, int type,
 		unsigned long total_size, bool use_pmd_mapping, bool is_exec_seg)
+#else
+static unsigned long elf_map(struct file *filep, unsigned long addr,
+		const struct elf_phdr *eppnt, int prot, int type,
+		unsigned long total_size)
+#endif
 {
-	unsigned long map_addr, size, off;
+	unsigned long map_addr;
+
+#ifdef CONFIG_ELF_SYSBOOST
+	unsigned long size, off;
 
 	if (use_pmd_mapping) {
 		size = eppnt->p_filesz + ELF_HPAGEOFFSET(eppnt->p_vaddr);
@@ -591,6 +615,12 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 		addr = ELF_PAGESTART(addr);
 		size = ELF_PAGEALIGN(size);
 	}
+#else
+	unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
+	unsigned long off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
+	addr = ELF_PAGESTART(addr);
+	size = ELF_PAGEALIGN(size);
+#endif
 
 	/* mmap() will return -EINVAL if given a zero size, but a
 	 * segment with zero filesize is perfectly valid */
@@ -795,7 +825,7 @@ static inline int make_prot(u32 p_flags, struct arch_elf_state *arch_state,
 	if (p_flags & PF_X)
 		prot |= PROT_EXEC;
 
-	return arch_elf_adjust_prot(prot, arch_state, has_interp, is_interp);
+	return g_sym.arch_elf_adjust_prot(prot, arch_state, has_interp, is_interp);
 }
 
 /* This is much more generalized than the library routine read function,
@@ -803,10 +833,17 @@ static inline int make_prot(u32 p_flags, struct arch_elf_state *arch_state,
    is only provided so that we can read a.out libraries that have
    an ELF header */
 
+#ifdef CONFIG_ELF_SYSBOOST
 static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 		struct file *interpreter,
 		unsigned long no_base, struct elf_phdr *interp_elf_phdata,
 		struct arch_elf_state *arch_state, bool is_rto_format)
+#else
+static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
+		struct file *interpreter,
+		unsigned long no_base, struct elf_phdr *interp_elf_phdata,
+		struct arch_elf_state *arch_state)
+#endif
 {
 	struct elf_phdr *eppnt;
 	unsigned long load_addr = 0;
@@ -862,8 +899,13 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 			else if (no_base && interp_elf_ex->e_type == ET_DYN)
 				load_addr = -vaddr;
 
+#ifdef CONFIG_ELF_SYSBOOST
 			map_addr = elf_map(interpreter, load_addr + vaddr,
 					eppnt, elf_prot, elf_type, total_size, false, false);
+#else
+			map_addr = elf_map(interpreter, load_addr + vaddr,
+					eppnt, elf_prot, elf_type, total_size);
+#endif
 			total_size = 0;
 			error = map_addr;
 			if (BAD_ADDR(map_addr))
@@ -1049,41 +1091,6 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 }
 
 #ifdef CONFIG_ELF_SYSBOOST
-struct file *try_get_rto_file(struct file *file)
-{
-	char *buffer, *rto_path;
-	struct file *rto_file;
-
-	buffer = kmalloc(PATH_MAX, GFP_KERNEL);
-	rto_path = file_path(file, buffer, PATH_MAX - 5);
-	strcat(rto_path, ".rto");
-	rto_file = open_exec(rto_path);
-
-	kfree(buffer);
-	return rto_file;
-}
-
-void *load_bprm_buf(struct file *file)
-{
-	ssize_t ret;
-	char *buffer;
-	loff_t pos = 0;
-
-	buffer = kmalloc(BINPRM_BUF_SIZE, GFP_KERNEL);
-	if (!buffer)
-		return ERR_PTR(-ENOMEM);
-
-	ret = kernel_read(file, buffer, BINPRM_BUF_SIZE, &pos);
-	if (ret != BINPRM_BUF_SIZE) {
-		kfree(buffer);
-		if (ret < 0)
-			return ERR_PTR(ret);
-		return ERR_PTR(-EIO);
-	}
-
-	return buffer;
-}
-
 static int prepare_rto(struct linux_binprm *bprm)
 {
 	void *buffer;
@@ -1103,14 +1110,17 @@ static inline int try_replace_file(struct linux_binprm *bprm)
 	int ret;
 
 	rto_file = try_get_rto_file(bprm->file);
-	if (IS_ERR(rto_file))
+	if (IS_ERR(rto_file)) {
+		pr_info("try_get_rto_file fail %ld\n", PTR_ERR(rto_file));
 		return PTR_ERR(rto_file);
+	}
 
 	original_file = bprm->file;
 	bprm->file = rto_file;
 	ret = prepare_rto(bprm);
 	if (ret) {
 		bprm->file = original_file;
+		pr_info("prepare_rto fail %d\n", ret);
 		return ret;
 	}
 
@@ -1118,23 +1128,6 @@ static inline int try_replace_file(struct linux_binprm *bprm)
 	return 0;
 }
 
-#ifdef CONFIG_ARM64
-#ifdef start_thread
-#undef start_thread
-#endif
-
-#define start_thread ___start_thread
-
-// arm64 start_thread is inline function, so copy it
-static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
-				    unsigned long sp)
-{
-	start_thread_common(regs, pc);
-	regs->pstate = PSR_MODE_EL0t;
-	g_sym.spectre_v4_enable_task_mitigation(current);
-	regs->sp = sp;
-}
-#endif /* CONFIG_ARM64 */
 #endif /* CONFIG_ELF_SYSBOOST */
 
 static int load_elf_binary(struct linux_binprm *bprm)
@@ -1159,15 +1152,18 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	struct mm_struct *mm;
 	struct pt_regs *regs;
-
 #ifdef CONFIG_ELF_SYSBOOST
-	// unsigned long rto_layout_start_addr = 0UL;
 	bool is_rto_format, is_rto_symbolic_link;
 	struct loaded_rto *loaded_rto = NULL;
 	struct list_head *preload_seg_pos = NULL;
 	struct loaded_seg *loaded_seg;
+#endif
 
 	retval = -ENOEXEC;
+
+#ifdef CONFIG_ELF_SYSBOOST
+	// unsigned long rto_layout_start_addr = 0UL;
+
 	/* close feature to rmmod this ko */
 	if (!use_rto) {
 		goto out;
@@ -1184,37 +1180,31 @@ load_rto:
 
 	/* replace app.rto file, then use binfmt */
 	if (is_rto_symbolic_link && !is_rto_format) {
-		// struct inode *inode = bprm->file->f_inode;
+		struct inode *inode = bprm->file->f_inode;
 		int ret;
+
 		if (use_hpage)
 			loaded_rto = find_loaded_rto(bprm->file->f_inode);
 		ret = try_replace_file(bprm);
-		if (ret) {
-			/* limit print */
-			printk("replace rto file fail, %d\n", ret);
+		if (ret)
 			goto out;
+		if (debug) {
+			pr_info("replace rto success, loaded_rto: %pK, inode: %pK\n",
+				loaded_rto, inode);
 		}
-		// pr_info("replace rto file success, loaded_rto: 0x%lx, inode: 0x%lx\n",
-			// loaded_rto, inode);
 		goto load_rto;
 	}
 
-	// if (!is_rto_format || !is_rto_symbolic_link) {
-	// 	if (debug)
-	// 		pr_info("directly load rto file is not supported now\n");
-	// 	goto out;
-	// }
-
 	/* loading rto from now on */
 	if (debug) {
-		printk("exec in rto mode, filename: %s, loaded_rto: %pK\n",
+		pr_info("exec in rto mode, filename: %s, loaded_rto: %pK\n",
 			bprm->file->f_path.dentry->d_iname, loaded_rto);
 	}
 #ifdef CONFIG_ARM64
 	/* close vdso optimization on arm64 in case of BUG */
 	is_rto_format = false;
 #endif
-#endif
+#endif /* CONFIG_ELF_SYSBOOST */
 
 	/* First of all, some simple consistency checks */
 	if (memcmp(elf_ex->e_ident, ELFMAG, SELFMAG) != 0)
@@ -1400,18 +1390,22 @@ out_free_interp:
 	start_data = 0;
 	end_data = 0;
 
+#ifdef CONFIG_ELF_SYSBOOST
 	if (loaded_rto)
 		preload_seg_pos = &loaded_rto->segs;
+#endif
 	/* Now we do a little grungy work by mmapping the ELF image into
 	   the correct location in memory. */
 	for(i = 0, elf_ppnt = elf_phdata;
 	    i < elf_ex->e_phnum; i++, elf_ppnt++) {
-		bool is_exec_seg = elf_ppnt->p_flags & PF_X;
 		int elf_prot, elf_flags;
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
 		unsigned long alignment;
+#ifdef CONFIG_ELF_SYSBOOST
 		unsigned long size, off;
+		bool is_exec_seg = elf_ppnt->p_flags & PF_X;
+#endif
 
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
@@ -1510,10 +1504,14 @@ out_free_interp:
 			 * ELF vaddrs will be correctly offset. The result
 			 * is then page aligned.
 			 */
+#ifdef CONFIG_ELF_SYSBOOST
 			if (use_hpage)
 				load_bias = ELF_HPAGESTART(load_bias - vaddr);
 			else
 				load_bias = ELF_PAGESTART(load_bias - vaddr);
+#else
+			load_bias = ELF_PAGESTART(load_bias - vaddr);
+#endif
 
 			/*
 			 * Calculate the entire size of the ELF mapping
@@ -1541,15 +1539,23 @@ out_free_interp:
 			}
 		}
 
+#ifdef CONFIG_ELF_SYSBOOST
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
 				elf_prot, elf_flags, total_size, true, is_exec_seg);
+#else
+		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
+				elf_prot, elf_flags, total_size);
+#endif
 		if (BAD_ADDR(error)) {
+#ifdef CONFIG_ELF_SYSBOOST
 			if (debug)
-				pr_info("lyt elf_map error: %ld\n", PTR_ERR((void*)error));
+				pr_info("elf_map error: %ld\n", error);
+#endif
 			retval = IS_ERR_VALUE(error) ?
 				PTR_ERR((void*)error) : -EINVAL;
 			goto out_free_dentry;
 		}
+#ifdef CONFIG_ELF_SYSBOOST
 		if (use_hpage && preload_seg_pos) {
 			preload_seg_pos = preload_seg_pos->next;
 			BUG_ON(preload_seg_pos == &loaded_rto->segs);
@@ -1559,21 +1565,28 @@ out_free_interp:
 			off = elf_ppnt->p_offset - ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
 			size = ELF_HPAGEALIGN(size);
 			if (debug)
-				pr_info("lyt vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
+				pr_info("elf_map vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
 					error, off, size);
 			if (is_exec_seg)
 				rto_populate(bprm->file, error, off, size, loaded_seg);
 		}
+#endif
 
 		if (first_pt_load) {
 			first_pt_load = 0;
 			if (elf_ex->e_type == ET_DYN) {
-				if (use_hpage)
+#ifdef CONFIG_ELF_SYSBOOST
+				if (use_hpage) {
 					load_bias += error -
 						ELF_HPAGESTART(load_bias + vaddr);
-				else
+				} else {
 					load_bias += error -
 						ELF_PAGESTART(load_bias + vaddr);
+				}
+#else
+				load_bias += error -
+				             ELF_PAGESTART(load_bias + vaddr);
+#endif
 				reloc_func_desc = load_bias;
 			}
 		}
@@ -1622,6 +1635,7 @@ out_free_interp:
 		}
 	}
 
+	pr_info("lyt load success\n");
 	e_entry = elf_ex->e_entry + load_bias;
 	phdr_addr += load_bias;
 	elf_bss += load_bias;
@@ -1645,10 +1659,17 @@ out_free_interp:
 	}
 
 	if (interpreter) {
+#ifdef CONFIG_ELF_SYSBOOST
 		elf_entry = load_elf_interp(interp_elf_ex,
 					    interpreter,
 					    load_bias, interp_elf_phdata,
 					    &arch_state, is_rto_format);
+#else
+		elf_entry = load_elf_interp(interp_elf_ex,
+					    interpreter,
+					    load_bias, interp_elf_phdata,
+					    &arch_state);
+#endif
 		if (!IS_ERR_VALUE(elf_entry)) {
 			/*
 			 * load_elf_interp() returns relocation
@@ -1682,9 +1703,13 @@ out_free_interp:
 	set_binfmt(&elf_format);
 
 #ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
+#ifdef CONFIG_ELF_SYSBOOST
 	retval = __arch_setup_additional_pages(bprm, !!interpreter, load_bias, is_rto_format);
+#else
+	retval = g_sym.arch_setup_additional_pages(bprm, !!interpreter);
 	if (retval < 0)
 		goto out;
+#endif
 #endif /* ARCH_HAS_SETUP_ADDITIONAL_PAGES */
 
 	retval = create_elf_tables(bprm, elf_ex, interp_load_addr,
@@ -2606,12 +2631,10 @@ end_coredump:
 
 int init_rto_binfmt(void)
 {
-#ifdef CONFIG_ELF_SYSBOOST
 	int ret = init_symbols();
 	if (ret) {
 		return ret;
 	}
-#endif
 
 	insert_binfmt(&elf_format);
 	return 0;
