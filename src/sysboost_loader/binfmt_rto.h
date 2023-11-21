@@ -4,6 +4,7 @@
  */
 
 #include <linux/file.h>
+#include <linux/binfmts.h>
 #include "loader_device.h"
 #include "netlink_kernel.h"
 
@@ -12,10 +13,8 @@ int rto_populate(struct file *file, unsigned long vaddr,
 
 int init_rto_binfmt(void);
 void exit_rto_binfmt(void);
-void *load_bprm_buf(struct file *file);
 struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
 				struct file *elf_file);
-struct file *try_get_rto_file(struct file *file);
 
 int rto_populate_init(void);
 

@@ -722,15 +722,14 @@ int rto_populate(struct file *file, unsigned long vaddr,
 	ret = -EINVAL;
 	vma = find_vma(mm, vaddr);
 	if (!vma)
-		goto error;
+		goto out;
 
 	mmap_read_lock(mm);
-	rto_populate_vma_page_range(vma, vaddr, vaddr + size, &locked, &loaded_seg->hpages);
+	ret = rto_populate_vma_page_range(vma, vaddr, vaddr + size, &locked, &loaded_seg->hpages);
 	mmap_read_unlock(mm);
 
-	return 0;
-error:
-	if (debug)
+out:
+	if (debug && ret < 0)
 		pr_info("rto_populate fail, error: %d\n", ret);
 	return ret;
 }

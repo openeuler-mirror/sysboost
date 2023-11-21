@@ -125,6 +125,41 @@ static void loaded_rto_free(struct loaded_rto *loaded_rto)
 // 		loaded_rto_free(loaded_rto);
 // }
 
+struct file *try_get_rto_file(struct file *file)
+{
+	char *buffer, *rto_path;
+	struct file *rto_file;
+
+	buffer = kmalloc(PATH_MAX, GFP_KERNEL);
+	rto_path = file_path(file, buffer, PATH_MAX - 5);
+	strcat(rto_path, ".rto");
+	rto_file = open_exec(rto_path);
+
+	kfree(buffer);
+	return rto_file;
+}
+
+void *load_bprm_buf(struct file *file)
+{
+	ssize_t ret;
+	char *buffer;
+	loff_t pos = 0;
+
+	buffer = kmalloc(BINPRM_BUF_SIZE, GFP_KERNEL);
+	if (!buffer)
+		return ERR_PTR(-ENOMEM);
+
+	ret = kernel_read(file, buffer, BINPRM_BUF_SIZE, &pos);
+	if (ret != BINPRM_BUF_SIZE) {
+		kfree(buffer);
+		if (ret < 0)
+			return ERR_PTR(ret);
+		return ERR_PTR(-EIO);
+	}
+
+	return buffer;
+}
+
 static int preload_rto(struct file *file)
 {
 	int ret, i;
@@ -309,7 +344,7 @@ out:
 	return err;
 }
 
-void __exit loader_device_exit(void)
+void loader_device_exit(void)
 {
 	misc_deregister(&loader_miscdev);
 	// pr_info("sysboost_loader: exit!\n");
