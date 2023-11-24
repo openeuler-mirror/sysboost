@@ -1157,6 +1157,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct loaded_rto *loaded_rto = NULL;
 	struct list_head *preload_seg_pos = NULL;
 	struct loaded_seg *loaded_seg;
+	bool using_hpage = false;
 #endif
 
 	retval = -ENOEXEC;
@@ -1183,8 +1184,10 @@ load_rto:
 		struct inode *inode = bprm->file->f_inode;
 		int ret;
 
-		if (use_hpage)
+		if (use_hpage) {
 			loaded_rto = find_loaded_rto(bprm->file->f_inode);
+			using_hpage = true;
+		}
 		ret = try_replace_file(bprm);
 		if (ret)
 			goto out;
@@ -1198,7 +1201,7 @@ load_rto:
 	/* loading rto from now on */
 	if (debug) {
 		pr_info("exec in rto mode, filename: %s, loaded_rto: %pK\n",
-			bprm->file->f_path.dentry->d_iname, loaded_rto);
+			FILE_TO_NAME(bprm->file), loaded_rto);
 	}
 #ifdef CONFIG_ARM64
 	/* close vdso optimization on arm64 in case of BUG */
@@ -1505,7 +1508,7 @@ out_free_interp:
 			 * is then page aligned.
 			 */
 #ifdef CONFIG_ELF_SYSBOOST
-			if (use_hpage)
+			if (using_hpage)
 				load_bias = ELF_HPAGESTART(load_bias - vaddr);
 			else
 				load_bias = ELF_PAGESTART(load_bias - vaddr);
@@ -1541,7 +1544,7 @@ out_free_interp:
 
 #ifdef CONFIG_ELF_SYSBOOST
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
-				elf_prot, elf_flags, total_size, true, is_exec_seg);
+				elf_prot, elf_flags, total_size, using_hpage, is_exec_seg);
 #else
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
 				elf_prot, elf_flags, total_size);
@@ -1556,7 +1559,7 @@ out_free_interp:
 			goto out_free_dentry;
 		}
 #ifdef CONFIG_ELF_SYSBOOST
-		if (use_hpage && preload_seg_pos) {
+		if (using_hpage && preload_seg_pos) {
 			preload_seg_pos = preload_seg_pos->next;
 			BUG_ON(preload_seg_pos == &loaded_rto->segs);
 			loaded_seg = list_entry(preload_seg_pos,
@@ -1576,7 +1579,7 @@ out_free_interp:
 			first_pt_load = 0;
 			if (elf_ex->e_type == ET_DYN) {
 #ifdef CONFIG_ELF_SYSBOOST
-				if (use_hpage) {
+				if (using_hpage) {
 					load_bias += error -
 						ELF_HPAGESTART(load_bias + vaddr);
 				} else {

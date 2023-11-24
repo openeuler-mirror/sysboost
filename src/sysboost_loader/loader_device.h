@@ -42,3 +42,5 @@ void *load_bprm_buf(struct file *file);
 #define RTO_LOAD_FLAG_LOAD		0x1
 #define RTO_LOAD_FLAG_PRELOAD		0x2
 #define RTO_LOAD_FLAG_MAX		0x100
+
+#define FILE_TO_NAME(x) (x->f_path.dentry->d_iname)

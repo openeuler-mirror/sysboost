@@ -172,22 +172,26 @@ static int preload_rto(struct file *file)
 
 	rto_file = try_get_rto_file(file);
 	if (IS_ERR(rto_file)) {
+		pr_info("%s: try_get_rto_file fail\n", __func__);
 		return -ENOENT;
 	}
 
 	loaded_rto = loaded_rto_alloc(inode);
 	if (!loaded_rto) {
+		pr_info("%s: loaded_rto_alloc fail\n", __func__);
 		ret = -ENOMEM;
 		goto error_alloc;
 	}
 
 	elf_ex = load_bprm_buf(rto_file);
 	if (IS_ERR(elf_ex)) {
+		pr_info("%s: load_bprm_buf fail\n", __func__);
 		ret = PTR_ERR(elf_ex);
 		goto error_bprm_buf;
 	}
 	elf_phdata = load_elf_phdrs(elf_ex, rto_file);
 	if (!elf_phdata) {
+		pr_info("%s: load_elf_phdrs fail\n", __func__);
 		ret = -EIO;
 		goto error_phdrs;
 	}
@@ -195,6 +199,14 @@ static int preload_rto(struct file *file)
 	for(i = 0, elf_ppnt = elf_phdata; i < elf_ex->e_phnum; i++, elf_ppnt++) {
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
+		
+		if (elf_ppnt->p_align < HPAGE_SIZE) {
+			pr_info("%s: align must >= 0x%lx, current file %s align is 0x%llx\n",
+				__func__, HPAGE_SIZE,
+				FILE_TO_NAME(rto_file), elf_ppnt->p_align);
+			ret = -EINVAL;
+			goto error_seg;
+		}
 
 		size = elf_ppnt->p_filesz + ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
 		offset = elf_ppnt->p_offset - ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
