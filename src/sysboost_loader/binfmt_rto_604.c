@@ -1407,7 +1407,7 @@ out_free_interp:
 		unsigned long alignment;
 #ifdef CONFIG_ELF_SYSBOOST
 		unsigned long size, off;
-		bool is_exec_seg = elf_ppnt->p_flags & PF_X;
+		bool is_exec_seg = !(elf_ppnt->p_flags & PF_W);
 #endif
 
 		if (elf_ppnt->p_type != PT_LOAD)
@@ -1567,9 +1567,11 @@ out_free_interp:
 			size = elf_ppnt->p_filesz + ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
 			off = elf_ppnt->p_offset - ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
 			size = ELF_HPAGEALIGN(size);
-			if (debug)
+			if (debug) {
+				pr_info("loaded_seg: %pK\n", loaded_seg);
 				pr_info("elf_map vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
 					error, off, size);
+			}
 			if (is_exec_seg)
 				rto_populate(bprm->file, error, off, size, loaded_seg);
 		}

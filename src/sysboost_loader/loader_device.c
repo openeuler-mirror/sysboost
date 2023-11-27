@@ -51,7 +51,10 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 	loaded_seg = loaded_seg_alloc(inode);
 	if (!loaded_seg)
 		return -ENOMEM;
-	
+
+	if (debug) {
+		pr_info("loading segment %pK\n", loaded_seg);
+	}
 	for (; pos < end; ) {
 		page = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP, HUGETLB_PAGE_ORDER);
 		if (!page) {
@@ -82,8 +85,8 @@ static int load_seg(struct file *file, struct loaded_rto *loaded_rto,
 		// if (loaded_rto->segs.next == &loaded_rto->segs || 
 		// 		loaded_seg->hpages.next == &loaded_seg->hpages) {
 			list_add_tail(&page->lru, &loaded_seg->hpages);
-			pr_info("load_seg: load 1 hpage: 0x%pK\n",
-				page);
+			if (debug)
+				pr_info("load_seg: load 1 hpage: 0x%pK\n", page);
 		// }
 	}
 
@@ -172,9 +175,11 @@ static int preload_rto(struct file *file)
 
 	rto_file = try_get_rto_file(file);
 	if (IS_ERR(rto_file)) {
-		pr_info("%s: try_get_rto_file fail\n", __func__);
+		pr_info("%s: try_get_rto_file %s fail\n", __func__, FILE_TO_NAME(file));
 		return -ENOENT;
 	}
+	if (debug)
+		pr_info("loading file %s\n", FILE_TO_NAME(rto_file))
 
 	loaded_rto = loaded_rto_alloc(inode);
 	if (!loaded_rto) {
