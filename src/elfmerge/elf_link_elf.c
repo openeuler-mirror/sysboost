@@ -367,7 +367,8 @@ static void write_sysboost_section(elf_link_t *elf_link)
 }*/
 
 // main ELF and libc.so have .interp, need to ignore it
-// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
+// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr
+// .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
 static elf_section_t hdr_segment_section_arr[] = {
 	{".interp", merge_template_ef_section},
 	{".note.gnu.property", merge_template_ef_section},
@@ -1363,42 +1364,57 @@ static void do_special_adapts(elf_link_t *elf_link)
 	// correct_stop_libc_atexit(elf_link);
 }
 
-// merge per section
-// .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .rela.dyn .rela.plt
-// merge segment, keep offset in page
-// .init .plt .text __libc_freeres_fn .fini
-// merge segment, keep offset in page, split text and data
-// .rodata .stapsdt.base .eh_frame_hdr .eh_frame .gcc_except_table
-// merge per section, RW -> RO
-// .tdata .init_array .fini_array .data.rel.ro .dynamic
-// merge segment, keep offset in page, RW -> RO
-// .got
-// merge segment, keep offset in page
-// .data .tm_clone_table __libc_subfreeres __libc_IO_vtables __libc_atexit .bss __libc_freeres_ptrs
+/*
+ * There are 2 kinds of merge in elfmerge:
+ * 1. merge per section:
+ *        merge same sections in each binary into one section.
+ * [.tdata a] [.init_array a] =>     new .tdata            new .init_array
+ * [.tdata b] [.init_array b] => [.data a, .data b] [.init_array a, .init_array b]
+ *
+ * 2. merge segment:
+ *        merge multiple sections in same segments in each binary all into one section.
+ * [.plt a,  .plt b ] =>             new .text
+ * [.text a, .text b] => [.plt a, .text a, .plt b, .text b]
+ */
 static void elf_link_write_sections(elf_link_t *elf_link)
 {
-	// .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
+	/*
+	 * merge per section for below sections:
+	 * .interp .note.gnu.build-id .note.ABI-tag .gnu.hash
+	 * .dynsym .dynstr .rela.dyn .rela.plt
+	 */
 	write_first_LOAD_segment(elf_link);
 
-	// .init .plt .text __libc_freeres_fn .fini
+	/*
+	 * merge segment for below sections:
+	 * .init .plt .text __libc_freeres_fn .fini
+	 * all into .text in new elf.
+	 */
 	write_text(elf_link);
 
-	// .rodata .stapsdt.base .eh_frame_hdr .eh_frame .gcc_except_table
+	/*
+	 * merge segment for below sections:
+	 * .rodata .stapsdt.base .eh_frame_hdr .eh_frame .gcc_except_table
+	 * all into .rodata in new elf.
+	 */
 	write_rodata(elf_link);
 
-	// .tdata .tbss .init_array .fini_array .data.rel.ro .dynamic .got .got.plt .data .bss
+	/*
+	 * merge per section for below sections:
+	 * .tdata .tbss .init_array .fini_array .data.rel.ro .dynamic .got .got.plt .data .bss
+	 */
 	write_data(elf_link);
 
-	// .dynamic
+	/* .dynamic (merge per section) */
 	modify_dynamic(elf_link);
 
-	// .symtab
+	/* .symtab (merge per section) */
 	write_symtab(elf_link);
 
-	// .strtab
+	/* .strtab (merge per section) */
 	write_strtab(elf_link);
 
-	// .shstrtab
+	/* .shstrtab (merge per section) */
 	write_shstrtab(elf_link);
 
 	/*
