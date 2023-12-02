@@ -681,7 +681,7 @@ out:
 	// something wrong had happen
 	si_log_set_global_level(SI_LOG_LEVEL_DEBUG);
 	show_sec_mapping(elf_link);
-	si_panic("get addr fail: %s addr %lx ret %lx\n", src_ef->file_name, addr, ret);
+	si_panic("Failed to get addr: %s addr %lx ret %lx\n", src_ef->file_name, addr, ret);
 	return NOT_FOUND;
 }
 
