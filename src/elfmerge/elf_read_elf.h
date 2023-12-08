@@ -350,6 +350,12 @@ bool got_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool rwdata_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool bss_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool elf_is_debug_section(elf_file_t *ef, Elf64_Shdr *sechdr);
+bool elf_is_rela_debug_section(elf_file_t *ef, Elf64_Shdr *sechdr);
+bool debug_info_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool debug_line_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool debug_str_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool debug_line_str_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool debug_abbrev_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool elf_is_same_area(const elf_file_t *ef, const Elf64_Shdr *a, const Elf64_Shdr *b);
 
 // ELF

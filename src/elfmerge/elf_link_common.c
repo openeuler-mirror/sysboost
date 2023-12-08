@@ -123,6 +123,11 @@ static char *needed_sections[] = {
     ".symtab",
     ".strtab",
     ".shstrtab",
+    ".debug_info",
+    ".debug_line",
+    ".debug_str",
+    ".debug_line_str",
+    ".debug_abbrev",
 };
 #define NEEDED_SECTIONS_LEN (sizeof(needed_sections) / sizeof(needed_sections[0]))
 
@@ -590,9 +595,11 @@ static unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef,
 
 	for (int i = 0; i < len; i++) {
 		sec_rel = &sec_rels[i];
+		// sec_rel is a section in the same file as src_ef
 		if (sec_rel->src_ef != src_ef) {
 			continue;
 		}
+		// old addr is between source section
 		if (addr < sec_rel->src_sec->sh_addr || addr > sec_rel->src_sec->sh_addr + sec_rel->src_sec->sh_size) {
 			continue;
 		}
@@ -602,7 +609,11 @@ static unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef,
 		}
 		// section like .symtab has no addr
 		if (!(sec_rel->src_sec->sh_flags & SHF_ALLOC)) {
-			continue;
+			// TODO clean code
+			char *name = elf_get_section_name(src_ef, sec_rel->src_sec);
+			if (strncmp(name, ".debug_info", 11) != 0) {
+				continue;
+			}
 		}
 		// .tbss has the same offset as .init_array, e.g.
 		//   [22] .tbss             NOBITS           00000000007ffd18  005ffd18

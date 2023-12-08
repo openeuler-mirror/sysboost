@@ -585,6 +585,11 @@ static void modify_tls_segment(elf_link_t *elf_link)
 	modify_segment(elf_link, out_ef->tls_Phdr, ".tdata", ".tbss");
 }
 
+static void write_debug_info(elf_link_t *elf_link)
+{
+	merge_debug_sections(elf_link);
+}
+
 // .tdata .init_array .fini_array .dynamic .got    .got.plt .data .bss
 static void write_data(elf_link_t *elf_link)
 {
@@ -1416,6 +1421,8 @@ static void elf_link_write_sections(elf_link_t *elf_link)
 
 	/* .shstrtab (merge per section) */
 	write_shstrtab(elf_link);
+
+	write_debug_info(elf_link);
 
 	/*
 	 * .comment is useless, it's used to hold comments about the generated ELF
