@@ -1312,6 +1312,56 @@ static void modify_elf_header(elf_link_t *elf_link)
 	elf_set_hugepage(elf_link);
 }
 
+struct dwarf_cu_header
+{
+	uint32_t length;
+	uint16_t version;
+	uint8_t unit_type;
+	uint8_t pointer_size;
+	uint32_t abbrev_offset;
+};
+
+void check_cu_header(struct dwarf_cu_header *cu_header)
+{
+	/* TODO */
+	if (cu_header->version != 5)
+		return;
+}
+
+/* modify abbrev offset stored in .debug_info */
+void modify_debug_info_abbrev_offset(elf_link_t *elf_link)
+{
+	elf_file_t *ef;
+	uint32_t da_offset = 0;
+	void *di_base = elf_find_section_ptr_by_name(&elf_link->out_ef, ".debug_info");
+	uint32_t cu_offset = 0;
+
+	foreach_infile(elf_link, ef) {
+		Elf64_Shdr *di_sec = elf_find_section_by_name(ef, ".debug_info");
+		Elf64_Shdr *da_sec = elf_find_section_by_name(ef, ".debug_abbrev");
+		uint32_t in_ef_cu_offset = 0;
+
+		while (in_ef_cu_offset < di_sec->sh_size) {
+			struct dwarf_cu_header *cu_header = di_base + cu_offset;
+			check_cu_header(cu_header);
+			cu_header->abbrev_offset += da_offset;
+			/*
+			 * each cu have additional 4 bytes beyond length,
+			 * i don't know why.
+			 */
+			cu_offset += cu_header->length + 4;
+			in_ef_cu_offset += cu_header->length + 4;
+		}
+
+		da_offset += da_sec->sh_size;
+	}
+}
+
+static void modify_debug(elf_link_t *elf_link)
+{
+	modify_debug_info_abbrev_offset(elf_link);
+}
+
 // .init_array first func is frame_dummy, frame_dummy call register_tm_clones
 // .fini_array first func is __do_global_dtors_aux, __do_global_dtors_aux call deregister_tm_clones
 char *disabled_funcs[] = {
@@ -1479,6 +1529,8 @@ int elf_link_write(elf_link_t *elf_link)
 	// modify local call to use jump
 	// .rela.init .rela.text .rela.rodata .rela.tdata .rela.init_array .rela.data
 	modify_local_call(elf_link);
+
+	modify_debug(elf_link);	
 
 	// modify ELF header and write sections
 	modify_elf_header(elf_link);

@@ -22,7 +22,10 @@
 #define RELOCATION_ROOT_DIR "/usr/lib/relocation"
 
 typedef struct {
-	Elf64_Ehdr *hdr;
+	union {
+		Elf64_Ehdr *hdr;
+		void *data;
+	};
 	Elf64_Phdr *segments;
 
 	Elf64_Shdr *sechdrs;
@@ -341,6 +344,7 @@ static inline bool elf_is_version_sec(Elf64_Shdr *sec)
 
 Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls_offset);
 Elf64_Shdr *elf_find_section_by_name(elf_file_t *ef, const char *sec_name);
+void *elf_find_section_ptr_by_name(elf_file_t *ef, const char *sec_name);
 Elf64_Shdr *elf_find_section_by_addr(elf_file_t *ef, unsigned long addr);
 typedef bool (*section_filter_func)(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool elf_is_relro_section(const elf_file_t *ef, const Elf64_Shdr *sechdr);

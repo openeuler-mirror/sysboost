@@ -365,6 +365,15 @@ Elf64_Shdr *elf_find_section_by_name(elf_file_t *ef, const char *sec_name)
 	return NULL;
 }
 
+void *elf_find_section_ptr_by_name(elf_file_t *ef, const char *sec_name)
+{
+	Elf64_Shdr *sec = elf_find_section_by_name(ef, sec_name);
+	if (!sec)
+		return NULL;
+
+	return ef->data + sec->sh_offset;
+}
+
 bool elf_is_relro_section(const elf_file_t *ef, const Elf64_Shdr *sechdr)
 {
 	unsigned int start = ef->relro_Phdr->p_paddr;

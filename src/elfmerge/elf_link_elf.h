@@ -24,4 +24,7 @@ int elf_link_set_mode(elf_link_t *elf_link, unsigned int mode);
 elf_file_t *elf_link_add_infile(elf_link_t *elf_link, char *path);
 int elf_link_write(elf_link_t *elf_link);
 
+#define foreach_infile(elf_link, ef)    \
+        for (ef = elf_link->in_efs; ef < elf_link->in_efs + elf_link->in_ef_nr; ef++)
+
 #endif /* _LINK_ELF_H */
