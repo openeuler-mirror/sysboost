@@ -1312,7 +1312,12 @@ static void modify_elf_header(elf_link_t *elf_link)
 	elf_set_hugepage(elf_link);
 }
 
-struct dwarf_cu_header
+/* debug modify start */
+
+#include <libdwarf.h>
+#include <dwarf.h>
+
+struct dwarf_unit_header
 {
 	uint32_t length;
 	uint16_t version;
@@ -1321,11 +1326,28 @@ struct dwarf_cu_header
 	uint32_t abbrev_offset;
 };
 
-void check_cu_header(struct dwarf_cu_header *cu_header)
+void check_unit_header(struct dwarf_unit_header *unit_header)
 {
-	/* TODO */
-	if (cu_header->version != 5)
-		return;
+	/*
+	 * 32-bit DWARF format's length must < 0xfffffff0,
+	 * we only support 32-bit now.
+	 */
+	if (unit_header->length >= 0xfffffff0)
+		si_panic("64-bit DWARF format is not supported\n");
+
+	if (unit_header->version != 5)
+		si_panic("only support DWARF version 5\n");
+	
+	if (unit_header->pointer_size != 8)
+		si_panic("only support 64-bit target machine\n");
+}
+
+void check_cu_header(struct dwarf_unit_header *cu_header)
+{
+	check_unit_header(cu_header);
+
+	if (cu_header->unit_type != DW_UT_compile)
+		si_panic("current unit_header is not cu_header\n");
 }
 
 /* modify abbrev offset stored in .debug_info */
@@ -1342,12 +1364,12 @@ void modify_debug_info_abbrev_offset(elf_link_t *elf_link)
 		uint32_t in_ef_cu_offset = 0;
 
 		while (in_ef_cu_offset < di_sec->sh_size) {
-			struct dwarf_cu_header *cu_header = di_base + cu_offset;
+			struct dwarf_unit_header *cu_header = di_base + cu_offset;
 			check_cu_header(cu_header);
 			cu_header->abbrev_offset += da_offset;
 			/*
-			 * each cu have additional 4 bytes beyond length,
-			 * i don't know why.
+			 * each cu have additional 4 bytes,
+			 * because length doesn't count itself's space.
 			 */
 			cu_offset += cu_header->length + 4;
 			in_ef_cu_offset += cu_header->length + 4;
@@ -1361,6 +1383,8 @@ static void modify_debug(elf_link_t *elf_link)
 {
 	modify_debug_info_abbrev_offset(elf_link);
 }
+
+/* debug modify end */
 
 // .init_array first func is frame_dummy, frame_dummy call register_tm_clones
 // .fini_array first func is __do_global_dtors_aux, __do_global_dtors_aux call deregister_tm_clones
@@ -1472,6 +1496,10 @@ static void elf_link_write_sections(elf_link_t *elf_link)
 	/* .shstrtab (merge per section) */
 	write_shstrtab(elf_link);
 
+	/*
+	 * merge per section for below sections:
+	 * .debug_info .debug_line .debug_str .debug_line_str .debug_abbrev
+	 */
 	write_debug_info(elf_link);
 
 	/*

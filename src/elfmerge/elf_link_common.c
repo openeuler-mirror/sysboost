@@ -609,11 +609,6 @@ static unsigned long _get_new_elf_addr(elf_link_t *elf_link, elf_file_t *src_ef,
 		}
 		// section like .symtab has no addr
 		if (!(sec_rel->src_sec->sh_flags & SHF_ALLOC)) {
-			// TODO clean code, why is it here?
-			// char *name = elf_get_section_name(src_ef, sec_rel->src_sec);
-			// if (strncmp(name, ".debug_info", 11) == 0) {
-			// 	printf("lyt debug\n");
-			// } else
 			continue;
 		}
 		// .tbss has the same offset as .init_array, e.g.
