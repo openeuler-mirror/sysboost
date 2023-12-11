@@ -36,6 +36,7 @@
 #endif
 
 #define DEBUG_SEC_PRE_NAME ".debug_"
+#define RELA_DEBUG_SEC_PRE_NAME ".rela.debug_"
 #define BUILD_ID_LEN 40
 
 #define ELF_VERSION_NR_LOCAL 0
@@ -364,6 +365,15 @@ Elf64_Shdr *elf_find_section_by_name(elf_file_t *ef, const char *sec_name)
 	return NULL;
 }
 
+void *elf_find_section_ptr_by_name(elf_file_t *ef, const char *sec_name)
+{
+	Elf64_Shdr *sec = elf_find_section_by_name(ef, sec_name);
+	if (!sec)
+		return NULL;
+
+	return ef->data + sec->sh_offset;
+}
+
 bool elf_is_relro_section(const elf_file_t *ef, const Elf64_Shdr *sechdr)
 {
 	unsigned int start = ef->relro_Phdr->p_paddr;
@@ -475,6 +485,48 @@ bool elf_is_debug_section(elf_file_t *ef, Elf64_Shdr *sechdr)
 	}
 
 	return false;
+}
+
+bool elf_is_rela_debug_section(elf_file_t *ef, Elf64_Shdr *sechdr)
+{
+	char *name = NULL;
+
+	name = ef->shstrtab_data + sechdr->sh_name;
+	if (strncmp(name, RELA_DEBUG_SEC_PRE_NAME, sizeof(RELA_DEBUG_SEC_PRE_NAME) - 1) == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+bool debug_info_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	return strcmp(name, ".debug_info") == 0;
+}
+
+bool debug_line_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	return strcmp(name, ".debug_line") == 0;
+}
+
+bool debug_str_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	return strcmp(name, ".debug_str") == 0;
+}
+
+bool debug_line_str_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	return strcmp(name, ".debug_line_str") == 0;
+}
+
+bool debug_abbrev_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	return strcmp(name, ".debug_abbrev") == 0;
 }
 
 // text | rodata | got | data | bss

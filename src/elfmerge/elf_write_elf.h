@@ -38,6 +38,7 @@ unsigned int elf_align_file_section(elf_link_t *elf_link, Elf64_Shdr *sec, bool 
 
 // write section
 void copy_from_old_elf(elf_link_t *elf_link);
+void merge_debug_sections(elf_link_t *elf_link);
 void merge_text_sections(elf_link_t *elf_link);
 void merge_rodata_sections(elf_link_t *elf_link);
 void merge_data_relro_sections(elf_link_t *elf_link);

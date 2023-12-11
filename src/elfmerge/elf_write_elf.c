@@ -65,12 +65,21 @@ unsigned int elf_align_file_section(elf_link_t *elf_link, Elf64_Shdr *sec, bool 
 	return elf_link->next_file_offset;
 }
 
+void print_memory(void *dest, size_t num_bytes) {
+    unsigned char *ptr = (unsigned char *)dest;
+    for (size_t i = 0; i < num_bytes; i++) {
+        printf("%02X ", ptr[i]);
+    }
+    printf("\n");
+}
+
 void *write_elf_file(elf_link_t *elf_link, void *src, unsigned int len)
 {
 	void *dest = ((void *)elf_link->out_ef.hdr) + elf_link->next_file_offset;
 	(void)memcpy(dest, src, len);
 
 	elf_link->next_file_offset += len;
+	// TODO debug should not change next_mem_addr?
 	elf_link->next_mem_addr += len;
 
 	return dest;
@@ -396,13 +405,22 @@ static void append_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t
 	if (dst_sec->sh_offset != 0 && sec->sh_type == SHT_NOBITS && !(sec->sh_flags & SHF_TLS)) {
 		is_align_file_offset = false;
 	}
+	// TODO clean code
+	char *name = elf_get_section_name(ef, sec);
+	if (strstr(name, "debug") != NULL) {
+		is_align_file_offset = false;
+	}
 	// offset in PAGE inherit from in ELF
 	elf_align_file_section(elf_link, sec, is_align_file_offset);
 
 	// first in section to dst section
 	if (dst_sec->sh_offset == 0) {
 		dst_sec->sh_offset = elf_link->next_file_offset;
-		dst_sec->sh_addr = elf_link->next_mem_addr;
+		if (elf_is_debug_section(ef, dst_sec) || elf_is_rela_debug_section(ef, dst_sec)) {
+			dst_sec->sh_addr = 0;
+		} else {
+			dst_sec->sh_addr = elf_link->next_mem_addr;
+		}
 	}
 
 	write_elf_file_section(elf_link, ef, sec, dst_sec);
@@ -487,8 +505,17 @@ static void merge_filter_sections(elf_link_t *elf_link, char *sec_name, section_
 		merge_filter_section(elf_link, dst_sec, ef, filter);
 	}
 
-	dst_sec->sh_size = elf_link->next_mem_addr - dst_sec->sh_addr;
+	dst_sec->sh_size = elf_get_sh_size(elf_link, dst_sec);
 	SI_LOG_DEBUG("section %-20s %08lx %08lx %06lx\n", sec_name, dst_sec->sh_addr, dst_sec->sh_offset, dst_sec->sh_size);
+}
+
+void merge_debug_sections(elf_link_t *elf_link)
+{
+	merge_filter_sections(elf_link, ".debug_info", debug_info_section_filter);
+	merge_filter_sections(elf_link, ".debug_abbrev", debug_abbrev_section_filter);
+	merge_filter_sections(elf_link, ".debug_line", debug_line_section_filter);
+	merge_filter_sections(elf_link, ".debug_str", debug_str_section_filter);
+	merge_filter_sections(elf_link, ".debug_line_str", debug_line_str_section_filter);
 }
 
 void merge_text_sections(elf_link_t *elf_link)

@@ -367,7 +367,8 @@ static void write_sysboost_section(elf_link_t *elf_link)
 }*/
 
 // main ELF and libc.so have .interp, need to ignore it
-// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
+// .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr
+// .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
 static elf_section_t hdr_segment_section_arr[] = {
 	{".interp", merge_template_ef_section},
 	{".note.gnu.property", merge_template_ef_section},
@@ -582,6 +583,11 @@ static void modify_tls_segment(elf_link_t *elf_link)
 	}
 
 	modify_segment(elf_link, out_ef->tls_Phdr, ".tdata", ".tbss");
+}
+
+static void write_debug_info(elf_link_t *elf_link)
+{
+	merge_debug_sections(elf_link);
 }
 
 // .tdata .init_array .fini_array .dynamic .got    .got.plt .data .bss
@@ -1306,6 +1312,80 @@ static void modify_elf_header(elf_link_t *elf_link)
 	elf_set_hugepage(elf_link);
 }
 
+/* debug modify start */
+
+#include <libdwarf.h>
+#include <dwarf.h>
+
+struct dwarf_unit_header
+{
+	uint32_t length;
+	uint16_t version;
+	uint8_t unit_type;
+	uint8_t pointer_size;
+	uint32_t abbrev_offset;
+};
+
+void check_unit_header(struct dwarf_unit_header *unit_header)
+{
+	/*
+	 * 32-bit DWARF format's length must < 0xfffffff0,
+	 * we only support 32-bit now.
+	 */
+	if (unit_header->length >= 0xfffffff0)
+		si_panic("64-bit DWARF format is not supported\n");
+
+	if (unit_header->version != 5)
+		si_panic("only support DWARF version 5\n");
+	
+	if (unit_header->pointer_size != 8)
+		si_panic("only support 64-bit target machine\n");
+}
+
+void check_cu_header(struct dwarf_unit_header *cu_header)
+{
+	check_unit_header(cu_header);
+
+	if (cu_header->unit_type != DW_UT_compile)
+		si_panic("current unit_header is not cu_header\n");
+}
+
+/* modify abbrev offset stored in .debug_info */
+void modify_debug_info_abbrev_offset(elf_link_t *elf_link)
+{
+	elf_file_t *ef;
+	uint32_t da_offset = 0;
+	void *di_base = elf_find_section_ptr_by_name(&elf_link->out_ef, ".debug_info");
+	uint32_t cu_offset = 0;
+
+	foreach_infile(elf_link, ef) {
+		Elf64_Shdr *di_sec = elf_find_section_by_name(ef, ".debug_info");
+		Elf64_Shdr *da_sec = elf_find_section_by_name(ef, ".debug_abbrev");
+		uint32_t in_ef_cu_offset = 0;
+
+		while (in_ef_cu_offset < di_sec->sh_size) {
+			struct dwarf_unit_header *cu_header = di_base + cu_offset;
+			check_cu_header(cu_header);
+			cu_header->abbrev_offset += da_offset;
+			/*
+			 * each cu have additional 4 bytes,
+			 * because length doesn't count itself's space.
+			 */
+			cu_offset += cu_header->length + 4;
+			in_ef_cu_offset += cu_header->length + 4;
+		}
+
+		da_offset += da_sec->sh_size;
+	}
+}
+
+static void modify_debug(elf_link_t *elf_link)
+{
+	modify_debug_info_abbrev_offset(elf_link);
+}
+
+/* debug modify end */
+
 // .init_array first func is frame_dummy, frame_dummy call register_tm_clones
 // .fini_array first func is __do_global_dtors_aux, __do_global_dtors_aux call deregister_tm_clones
 char *disabled_funcs[] = {
@@ -1363,43 +1443,64 @@ static void do_special_adapts(elf_link_t *elf_link)
 	// correct_stop_libc_atexit(elf_link);
 }
 
-// merge per section
-// .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .rela.dyn .rela.plt
-// merge segment, keep offset in page
-// .init .plt .text __libc_freeres_fn .fini
-// merge segment, keep offset in page, split text and data
-// .rodata .stapsdt.base .eh_frame_hdr .eh_frame .gcc_except_table
-// merge per section, RW -> RO
-// .tdata .init_array .fini_array .data.rel.ro .dynamic
-// merge segment, keep offset in page, RW -> RO
-// .got
-// merge segment, keep offset in page
-// .data .tm_clone_table __libc_subfreeres __libc_IO_vtables __libc_atexit .bss __libc_freeres_ptrs
+/*
+ * There are 2 kinds of merge in elfmerge:
+ * 1. merge per section:
+ *        merge same sections in each binary into one section.
+ * [.tdata a] [.init_array a] =>     new .tdata            new .init_array
+ * [.tdata b] [.init_array b] => [.data a, .data b] [.init_array a, .init_array b]
+ *
+ * 2. merge segment:
+ *        merge multiple sections in same segments in each binary all into one section.
+ * [.plt a,  .plt b ] =>             new .text
+ * [.text a, .text b] => [.plt a, .text a, .plt b, .text b]
+ */
 static void elf_link_write_sections(elf_link_t *elf_link)
 {
-	// .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_d .gnu.version_r .rela.dyn .rela.plt
+	/*
+	 * merge per section for below sections:
+	 * .interp .note.gnu.build-id .note.ABI-tag .gnu.hash
+	 * .dynsym .dynstr .rela.dyn .rela.plt
+	 */
 	write_first_LOAD_segment(elf_link);
 
-	// .init .plt .text __libc_freeres_fn .fini
+	/*
+	 * merge segment for below sections:
+	 * .init .plt .text __libc_freeres_fn .fini
+	 * all into .text in new elf.
+	 */
 	write_text(elf_link);
 
-	// .rodata .stapsdt.base .eh_frame_hdr .eh_frame .gcc_except_table
+	/*
+	 * merge segment for below sections:
+	 * .rodata .stapsdt.base .eh_frame_hdr .eh_frame .gcc_except_table
+	 * all into .rodata in new elf.
+	 */
 	write_rodata(elf_link);
 
-	// .tdata .tbss .init_array .fini_array .data.rel.ro .dynamic .got .got.plt .data .bss
+	/*
+	 * merge per section for below sections:
+	 * .tdata .tbss .init_array .fini_array .data.rel.ro .dynamic .got .got.plt .data .bss
+	 */
 	write_data(elf_link);
 
-	// .dynamic
+	/* .dynamic (merge per section) */
 	modify_dynamic(elf_link);
 
-	// .symtab
+	/* .symtab (merge per section) */
 	write_symtab(elf_link);
 
-	// .strtab
+	/* .strtab (merge per section) */
 	write_strtab(elf_link);
 
-	// .shstrtab
+	/* .shstrtab (merge per section) */
 	write_shstrtab(elf_link);
+
+	/*
+	 * merge per section for below sections:
+	 * .debug_info .debug_line .debug_str .debug_line_str .debug_abbrev
+	 */
+	write_debug_info(elf_link);
 
 	/*
 	 * .comment is useless, it's used to hold comments about the generated ELF
@@ -1456,6 +1557,8 @@ int elf_link_write(elf_link_t *elf_link)
 	// modify local call to use jump
 	// .rela.init .rela.text .rela.rodata .rela.tdata .rela.init_array .rela.data
 	modify_local_call(elf_link);
+
+	modify_debug(elf_link);	
 
 	// modify ELF header and write sections
 	modify_elf_header(elf_link);
