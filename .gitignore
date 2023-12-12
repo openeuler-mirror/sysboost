@@ -9,6 +9,14 @@ vendor
 Cargo.lock
 *.rto
 
+# readelf/objdump
+*.asm
+*.elf
+*.w
+*.wi
+*.s
+*.x
+
 # vscode
 .vscode/*
 !.vscode/settings.json

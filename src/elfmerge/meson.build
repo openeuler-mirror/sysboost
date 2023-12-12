@@ -18,6 +18,8 @@ core_sources = files(
 
 cflags += ['-fpic', '-pie']
 
+default_ldflags += ['/usr/lib64/libdwarf.a']
+
 includes += '/usr/src/debug/libdwarf-0.7.0-1.oe2309.aarch64/src/lib/libdwarf/'
 includes += '/usr/include/libdwarf-0/'
 
