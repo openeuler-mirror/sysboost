@@ -703,15 +703,45 @@ unsigned long get_new_addr_by_old_addr_ok(elf_link_t *elf_link, elf_file_t *src_
 	return 0;
 }
 
+static unsigned long _get_new_elf_offset(elf_link_t *elf_link, elf_file_t *src_ef,
+					 unsigned long offset)
+{
+	int len = elf_link->sec_mapping_arr->len;
+	elf_sec_mapping_t *sec_rels = elf_link->sec_mapping_arr->data;
+	elf_sec_mapping_t *sec_rel = NULL;
+	bool found = false;
+
+	for (int i = 0; i < len; i++) {
+		sec_rel = &sec_rels[i];
+		if (sec_rel->src_ef != src_ef) {
+			continue;
+		}
+		// .bss overlaps with areas behind
+		if (sec_rel->src_sec->sh_type == SHT_NOBITS) {
+			continue;
+		}
+		if (offset < sec_rel->src_sec->sh_offset ||
+			offset >= sec_rel->src_sec->sh_offset + sec_rel->src_sec->sh_size) {
+			continue;
+		}
+		found = true;
+		break;
+	}
+
+	if (!found)
+		return NOT_FOUND;
+	return offset - sec_rel->src_sec->sh_offset + sec_rel->dst_file_offset;
+}
+
 unsigned long get_new_offset_by_old_offset(elf_link_t *elf_link, elf_file_t *src_ef, unsigned long offset)
 {
 	// addr != offset after .rodata segment, .tdata is not eq
 	Elf64_Phdr *p = src_ef->data_Phdr;
-	if (offset >= p->p_offset) {
-		si_panic("error: %s offset %lx\n", src_ef->file_name, offset);
+	if (offset < p->p_offset) {
+		return get_new_addr_by_old_addr(elf_link, src_ef, offset);
 	}
 
-	return get_new_addr_by_old_addr(elf_link, src_ef, offset);
+	return _get_new_elf_offset(elf_link, src_ef, offset);
 }
 
 static unsigned long get_ifunc_new_addr(elf_link_t *elf_link, elf_file_t *ef, Elf64_Sym *sym, const char *sym_name);
