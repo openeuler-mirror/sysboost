@@ -15,6 +15,8 @@
 
 #include "elf_link_common.h"
 
+int init_insn_table(void);
+
 void modify_rela_dyn(elf_link_t *elf_link);
 void modify_got(elf_link_t *elf_link);
 void modify_local_call(elf_link_t *elf_link);

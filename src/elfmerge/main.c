@@ -29,6 +29,7 @@
 #include "elf_link_common.h"
 #include "elf_link_elf.h"
 #include "elf_read_elf.h"
+#include "elf_relocation.h"
 
 int main(int argc, char *argv[])
 {
@@ -130,6 +131,11 @@ int main(int argc, char *argv[])
 		si_log_set_global_level(SI_LOG_LEVEL_DEBUG);
 	} else {
 		si_log_set_global_level(SI_LOG_LEVEL_INFO);
+	}
+
+	ret = init_insn_table();
+	if (ret < 0) {
+		return -1;
 	}
 
 	ret = elf_link_set_mode(elf_link, mode);

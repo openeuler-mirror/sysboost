@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "elf_link_common.h"
 #include "elf_write_elf.h"
@@ -28,7 +29,214 @@
 #define unlikely(x) __builtin_expect((x), 0)
 
 #define ARM64_INSN_LEN (4)
+#define INSN_BIT (ARM64_INSN_LEN * CHAR_BIT)
 #define BIAS 0x10
+
+/*
+ * all supported instructions are listed here,
+ * their order is the same as in the manual 
+ * 
+ * set INSN_INVALID to 0, make it easier to initialize to all invalid
+ */
+#define FOREACH_INSN(MACRO)		\
+	MACRO(INSN_INVALID)		\
+	MACRO(INSN_ADRP)		\
+	MACRO(INSN_B_COND)		\
+	MACRO(INSN_B)			\
+	MACRO(INSN_LDR_I_SIMD_POST)	\
+	MACRO(INSN_LDR_I_SIMD_PRE)	\
+	MACRO(INSN_LDR_I_SIMD_UNSIGNED)	\
+	MACRO(INSN_LDR_I_POST)		\
+	MACRO(INSN_LDR_I_PRE)		\
+	MACRO(INSN_LDR_I_UNSIGNED)	\
+	MACRO(INSN_LDR_L_SIMD)		\
+	MACRO(INSN_LDR_L)		\
+	MACRO(INSN_LDR_R_SIMD)		\
+	MACRO(INSN_LDR_R)		\
+	MACRO(INSN_LDRB_I_POST)		\
+	MACRO(INSN_LDRB_I_PRE)		\
+	MACRO(INSN_LDRB_I_UNSIGNED)	\
+	MACRO(INSN_LDRB_R)		\
+	MACRO(INSN_LDRH_I_POST)		\
+	MACRO(INSN_LDRH_I_PRE)		\
+	MACRO(INSN_LDRH_I_UNSIGNED)	\
+	MACRO(INSN_LDRH_R)		\
+	MACRO(INSN_LDRSB_I_POST)	\
+	MACRO(INSN_LDRSB_I_PRE)		\
+	MACRO(INSN_LDRSB_I_UNSIGNED)	\
+	MACRO(INSN_LDRSB_R)		\
+	MACRO(INSN_LDRSH_I_POST)	\
+	MACRO(INSN_LDRSH_I_PRE)		\
+	MACRO(INSN_LDRSH_I_UNSIGNED)	\
+	MACRO(INSN_LDRSH_R)		\
+	MACRO(INSN_LDRSW_I_POST)	\
+	MACRO(INSN_LDRSW_I_PRE)		\
+	MACRO(INSN_LDRSW_I_UNSIGNED)	\
+	MACRO(INSN_LDRSW_L)		\
+	MACRO(INSN_LDRSW_R)		\
+	MACRO(INSN_NOP)			\
+	MACRO(INSN_RET)			\
+	MACRO(INSN_STR_I_SIMD_POST)	\
+	MACRO(INSN_STR_I_SIMD_PRE)	\
+	MACRO(INSN_STR_I_SIMD_UNSIGNED)	\
+	MACRO(INSN_STR_I_POST)		\
+	MACRO(INSN_STR_I_PRE)		\
+	MACRO(INSN_STR_I_UNSIGNED)	\
+	MACRO(INSN_STR_R_SIMD)		\
+	MACRO(INSN_STR_R)		\
+	MACRO(INSN_STRB_I_POST)		\
+	MACRO(INSN_STRB_I_PRE)		\
+	MACRO(INSN_STRB_I_UNSIGNED)	\
+	MACRO(INSN_STRB_R)		\
+	MACRO(INSN_STRH_I_POST)		\
+	MACRO(INSN_STRH_I_PRE)		\
+	MACRO(INSN_STRH_I_UNSIGNED)	\
+	MACRO(INSN_STRH_R)		\
+
+#define GENERATE_ENUM(x) x,
+enum insn_types
+{
+	FOREACH_INSN(GENERATE_ENUM)	/* have comma at end */
+	INSN_TYPE_NUM
+};
+
+#define GENERATE_STRING(x) #x,
+const char *insn_type_strings[] = {
+	FOREACH_INSN(GENERATE_STRING)
+};
+
+const char *insn_type_to_str(int insn_type)
+{
+	return insn_type_strings[insn_type];
+}
+
+/* #define _PREFIX	"" */
+#define INSN_INVALID_PREFIX		NULL
+#define INSN_ADRP_PREFIX		"1..10000"
+#define INSN_B_COND_PREFIX		"01010100...................0"
+#define INSN_B_PREFIX			"000101"
+#define INSN_LDR_I_SIMD_POST_PREFIX	"..111100.10.........01"
+#define INSN_LDR_I_SIMD_PRE_PREFIX	"..111100.10.........11"
+#define INSN_LDR_I_SIMD_UNSIGNED_PREFIX	"..111101.1"
+#define INSN_LDR_I_POST_PREFIX		"1.111000010.........01"
+#define INSN_LDR_I_PRE_PREFIX		"1.111000010.........11"
+#define INSN_LDR_I_UNSIGNED_PREFIX	"1.11100101"
+#define INSN_LDR_L_SIMD_PREFIX		"..011100"
+#define INSN_LDR_L_PREFIX		"0.011000"
+#define INSN_LDR_R_SIMD_PREFIX		"..111100.11.........10"
+#define INSN_LDR_R_PREFIX		"1.111000011.........10"
+#define INSN_LDRB_I_POST_PREFIX		"00111000010.........01"
+#define INSN_LDRB_I_PRE_PREFIX		"00111000010.........11"
+#define INSN_LDRB_I_UNSIGNED_PREFIX	"0011100101"
+#define INSN_LDRB_R_PREFIX		"00111000011.........10"
+#define INSN_LDRH_I_POST_PREFIX		"01111000010.........01"
+#define INSN_LDRH_I_PRE_PREFIX		"01111000010.........11"
+#define INSN_LDRH_I_UNSIGNED_PREFIX	"0111100101"
+#define INSN_LDRH_R_PREFIX		"01111000011.........10"
+#define INSN_LDRSB_I_POST_PREFIX	"001110001.0.........01"
+#define INSN_LDRSB_I_PRE_PREFIX		"001110001.0.........11"
+#define INSN_LDRSB_I_UNSIGNED_PREFIX	"001110011"
+#define INSN_LDRSB_R_PREFIX		"001110001.1.........10"
+#define INSN_LDRSH_I_POST_PREFIX	"011110001.0.........01"
+#define INSN_LDRSH_I_PRE_PREFIX		"011110001.0.........11"
+#define INSN_LDRSH_I_UNSIGNED_PREFIX	"011110011"
+#define INSN_LDRSH_R_PREFIX		"011110001.1.........10"
+#define INSN_LDRSW_I_POST_PREFIX	"10111000100.........01"
+#define INSN_LDRSW_I_PRE_PREFIX		"10111000100.........11"
+#define INSN_LDRSW_I_UNSIGNED_PREFIX	"1011100110"
+#define INSN_LDRSW_L_PREFIX		"10011000"
+#define INSN_LDRSW_R_PREFIX		"10111000101.........10"
+#define INSN_NOP_PREFIX			"11010101000000110010000000011111"
+#define INSN_RET_PREFIX			"1101011001011111000000.....00000"
+#define INSN_STR_I_SIMD_POST_PREFIX	"..111100.00.........01"
+#define INSN_STR_I_SIMD_PRE_PREFIX	"..111100.00.........11"
+#define INSN_STR_I_SIMD_UNSIGNED_PREFIX	"..111101.0"
+#define INSN_STR_I_POST_PREFIX		"1.111000000.........01"
+#define INSN_STR_I_PRE_PREFIX		"1.111000000.........11"
+#define INSN_STR_I_UNSIGNED_PREFIX	"1.11100100"
+#define INSN_STR_R_SIMD_PREFIX		"..111100.01.........10"
+#define INSN_STR_R_PREFIX		"1.111000001.........10"
+#define INSN_STRB_I_POST_PREFIX		"00111000000.........01"
+#define INSN_STRB_I_PRE_PREFIX		"00111000000.........11"
+#define INSN_STRB_I_UNSIGNED_PREFIX	"0011100100"
+#define INSN_STRB_R_PREFIX		"00111000001.........10"
+#define INSN_STRH_I_POST_PREFIX		"01111000000.........01"
+#define INSN_STRH_I_PRE_PREFIX		"01111000000.........11"
+#define INSN_STRH_I_UNSIGNED_PREFIX	"0111100100"
+#define INSN_STRH_R_PREFIX		"01111000001.........10"
+
+char *insn_prefixes[INSN_TYPE_NUM];
+uint8_t *insn_prefix_table;
+unsigned int insn_prefix_bit = 22;
+
+int get_insn_type(unsigned insn)
+{
+	unsigned int prefix = insn >> (INSN_BIT - insn_prefix_bit);
+	return insn_prefix_table[prefix];
+}
+
+/*
+ * fill all posibilities of an instruction.
+ */
+void fill_prefix_table_one(int insn_type, char *prefix)
+{
+	int bitnum = 0;
+	unsigned int offsets[INSN_BIT];
+	unsigned int prefix_base = 0;
+	size_t prefix_len;
+
+	if (!prefix)
+		return;
+
+	prefix_len = strlen(prefix);
+	for (unsigned int i = 0; i < insn_prefix_bit; i++) {
+		int cur_offset = insn_prefix_bit - 1 - i;
+		/* find how many '.' in this string and store their locations in "offsets" */
+		if (i >= prefix_len || prefix[i] == '.') {
+			offsets[bitnum++] = cur_offset;
+			continue;
+		}
+
+		if (prefix[i] == '1')
+			prefix_base |= (1U << cur_offset);
+	}
+
+	for (unsigned int i = 0; i < (1U << bitnum); i++) {
+		unsigned int cur_i = i;
+		unsigned int insn = prefix_base;
+		for (int j = 0; j < bitnum; j++) {
+			insn |= (cur_i & 1U) << offsets[j];
+			cur_i >>= 1;
+		}
+		if (insn_prefix_table[insn] != INSN_INVALID)
+			si_panic("conflict insns: %s and %s\n",
+				 insn_type_to_str(insn_type),
+				 insn_type_to_str(insn_prefix_table[insn]));
+		insn_prefix_table[insn] = insn_type;
+	}
+}
+
+#define GENERATE_INIT_CODE(x)		\
+	insn_prefixes[x] = x##_PREFIX;
+
+int init_insn_table(void)
+{
+	FOREACH_INSN(GENERATE_INIT_CODE);
+
+	if (INSN_TYPE_NUM > (1UL << (CHAR_BIT * sizeof(insn_prefix_table[0]))))
+		si_panic("too many instruction types, increase insn_prefix_table size.\n");
+	insn_prefix_table = calloc(1 << insn_prefix_bit, sizeof(uint8_t));
+	if (!insn_prefix_table) {
+		SI_LOG_INFO("init_insn_table calloc fail\n");
+		return -ENOMEM;
+	}
+
+	for (int i = 1; i < INSN_TYPE_NUM; i++) {
+		fill_prefix_table_one(i, insn_prefixes[i]);
+	}
+
+	return 0;
+}
 
 // B
 // Branch causes an unconditional branch to a label at a PC-relative offset, with a hint that this is not a subroutine call or return.
