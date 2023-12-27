@@ -19,16 +19,498 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <limits.h>
+#include <si_log.h>
 
 #include "elf_link_common.h"
 #include "elf_write_elf.h"
+#include "elf_link_elf.h"
 #include <si_debug.h>
-#include <si_log.h>
 
 #define unlikely(x) __builtin_expect((x), 0)
 
 #define ARM64_INSN_LEN (4)
+#define INSN_BIT (ARM64_INSN_LEN * CHAR_BIT)
 #define BIAS 0x10
+
+/*
+ * all supported instructions are listed here,
+ * their order is the same as in the manual 
+ * 
+ * set INSN_INVALID to 0, make it easier to initialize to all invalid
+ */
+#define FOREACH_INSN(MACRO)		\
+	MACRO(INSN_INVALID)		\
+	MACRO(INSN_ADRP)		\
+	MACRO(INSN_B_COND)		\
+	MACRO(INSN_B)			\
+	MACRO(INSN_BL)			\
+	MACRO(INSN_CBNZ)		\
+	MACRO(INSN_CBZ)			\
+	MACRO(INSN_LDR_I_SIMD_POST)	\
+	MACRO(INSN_LDR_I_SIMD_PRE)	\
+	MACRO(INSN_LDR_I_SIMD_UNSIGNED)	\
+	MACRO(INSN_LDR_I_POST)		\
+	MACRO(INSN_LDR_I_PRE)		\
+	MACRO(INSN_LDR_I_UNSIGNED)	\
+	MACRO(INSN_LDR_L_SIMD)		\
+	MACRO(INSN_LDR_L)		\
+	MACRO(INSN_LDR_R_SIMD)		\
+	MACRO(INSN_LDR_R)		\
+	MACRO(INSN_LDRB_I_POST)		\
+	MACRO(INSN_LDRB_I_PRE)		\
+	MACRO(INSN_LDRB_I_UNSIGNED)	\
+	MACRO(INSN_LDRB_R)		\
+	MACRO(INSN_LDRH_I_POST)		\
+	MACRO(INSN_LDRH_I_PRE)		\
+	MACRO(INSN_LDRH_I_UNSIGNED)	\
+	MACRO(INSN_LDRH_R)		\
+	MACRO(INSN_LDRSB_I_POST)	\
+	MACRO(INSN_LDRSB_I_PRE)		\
+	MACRO(INSN_LDRSB_I_UNSIGNED)	\
+	MACRO(INSN_LDRSB_R)		\
+	MACRO(INSN_LDRSH_I_POST)	\
+	MACRO(INSN_LDRSH_I_PRE)		\
+	MACRO(INSN_LDRSH_I_UNSIGNED)	\
+	MACRO(INSN_LDRSH_R)		\
+	MACRO(INSN_LDRSW_I_POST)	\
+	MACRO(INSN_LDRSW_I_PRE)		\
+	MACRO(INSN_LDRSW_I_UNSIGNED)	\
+	MACRO(INSN_LDRSW_L)		\
+	MACRO(INSN_LDRSW_R)		\
+	MACRO(INSN_NOP)			\
+	MACRO(INSN_RET)			\
+	MACRO(INSN_STR_I_SIMD_POST)	\
+	MACRO(INSN_STR_I_SIMD_PRE)	\
+	MACRO(INSN_STR_I_SIMD_UNSIGNED)	\
+	MACRO(INSN_STR_I_POST)		\
+	MACRO(INSN_STR_I_PRE)		\
+	MACRO(INSN_STR_I_UNSIGNED)	\
+	MACRO(INSN_STR_R_SIMD)		\
+	MACRO(INSN_STR_R)		\
+	MACRO(INSN_STRB_I_POST)		\
+	MACRO(INSN_STRB_I_PRE)		\
+	MACRO(INSN_STRB_I_UNSIGNED)	\
+	MACRO(INSN_STRB_R)		\
+	MACRO(INSN_STRH_I_POST)		\
+	MACRO(INSN_STRH_I_PRE)		\
+	MACRO(INSN_STRH_I_UNSIGNED)	\
+	MACRO(INSN_STRH_R)		\
+	MACRO(INSN_TBNZ)		\
+	MACRO(INSN_TBZ)			\
+
+#define GENERATE_ENUM(x) x,
+enum insn_types
+{
+	FOREACH_INSN(GENERATE_ENUM)	/* have comma at end */
+	INSN_TYPE_NUM
+};
+
+#define GENERATE_STRING(x) #x,
+const char *insn_type_strings[] = {
+	FOREACH_INSN(GENERATE_STRING)
+};
+
+const char *insn_type_to_str(int insn_type)
+{
+	return insn_type_strings[insn_type];
+}
+
+typedef struct {
+	int id;
+	const char *prefix;
+} insn_table_element;
+
+insn_table_element insn_table[] = {
+	{INSN_INVALID,			NULL					},
+	{INSN_ADRP,			"1..10000"				},
+	{INSN_B_COND,			"01010100...................0"		},
+	{INSN_B,			"000101"				},
+	{INSN_BL,			"100101"				},
+	{INSN_CBNZ,			".0110101"				},
+	{INSN_CBZ,			".0110100"				},
+	{INSN_LDR_I_SIMD_POST,		"..111100.10.........01"		},
+	{INSN_LDR_I_SIMD_PRE,		"..111100.10.........11"		},
+	{INSN_LDR_I_SIMD_UNSIGNED,	"..111101.1"				},
+	{INSN_LDR_I_POST,		"1.111000010.........01"		},
+	{INSN_LDR_I_PRE,		"1.111000010.........11"		},
+	{INSN_LDR_I_UNSIGNED,		"1.11100101"				},
+	{INSN_LDR_L_SIMD,		"..011100"				},
+	{INSN_LDR_L,			"0.011000"				},
+	{INSN_LDR_R_SIMD,		"..111100.11.........10"		},
+	{INSN_LDR_R,			"1.111000011.........10"		},
+	{INSN_LDRB_I_POST,		"00111000010.........01"		},
+	{INSN_LDRB_I_PRE,		"00111000010.........11"		},
+	{INSN_LDRB_I_UNSIGNED,		"0011100101"				},
+	{INSN_LDRB_R,			"00111000011.........10"		},
+	{INSN_LDRH_I_POST,		"01111000010.........01"		},
+	{INSN_LDRH_I_PRE,		"01111000010.........11"		},
+	{INSN_LDRH_I_UNSIGNED,		"0111100101"				},
+	{INSN_LDRH_R,			"01111000011.........10"		},
+	{INSN_LDRSB_I_POST,		"001110001.0.........01"		},
+	{INSN_LDRSB_I_PRE,		"001110001.0.........11"		},
+	{INSN_LDRSB_I_UNSIGNED,		"001110011"				},
+	{INSN_LDRSB_R,			"001110001.1.........10"		},
+	{INSN_LDRSH_I_POST,		"011110001.0.........01"		},
+	{INSN_LDRSH_I_PRE,		"011110001.0.........11"		},
+	{INSN_LDRSH_I_UNSIGNED,		"011110011"				},
+	{INSN_LDRSH_R,			"011110001.1.........10"		},
+	{INSN_LDRSW_I_POST,		"10111000100.........01"		},
+	{INSN_LDRSW_I_PRE,		"10111000100.........11"		},
+	{INSN_LDRSW_I_UNSIGNED,		"1011100110"				},
+	{INSN_LDRSW_L,			"10011000"				},
+	{INSN_LDRSW_R,			"10111000101.........10"		},
+	{INSN_NOP,			"11010101000000110010000000011111"	},
+	{INSN_RET,			"1101011001011111000000.....00000"	},
+	{INSN_STR_I_SIMD_POST,		"..111100.00.........01"		},
+	{INSN_STR_I_SIMD_PRE,		"..111100.00.........11"		},
+	{INSN_STR_I_SIMD_UNSIGNED,	"..111101.0"				},
+	{INSN_STR_I_POST,		"1.111000000.........01"		},
+	{INSN_STR_I_PRE,		"1.111000000.........11"		},
+	{INSN_STR_I_UNSIGNED,		"1.11100100"				},
+	{INSN_STR_R_SIMD,		"..111100.01.........10"		},
+	{INSN_STR_R,			"1.111000001.........10"		},
+	{INSN_STRB_I_POST,		"00111000000.........01"		},
+	{INSN_STRB_I_PRE,		"00111000000.........11"		},
+	{INSN_STRB_I_UNSIGNED,		"0011100100"				},
+	{INSN_STRB_R,			"00111000001.........10"		},
+	{INSN_STRH_I_POST,		"01111000000.........01"		},
+	{INSN_STRH_I_PRE,		"01111000000.........11"		},
+	{INSN_STRH_I_UNSIGNED,		"0111100100"				},
+	{INSN_STRH_R,			"01111000001.........10"		},
+	{INSN_TBNZ,			".0110111"				},
+	{INSN_TBZ,			".0110110"				},
+};
+
+static int64_t sign_extend_64(int64_t value, int len)
+{
+	int shift = 64 - len;
+	return (value << shift) >> shift;
+}
+
+/* B.cond */
+int64_t get_offset_B_COND(uint32_t binary)
+{
+	uint32_t imm19 = (binary & 0xFFFFE0U) >> 5;
+	return sign_extend_64(imm19 << 2, 21);
+}
+
+int64_t get_offset_TBNZ(uint32_t binary)
+{
+	uint32_t imm14 = (binary & 0x7FFE0U) >> 5;
+	return sign_extend_64(imm14 << 2, 16);
+}
+
+uint8_t *insn_prefix_table;
+/* 如果修改该值，get_insn_type中的校验也需要修改 */
+unsigned int insn_prefix_bit = 22;
+
+int get_insn_type(unsigned insn)
+{
+	unsigned int prefix = insn >> (INSN_BIT - insn_prefix_bit);
+	int insn_type = insn_prefix_table[prefix];
+
+	/* 检查一下后面的bits，防止出现未定义的指令被识别成现有指令 */
+	switch (insn_type)
+	{
+	case INSN_B_COND:
+		if (insn & 0x10U)
+			insn_type = INSN_INVALID;
+		break;
+	case INSN_NOP:
+		if ((insn & 0x3FFU) != 0x1FU)
+			insn_type = INSN_INVALID;
+		break;
+	case INSN_RET:
+		if (insn & 0x1FU)
+			insn_type = INSN_INVALID;
+		break;
+	default:
+		break;
+	}
+
+	return insn_type;
+}
+
+/*
+ * fill all posibilities of an instruction.
+ */
+void fill_prefix_table_one(int insn_type, const char *prefix)
+{
+	int bitnum = 0;
+	unsigned int offsets[INSN_BIT];
+	unsigned int prefix_base = 0;
+	size_t prefix_len;
+
+	if (!prefix)
+		return;
+
+	prefix_len = strlen(prefix);
+	for (unsigned int i = 0; i < insn_prefix_bit; i++) {
+		int cur_offset = insn_prefix_bit - 1 - i;
+		/* find how many '.' in this string and store their locations in "offsets" */
+		if (i >= prefix_len || prefix[i] == '.') {
+			offsets[bitnum++] = cur_offset;
+			continue;
+		}
+
+		if (prefix[i] == '1')
+			prefix_base |= (1U << cur_offset);
+	}
+
+	for (unsigned int i = 0; i < (1U << bitnum); i++) {
+		unsigned int cur_i = i;
+		unsigned int insn = prefix_base;
+		for (int j = 0; j < bitnum; j++) {
+			insn |= (cur_i & 1U) << offsets[j];
+			cur_i >>= 1;
+		}
+		if (insn_prefix_table[insn] != INSN_INVALID)
+			si_panic("conflict insns: %s and %s\n",
+				 insn_type_to_str(insn_type),
+				 insn_type_to_str(insn_prefix_table[insn]));
+		insn_prefix_table[insn] = insn_type;
+	}
+}
+
+int init_insn_table(void)
+{
+	if (INSN_TYPE_NUM > (1UL << (CHAR_BIT * sizeof(insn_prefix_table[0]))))
+		si_panic("too many instruction types, increase insn_prefix_table size.\n");
+	insn_prefix_table = calloc(1 << insn_prefix_bit, sizeof(uint8_t));
+	if (!insn_prefix_table) {
+		SI_LOG_INFO("init_insn_table calloc fail\n");
+		return -ENOMEM;
+	}
+
+	for (int i = 1; i < INSN_TYPE_NUM; i++) {
+		fill_prefix_table_one(i, insn_table[i].prefix);
+	}
+
+	return 0;
+}
+
+typedef struct {
+	int type;
+	uint64_t offset;
+} register_status_one;
+
+#define REGISTER_NUM 32
+typedef struct {
+	register_status_one data[REGISTER_NUM];
+	uint32_t *insnp;
+} traverse_status;
+
+typedef struct {
+	bool reached;
+	bool is_func;
+} insn_status;
+
+void clear_status_stack(traverse_status *status_stack, int depth)
+{
+	memset(&status_stack[depth], 0, sizeof(status_stack[0]));
+}
+
+static unsigned get_branch_addr(unsigned binary, unsigned offset);
+uint32_t *get_insnp_INSN_B(uint32_t *insnp)
+{
+	return (uint32_t *)(uint64_t)get_branch_addr(*insnp, (uint64_t)insnp);
+}
+
+uint32_t *get_insnp_INSN_B_COND(uint32_t *insnp)
+{
+	return (uint32_t *)((void *)insnp + get_offset_B_COND(*insnp));
+}
+
+uint32_t *get_insnp_INSN_TBNZ(uint32_t *insnp)
+{
+	return (uint32_t *)((void *)insnp + get_offset_TBNZ(*insnp));
+}
+
+/* TODO 处理跳转到abort的特殊情况 */
+/*
+ * 当函数的最后一个语句是调用其他函数时，汇编语言可能使用b指令直接跳转，而非函数跳转bl指令。
+ * 因此我们不能有“函数一定连续”的假设，也不能单纯使用bl指令来判断哪里有函数。
+ * 举例：
+ * 0000000000035550 <frame_dummy>:
+   35550:	17ffffdc 	b	354c0 <register_tm_clones>
+   35554:	d503201f 	nop
+   35558:	d503201f 	nop
+   3555c:	d503201f 	nop
+ */
+#define DEPTH_MAX 128
+int traverse_func(uint32_t *start, insn_status *status_table,
+	uint32_t *text_start, uint32_t *text_end, uint64_t sh_offset,
+	uint32_t *plt_start, uint32_t *plt_end)
+{
+	int ret = 0;
+	/* TODO change to dynamic array */
+	traverse_status *status_stack = calloc(DEPTH_MAX, sizeof(traverse_status));
+	int depth = 0;
+
+	clear_status_stack(status_stack, 0);
+
+	for (uint32_t *insnp = start; ; ) {
+		int64_t id = insnp - text_start;
+		uint32_t *BL_insnp;
+		uint64_t BL_id;
+		int insn_type = get_insn_type(*insnp);
+		bool in_plt = (insnp >= plt_start && insnp < plt_end);
+		bool in_text = (insnp >= text_start && insnp < text_end);
+
+		if (!in_text && !in_plt) {
+			si_panic("insnp goes out of plt/text range, id: %ld\n", id);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		/* TODO 确保.plt段与.text段没有交集；所有的段的顺序/相交最好都检查下 */
+		/* 这种情况是使用b指令进行函数跳转，且跳转的函数在本函数之前 */
+		if (insnp < start) {
+			if (in_text)
+				status_table[id].is_func = true;
+			/* 前面的函数一定遍历过了，不用再设置reached，下面的判断里面就会返回 */
+		}
+
+		if (in_plt || status_table[id].reached) {
+			/* 如果该位置的指令已经遍历到过了，退回上一层 */
+			if (depth > 0) {
+				depth--;
+				insnp = status_stack[depth].insnp;
+				if ((uint64_t)insnp - (uint64_t)start + sh_offset == 0x233d14)
+					printf("catch\n");
+				continue;
+			} else {
+				goto out;
+			}
+		}
+		status_table[id].reached = true;
+
+		switch (insn_type) {
+		case INSN_B:
+			insnp = get_insnp_INSN_B(insnp);
+			continue;
+		case INSN_B_COND:
+		case INSN_CBNZ:
+		case INSN_CBZ:
+		case INSN_TBNZ:
+		case INSN_TBZ:
+			status_stack[depth].insnp = insnp + 1;
+			depth++;
+			if (depth >= DEPTH_MAX)
+				si_panic("depth reach max\n");
+			clear_status_stack(status_stack, depth);
+
+			switch (insn_type) {
+			case INSN_B_COND:
+			case INSN_CBNZ:
+			case INSN_CBZ:
+				/* B_COND/CBNZ/CBZ偏移的计算方式都一样 */
+				insnp = get_insnp_INSN_B_COND(insnp);
+				break;
+			case INSN_TBNZ:
+			case INSN_TBZ:
+				/* TBNZ/TBZ偏移的计算方式一样 */
+				insnp = get_insnp_INSN_TBNZ(insnp);
+				break;
+			default:
+				si_panic("%s internal error\n", __func__);
+				break;
+			}
+			continue;
+		case INSN_BL:
+			/* B/BL偏移的计算方式一样 */
+			BL_insnp = get_insnp_INSN_B(insnp);
+			in_plt = (BL_insnp >= plt_start && BL_insnp < plt_end);
+			in_text = (BL_insnp >= text_start && BL_insnp < text_end);
+			/* BL跳转的目的地址一定是准确的函数地址 */
+			if (!in_text && !in_plt) {
+				// printf("panic function_start: %lx, value: %x\n",
+				// 	(uint64_t)insnp - (uint64_t)text_start + sh_offset,
+				// 	*insnp);
+				si_panic("BL_insnp goes out of plt/text range, id: %ld\n",
+					BL_id);
+				ret = -EINVAL;
+				goto out;
+			}
+			if (in_text)
+				status_table[BL_insnp - text_start].is_func = true;
+			break;
+		case INSN_RET:
+			/* 不修改当前指令位置，下次循环会判断为is_reached，自动返回 */
+			continue;
+		default:
+			break;
+		}
+
+		insnp++;
+	}
+out:
+	free(status_stack);
+	return ret;
+}
+
+int do_traverse_text(uint32_t *start, uint32_t *end, uint64_t sh_offset,
+			uint32_t *plt_start, uint32_t *plt_end)
+{
+	int ret = 0;
+	insn_status *status_table = calloc(end - start, sizeof(insn_status));
+
+	for (uint32_t *func_start = start; func_start < end; ) {
+		status_table[func_start - start].is_func = true;
+		printf("function_start: %lx, value: %x\n",
+			(uint64_t)func_start - (uint64_t)start + sh_offset, *func_start);
+		ret = traverse_func(func_start, status_table,
+			start, end, sh_offset, plt_start, plt_end);
+		if (ret)
+			break;
+		for (; func_start < end; func_start++) {
+			uint64_t id = func_start - start;
+			/* 找到第一个还没遍历到过的指令，下个函数的开头就在此处 */
+			if (status_table[id].reached)
+				continue;
+			/* 跳过上个函数末尾的nop */
+			if (get_insn_type(*func_start) != INSN_NOP)
+				break;
+			status_table[id].reached = true;
+		}
+	}
+
+	free(status_table);
+	return ret;
+}
+
+int modify_text_section(elf_link_t *elf_link)
+{
+	elf_file_t *ef;
+	Elf64_Shdr *text_sec, *plt_sec;
+	int ret = 0;
+	
+	uint32_t *insnp, *insnp_plt;
+
+	/* 开发中 */
+	return ret;
+
+	foreach_infile(elf_link, ef) {
+		if (!strcmp(ef->file_name, "/usr/lib/relocation/usr/bin/bash.relocation"))
+			break;
+	}
+	text_sec = elf_find_section_by_name(ef, ".text");
+	plt_sec= elf_find_section_by_name(ef, ".plt");
+	printf("modify_text_section %s, %s\n",
+		ef->file_name, elf_get_section_name(ef, text_sec));
+
+	insnp = elf_find_section_ptr_by_name(ef, ".text");
+	insnp_plt = elf_find_section_ptr_by_name(ef, ".plt");
+
+	ret = do_traverse_text(
+		insnp, (void *)insnp + text_sec->sh_size, text_sec->sh_offset,
+		insnp_plt, (void *)insnp_plt + plt_sec->sh_size
+	);
+	printf("modify_text_section %s, %s done\n",
+		ef->file_name, elf_get_section_name(ef, text_sec));
+	return ret;
+}
 
 // B
 // Branch causes an unconditional branch to a label at a PC-relative offset, with a hint that this is not a subroutine call or return.

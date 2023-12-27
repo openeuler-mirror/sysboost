@@ -302,6 +302,7 @@ unsigned long elf_get_new_tls_offset(elf_link_t *elf_link, elf_file_t *ef, unsig
 
 // section
 bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec);
+bool is_section_using_reladyn(elf_file_t *ef, Elf64_Shdr *sec);
 int get_new_section_index(elf_link_t *elf_link, elf_file_t *src_ef, unsigned int sec_index);
 unsigned long get_new_name_offset(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Shdr *src_sec, unsigned long offset);
 
@@ -325,5 +326,8 @@ void init_symbol_mapping(elf_link_t *elf_link);
 
 // common
 bool is_empty_path(const char *path);
+
+#define foreach_string(list, s)	\
+	for (s = list; s < list + (sizeof(list) / sizeof(list[0])); s++)
 
 #endif /* _ELF_LINK_COMMON_H */

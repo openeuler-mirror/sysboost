@@ -1742,7 +1742,7 @@ static void elf_link_write_sections(elf_link_t *elf_link)
 
 	/*
 	 * merge segment for below sections:
-	 * .init .plt .text __libc_freeres_fn .fini
+	 * .init .plt .text .fini
 	 * all into .text in new elf.
 	 */
 	write_text(elf_link);
@@ -1829,6 +1829,10 @@ int elf_link_write(elf_link_t *elf_link)
 	modify_rela_dyn(elf_link);
 	// .rela.plt .plt.got
 	modify_got(elf_link);
+
+	/* 目前该函数没有实际作用，后续会代替modify_local_call的.rela.init .rela.text部分 */
+	/* .init .plt .text .fini */
+	modify_text_section(elf_link);
 
 	// modify local call to use jump
 	// .rela.init .rela.text .rela.rodata .rela.tdata .rela.init_array .rela.data
