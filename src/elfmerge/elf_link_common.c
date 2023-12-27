@@ -99,35 +99,35 @@ bool is_gnu_weak_symbol(Elf64_Sym *sym)
 
 // .interp is needed by dyn-mode, staitc-mode template do not have
 static char *needed_sections[] = {
-    ".interp",
-    ".note.gnu.build-id",
-    ".note.ABI-tag",
-    ".gnu.hash",
-    ".dynsym",
-    ".dynstr",
-    ".rela.dyn",
-    ".rela.plt",
-    ".text",
-    ".rodata",
-    ".eh_frame_hdr", // this section's header is not modified, is it really needed?
-    ".tdata",
-    ".tbss",
-    ".preinit_array",
-    ".init_array",
-    ".fini_array",
-    ".data.rel.ro",
-    ".dynamic",
-    ".got",
-    ".data",
-    ".bss",
-    ".symtab",
-    ".strtab",
-    ".shstrtab",
-    ".debug_info",
-    ".debug_line",
-    ".debug_str",
-    ".debug_line_str",
-    ".debug_abbrev",
+	".interp",
+	".note.gnu.build-id",
+	".note.ABI-tag",
+	".gnu.hash",
+	".dynsym",
+	".dynstr",
+	".rela.dyn",
+	".rela.plt",
+	".text",
+	".rodata",
+	".eh_frame_hdr", // this section's header is not modified, is it really needed?
+	".tdata",
+	".tbss",
+	".preinit_array",
+	".init_array",
+	".fini_array",
+	".data.rel.ro",
+	".dynamic",
+	".got",
+	".data",
+	".bss",
+	".symtab",
+	".strtab",
+	".shstrtab",
+	".debug_info",
+	".debug_line",
+	".debug_str",
+	".debug_line_str",
+	".debug_abbrev",
 };
 #define NEEDED_SECTIONS_LEN (sizeof(needed_sections) / sizeof(needed_sections[0]))
 
@@ -170,6 +170,28 @@ bool is_section_needed(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *sec)
 
 	return true;
 	*/
+}
+
+/* TODO 这个好像不需要 */
+static char *reladyn_sections[] = {
+	".init_array",
+	".fini_array",
+	".data.rel.ro",
+	".data",
+};
+
+bool is_section_using_reladyn(elf_file_t *ef, Elf64_Shdr *sec)
+{
+	char **strp;
+	char *name = elf_get_section_name(ef, sec);
+	return strcmp(name, ".text");
+
+	foreach_string(reladyn_sections, strp) {
+		if (strcmp(name, *strp) == 0)
+			return true;
+	}
+
+	return false;
 }
 
 // symbol_name string can not change

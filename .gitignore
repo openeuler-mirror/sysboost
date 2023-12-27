@@ -22,3 +22,5 @@ Cargo.lock
 !.vscode/settings.json
 !.vscode/c_cpp_properties.json
 
+do.py
+push.py

@@ -20,6 +20,7 @@ int init_insn_table(void);
 void modify_rela_dyn(elf_link_t *elf_link);
 void modify_got(elf_link_t *elf_link);
 void modify_local_call(elf_link_t *elf_link);
+void modify_text_section(elf_link_t *elf_link);
 
 int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rela);
 void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr);

@@ -9,6 +9,16 @@
 	"rust-analyzer.lens.enable": false,
 	"files.associations": {
 		"*.h": "c",
+		"random": "c",
+		"array": "c",
+		"string": "c",
+		"string_view": "c",
+		"typeinfo": "c",
+		"compare": "c",
+		"deque": "c",
+		"unordered_map": "c",
+		"vector": "c",
+		"initializer_list": "c"
 	},
 	"C_Cpp.errorSquiggles": "disabled",
 }
