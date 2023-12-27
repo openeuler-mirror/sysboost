@@ -9,11 +9,11 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-8-28
 
-use crate::common::set_thp;
 use crate::common::is_arch_x86_64;
 use crate::config::RtoConfig;
 use crate::lib::process_ext::run_child;
 use crate::config::get_config;
+use crate::aot::set_rto_link_flag;
 
 use std::fs;
 use std::path::Path;
@@ -59,25 +59,20 @@ fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
 			return -1;
 		}
 	};
-	let elf_bak_path = elf_path.with_extension("bak");
-	match fs::copy(&elf_path, &elf_bak_path) {
-		Ok(_) => {}
-		Err(e) => {
-			log::error!("Copy failed: {}", e);
-			return -1;
-		}
-	}
-	args.push(elf_bak_path.to_str().unwrap().to_string());
-	args.push("-o".to_string());
+	let rto_path = elf_path.with_extension("rto");
 	args.push(elf.split_whitespace().collect());
-
+	args.push("-o".to_string());
+	args.push(rto_path.to_str().unwrap().to_string());
+	
 	let real_profile_path = get_profile_path(conf);
 	if real_profile_path != "" {
 		args.push(format!("-data={}", real_profile_path));
 	}
-
-	let ret = run_child("/usr/bin/llvm-bolt", &args);
-
+	let mut ret = run_child("/usr/bin/llvm-bolt", &args);
+	if ret != 0 {
+		return ret;
+	}
+	ret = set_rto_link_flag(&rto_path.to_str().unwrap().to_string(), true);
 	return ret;
 }
 
@@ -140,10 +135,10 @@ pub fn bolt_optimize(conf: &RtoConfig) -> i32 {
 			return ret;
 		} else {
 			let ret = bolt_optimize_bin(&conf);
-			// 如果优化程序是mysqld, 则开启透明大页
-			if is_mysqld(conf) {
-				set_thp();
-			}
+			// rto加载流程会使用大页功能，不需要开启系统透明大页
+			// if is_mysqld(conf) {
+			// 	//set_thp();
+			// }
 			return ret;
 		}
 	}

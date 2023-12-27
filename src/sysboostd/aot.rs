@@ -111,6 +111,28 @@ pub fn set_app_link_flag(path: &String, is_set: bool) -> i32 {
 	return ret;
 }
 
+pub fn set_rto_link_flag(path: &String, is_set: bool) -> i32 {
+	let mut args: Vec<String> = Vec::new();
+	if is_set {
+		args.push("--set-rto".to_string());
+	} else {
+		args.push("--unset-rto".to_string());
+	}
+
+	// 回滚场景, 路径是软链接要转换为真实路径
+	let real_path = match fs::canonicalize(path) {
+		Ok(p) => p,
+		Err(e) => {
+			log::error!("get realpath failed: {}", e);
+			return -1;
+		}
+	};
+
+	args.push(format!("{}", real_path.to_string_lossy()));
+	let ret = run_child(SYSBOOST_PATH, &args);
+	return ret;
+}
+
 // 生成rto文件
 // rto文件先生成到临时文件, 然后mv到最终路径, 避免并发操作文件问题
 // sysboost --output=/usr/bin/bash.tmp.rto -static /usr/bin/bash lib1 lib2
