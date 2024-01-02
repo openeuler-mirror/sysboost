@@ -15,6 +15,7 @@
 
 #include <elf.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #define NOT_FOUND_SYM (-1U)
 
@@ -53,6 +54,65 @@ typedef struct {
 	char *file_name;
 	char *build_id;
 } elf_file_t;
+
+#define FOREACH_SECTION(MACRO)					\
+	MACRO(SEC_INTERP,		".interp"		)\
+	MACRO(SEC_BUILD_ID,		".note.gnu.build-id"	)\
+	MACRO(SEC_ABI_TAG,		".note.ABI-tag"		)\
+	MACRO(SEC_GNU_HASH,		".gnu.hash"		)\
+	MACRO(SEC_DYNSYM,		".dynsym"		)\
+	MACRO(SEC_DYNSTR,		".dynstr"		)\
+	MACRO(SEC_RELA_DYN,		".rela.dyn"		)\
+	MACRO(SEC_RELA_PLT,		".rela.plt"		)\
+	MACRO(SEC_TEXT,			".text"			)\
+	MACRO(SEC_RODATA,		".rodata"		)\
+	/* this section's header is not modified, is it really needed? */	\
+	MACRO(SEC_EH_FRAME_HDR,		".eh_frame_hdr"		)\
+	MACRO(SEC_TDATA,		".tdata"		)\
+	MACRO(SEC_TBSS,			".tbss"			)\
+	MACRO(SEC_PREINIT_ARRAY,	".preinit_array"	)\
+	MACRO(SEC_INIT_ARRAY,		".init_array"		)\
+	MACRO(SEC_FINI_ARRAY,		".fini_array"		)\
+	MACRO(SEC_DATA_REL_RO,		".data.rel.ro"		)\
+	MACRO(SEC_DYNAMIC,		".dynamic"		)\
+	MACRO(SEC_GOT,			".got"			)\
+	MACRO(SEC_DATA,			".data"			)\
+	MACRO(SEC_BSS,			".bss"			)\
+	MACRO(SEC_SYMTAB,		".symtab"		)\
+	MACRO(SEC_STRTAB,		".strtab"		)\
+	MACRO(SEC_SHSTRTAB,		".shstrtab"		)\
+	MACRO(SEC_DEBUG_INFO,		".debug_info"		)\
+	MACRO(SEC_DEBUG_LINE,		".debug_line"		)\
+	MACRO(SEC_DEBUG_STR,		".debug_str"		)\
+	MACRO(SEC_DEBUG_LINE_STR,	".debug_line_str"	)\
+	MACRO(SEC_DEBUG_ABBREV,		".debug_abbrev"		)\
+
+extern char *needed_sections[];
+
+#define GENERATE_SECTION_TYPE(x, ...) x,
+enum section_types
+{
+	FOREACH_SECTION(GENERATE_SECTION_TYPE)
+	SECTION_NUM,
+};
+
+#define GENERATE_STRING(x, ...) #x,
+extern const char *sec_type_strings[];
+
+static inline const char *sec_type_to_str(int sec_type)
+{
+	return sec_type_strings[sec_type];
+}
+
+static inline int elf_sec_name_to_type(char *name)
+{
+	for (int i = 0; i < SECTION_NUM; i++) {
+		if (!strcmp(needed_sections[i], name))
+			return i;
+	}
+
+	return -EINVAL;
+}
 
 static inline void *elf_get_section_data(elf_file_t *ef, Elf64_Shdr *sec)
 {
@@ -345,6 +405,7 @@ static inline bool elf_is_version_sec(Elf64_Shdr *sec)
 Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls_offset);
 Elf64_Shdr *elf_find_section_by_name(elf_file_t *ef, const char *sec_name);
 void *elf_find_section_ptr_by_name(elf_file_t *ef, const char *sec_name);
+int elf_find_sec_type_by_addr(elf_file_t *ef, unsigned long addr);
 Elf64_Shdr *elf_find_section_by_addr(elf_file_t *ef, unsigned long addr);
 typedef bool (*section_filter_func)(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool elf_is_relro_section(const elf_file_t *ef, const Elf64_Shdr *sechdr);

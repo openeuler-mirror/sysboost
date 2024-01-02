@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <si_common.h>
 #include <si_debug.h>
@@ -41,6 +42,10 @@
 
 #define ELF_VERSION_NR_LOCAL 0
 #define ELF_VERSION_NR_GLOBAL 1
+
+const char *sec_type_strings[] = {
+	FOREACH_SECTION(GENERATE_STRING)
+};
 
 Elf64_Rela *elf_get_rela_by_addr(elf_file_t *ef, unsigned long addr)
 {
@@ -330,6 +335,17 @@ Elf64_Shdr *elf_find_section_by_addr(elf_file_t *ef, unsigned long addr)
 	}
 
 	return NULL;
+}
+
+int elf_find_sec_type_by_addr(elf_file_t *ef, unsigned long addr)
+{
+	Elf64_Shdr *sec = elf_find_section_by_addr(ef, addr);
+	char *name;
+	
+	if (sec == NULL)
+		return -EINVAL;
+	name = elf_get_section_name(ef, sec);
+	return elf_sec_name_to_type(name);
 }
 
 Elf64_Shdr *elf_find_section_by_tls_offset(elf_file_t *ef, unsigned long obj_tls_offset)
