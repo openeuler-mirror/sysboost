@@ -98,36 +98,9 @@ bool is_gnu_weak_symbol(Elf64_Sym *sym)
 }
 
 // .interp is needed by dyn-mode, staitc-mode template do not have
-static char *needed_sections[] = {
-	".interp",
-	".note.gnu.build-id",
-	".note.ABI-tag",
-	".gnu.hash",
-	".dynsym",
-	".dynstr",
-	".rela.dyn",
-	".rela.plt",
-	".text",
-	".rodata",
-	".eh_frame_hdr", // this section's header is not modified, is it really needed?
-	".tdata",
-	".tbss",
-	".preinit_array",
-	".init_array",
-	".fini_array",
-	".data.rel.ro",
-	".dynamic",
-	".got",
-	".data",
-	".bss",
-	".symtab",
-	".strtab",
-	".shstrtab",
-	".debug_info",
-	".debug_line",
-	".debug_str",
-	".debug_line_str",
-	".debug_abbrev",
+#define GENERATE_NEEDED_SECTION(a, b, ...) b,
+char *needed_sections[] = {
+	FOREACH_SECTION(GENERATE_NEEDED_SECTION)
 };
 #define NEEDED_SECTIONS_LEN (sizeof(needed_sections) / sizeof(needed_sections[0]))
 

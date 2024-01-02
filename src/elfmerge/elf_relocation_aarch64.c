@@ -39,74 +39,73 @@
  * 
  * set INSN_INVALID to 0, make it easier to initialize to all invalid
  */
-#define FOREACH_INSN(MACRO)		\
-	MACRO(INSN_INVALID)		\
-	MACRO(INSN_ADRP)		\
-	MACRO(INSN_B_COND)		\
-	MACRO(INSN_B)			\
-	MACRO(INSN_BL)			\
-	MACRO(INSN_CBNZ)		\
-	MACRO(INSN_CBZ)			\
-	MACRO(INSN_LDR_I_SIMD_POST)	\
-	MACRO(INSN_LDR_I_SIMD_PRE)	\
-	MACRO(INSN_LDR_I_SIMD_UNSIGNED)	\
-	MACRO(INSN_LDR_I_POST)		\
-	MACRO(INSN_LDR_I_PRE)		\
-	MACRO(INSN_LDR_I_UNSIGNED)	\
-	MACRO(INSN_LDR_L_SIMD)		\
-	MACRO(INSN_LDR_L)		\
-	MACRO(INSN_LDR_R_SIMD)		\
-	MACRO(INSN_LDR_R)		\
-	MACRO(INSN_LDRB_I_POST)		\
-	MACRO(INSN_LDRB_I_PRE)		\
-	MACRO(INSN_LDRB_I_UNSIGNED)	\
-	MACRO(INSN_LDRB_R)		\
-	MACRO(INSN_LDRH_I_POST)		\
-	MACRO(INSN_LDRH_I_PRE)		\
-	MACRO(INSN_LDRH_I_UNSIGNED)	\
-	MACRO(INSN_LDRH_R)		\
-	MACRO(INSN_LDRSB_I_POST)	\
-	MACRO(INSN_LDRSB_I_PRE)		\
-	MACRO(INSN_LDRSB_I_UNSIGNED)	\
-	MACRO(INSN_LDRSB_R)		\
-	MACRO(INSN_LDRSH_I_POST)	\
-	MACRO(INSN_LDRSH_I_PRE)		\
-	MACRO(INSN_LDRSH_I_UNSIGNED)	\
-	MACRO(INSN_LDRSH_R)		\
-	MACRO(INSN_LDRSW_I_POST)	\
-	MACRO(INSN_LDRSW_I_PRE)		\
-	MACRO(INSN_LDRSW_I_UNSIGNED)	\
-	MACRO(INSN_LDRSW_L)		\
-	MACRO(INSN_LDRSW_R)		\
-	MACRO(INSN_NOP)			\
-	MACRO(INSN_RET)			\
-	MACRO(INSN_STR_I_SIMD_POST)	\
-	MACRO(INSN_STR_I_SIMD_PRE)	\
-	MACRO(INSN_STR_I_SIMD_UNSIGNED)	\
-	MACRO(INSN_STR_I_POST)		\
-	MACRO(INSN_STR_I_PRE)		\
-	MACRO(INSN_STR_I_UNSIGNED)	\
-	MACRO(INSN_STR_R_SIMD)		\
-	MACRO(INSN_STR_R)		\
-	MACRO(INSN_STRB_I_POST)		\
-	MACRO(INSN_STRB_I_PRE)		\
-	MACRO(INSN_STRB_I_UNSIGNED)	\
-	MACRO(INSN_STRB_R)		\
-	MACRO(INSN_STRH_I_POST)		\
-	MACRO(INSN_STRH_I_PRE)		\
-	MACRO(INSN_STRH_I_UNSIGNED)	\
-	MACRO(INSN_STRH_R)		\
-	MACRO(INSN_TBNZ)		\
-	MACRO(INSN_TBZ)			\
+#define FOREACH_INSN(MACRO)							 \
+	MACRO(INSN_INVALID,		NULL					)\
+	MACRO(INSN_ADRP,		"1..10000"				)\
+	MACRO(INSN_B_COND,		"01010100...................0"		)\
+	MACRO(INSN_B,			"000101"				)\
+	MACRO(INSN_BL,			"100101"				)\
+	MACRO(INSN_CBNZ,		".0110101"				)\
+	MACRO(INSN_CBZ,			".0110100"				)\
+	MACRO(INSN_LDR_I_SIMD_POST,	"..111100.10.........01"		)\
+	MACRO(INSN_LDR_I_SIMD_PRE,	"..111100.10.........11"		)\
+	MACRO(INSN_LDR_I_SIMD_UNSIGNED,	"..111101.1"				)\
+	MACRO(INSN_LDR_I_POST,		"1.111000010.........01"		)\
+	MACRO(INSN_LDR_I_PRE,		"1.111000010.........11"		)\
+	MACRO(INSN_LDR_I_UNSIGNED,	"1.11100101"				)\
+	MACRO(INSN_LDR_L_SIMD,		"..011100"				)\
+	MACRO(INSN_LDR_L,		"0.011000"				)\
+	MACRO(INSN_LDR_R_SIMD,		"..111100.11.........10"		)\
+	MACRO(INSN_LDR_R,		"1.111000011.........10"		)\
+	MACRO(INSN_LDRB_I_POST,		"00111000010.........01"		)\
+	MACRO(INSN_LDRB_I_PRE,		"00111000010.........11"		)\
+	MACRO(INSN_LDRB_I_UNSIGNED,	"0011100101"				)\
+	MACRO(INSN_LDRB_R,		"00111000011.........10"		)\
+	MACRO(INSN_LDRH_I_POST,		"01111000010.........01"		)\
+	MACRO(INSN_LDRH_I_PRE,		"01111000010.........11"		)\
+	MACRO(INSN_LDRH_I_UNSIGNED,	"0111100101"				)\
+	MACRO(INSN_LDRH_R,		"01111000011.........10"		)\
+	MACRO(INSN_LDRSB_I_POST,	"001110001.0.........01"		)\
+	MACRO(INSN_LDRSB_I_PRE,		"001110001.0.........11"		)\
+	MACRO(INSN_LDRSB_I_UNSIGNED,	"001110011"				)\
+	MACRO(INSN_LDRSB_R,		"001110001.1.........10"		)\
+	MACRO(INSN_LDRSH_I_POST,	"011110001.0.........01"		)\
+	MACRO(INSN_LDRSH_I_PRE,		"011110001.0.........11"		)\
+	MACRO(INSN_LDRSH_I_UNSIGNED,	"011110011"				)\
+	MACRO(INSN_LDRSH_R,		"011110001.1.........10"		)\
+	MACRO(INSN_LDRSW_I_POST,	"10111000100.........01"		)\
+	MACRO(INSN_LDRSW_I_PRE,		"10111000100.........11"		)\
+	MACRO(INSN_LDRSW_I_UNSIGNED,	"1011100110"				)\
+	MACRO(INSN_LDRSW_L,		"10011000"				)\
+	MACRO(INSN_LDRSW_R,		"10111000101.........10"		)\
+	MACRO(INSN_NOP,			"11010101000000110010000000011111"	)\
+	MACRO(INSN_RET,			"1101011001011111000000.....00000"	)\
+	MACRO(INSN_STR_I_SIMD_POST,	"..111100.00.........01"		)\
+	MACRO(INSN_STR_I_SIMD_PRE,	"..111100.00.........11"		)\
+	MACRO(INSN_STR_I_SIMD_UNSIGNED,	"..111101.0"				)\
+	MACRO(INSN_STR_I_POST,		"1.111000000.........01"		)\
+	MACRO(INSN_STR_I_PRE,		"1.111000000.........11"		)\
+	MACRO(INSN_STR_I_UNSIGNED,	"1.11100100"				)\
+	MACRO(INSN_STR_R_SIMD,		"..111100.01.........10"		)\
+	MACRO(INSN_STR_R,		"1.111000001.........10"		)\
+	MACRO(INSN_STRB_I_POST,		"00111000000.........01"		)\
+	MACRO(INSN_STRB_I_PRE,		"00111000000.........11"		)\
+	MACRO(INSN_STRB_I_UNSIGNED,	"0011100100"				)\
+	MACRO(INSN_STRB_R,		"00111000001.........10"		)\
+	MACRO(INSN_STRH_I_POST,		"01111000000.........01"		)\
+	MACRO(INSN_STRH_I_PRE,		"01111000000.........11"		)\
+	MACRO(INSN_STRH_I_UNSIGNED,	"0111100100"				)\
+	MACRO(INSN_STRH_R,		"01111000001.........10"		)\
+	MACRO(INSN_TBNZ,		".0110111"				)\
+	MACRO(INSN_TBZ,			".0110110"				)\
 
-#define GENERATE_ENUM(x) x,
+#define GENERATE_ENUM(x, ...) x,
 enum insn_types
 {
 	FOREACH_INSN(GENERATE_ENUM)	/* have comma at end */
-	INSN_TYPE_NUM
+	INSN_TYPE_NUM,
 };
 
-#define GENERATE_STRING(x) #x,
 const char *insn_type_strings[] = {
 	FOREACH_INSN(GENERATE_STRING)
 };
@@ -121,71 +120,63 @@ typedef struct {
 	const char *prefix;
 } insn_table_element;
 
+#define GENERATE_INSN_TABLE(a, b) {a, b},
 insn_table_element insn_table[] = {
-	{INSN_INVALID,			NULL					},
-	{INSN_ADRP,			"1..10000"				},
-	{INSN_B_COND,			"01010100...................0"		},
-	{INSN_B,			"000101"				},
-	{INSN_BL,			"100101"				},
-	{INSN_CBNZ,			".0110101"				},
-	{INSN_CBZ,			".0110100"				},
-	{INSN_LDR_I_SIMD_POST,		"..111100.10.........01"		},
-	{INSN_LDR_I_SIMD_PRE,		"..111100.10.........11"		},
-	{INSN_LDR_I_SIMD_UNSIGNED,	"..111101.1"				},
-	{INSN_LDR_I_POST,		"1.111000010.........01"		},
-	{INSN_LDR_I_PRE,		"1.111000010.........11"		},
-	{INSN_LDR_I_UNSIGNED,		"1.11100101"				},
-	{INSN_LDR_L_SIMD,		"..011100"				},
-	{INSN_LDR_L,			"0.011000"				},
-	{INSN_LDR_R_SIMD,		"..111100.11.........10"		},
-	{INSN_LDR_R,			"1.111000011.........10"		},
-	{INSN_LDRB_I_POST,		"00111000010.........01"		},
-	{INSN_LDRB_I_PRE,		"00111000010.........11"		},
-	{INSN_LDRB_I_UNSIGNED,		"0011100101"				},
-	{INSN_LDRB_R,			"00111000011.........10"		},
-	{INSN_LDRH_I_POST,		"01111000010.........01"		},
-	{INSN_LDRH_I_PRE,		"01111000010.........11"		},
-	{INSN_LDRH_I_UNSIGNED,		"0111100101"				},
-	{INSN_LDRH_R,			"01111000011.........10"		},
-	{INSN_LDRSB_I_POST,		"001110001.0.........01"		},
-	{INSN_LDRSB_I_PRE,		"001110001.0.........11"		},
-	{INSN_LDRSB_I_UNSIGNED,		"001110011"				},
-	{INSN_LDRSB_R,			"001110001.1.........10"		},
-	{INSN_LDRSH_I_POST,		"011110001.0.........01"		},
-	{INSN_LDRSH_I_PRE,		"011110001.0.........11"		},
-	{INSN_LDRSH_I_UNSIGNED,		"011110011"				},
-	{INSN_LDRSH_R,			"011110001.1.........10"		},
-	{INSN_LDRSW_I_POST,		"10111000100.........01"		},
-	{INSN_LDRSW_I_PRE,		"10111000100.........11"		},
-	{INSN_LDRSW_I_UNSIGNED,		"1011100110"				},
-	{INSN_LDRSW_L,			"10011000"				},
-	{INSN_LDRSW_R,			"10111000101.........10"		},
-	{INSN_NOP,			"11010101000000110010000000011111"	},
-	{INSN_RET,			"1101011001011111000000.....00000"	},
-	{INSN_STR_I_SIMD_POST,		"..111100.00.........01"		},
-	{INSN_STR_I_SIMD_PRE,		"..111100.00.........11"		},
-	{INSN_STR_I_SIMD_UNSIGNED,	"..111101.0"				},
-	{INSN_STR_I_POST,		"1.111000000.........01"		},
-	{INSN_STR_I_PRE,		"1.111000000.........11"		},
-	{INSN_STR_I_UNSIGNED,		"1.11100100"				},
-	{INSN_STR_R_SIMD,		"..111100.01.........10"		},
-	{INSN_STR_R,			"1.111000001.........10"		},
-	{INSN_STRB_I_POST,		"00111000000.........01"		},
-	{INSN_STRB_I_PRE,		"00111000000.........11"		},
-	{INSN_STRB_I_UNSIGNED,		"0011100100"				},
-	{INSN_STRB_R,			"00111000001.........10"		},
-	{INSN_STRH_I_POST,		"01111000000.........01"		},
-	{INSN_STRH_I_PRE,		"01111000000.........11"		},
-	{INSN_STRH_I_UNSIGNED,		"0111100100"				},
-	{INSN_STRH_R,			"01111000001.........10"		},
-	{INSN_TBNZ,			".0110111"				},
-	{INSN_TBZ,			".0110110"				},
+	FOREACH_INSN(GENERATE_INSN_TABLE)
 };
 
 static int64_t sign_extend_64(int64_t value, int len)
 {
 	int shift = 64 - len;
 	return (value << shift) >> shift;
+}
+
+/*
+ * ADRP
+ * |31|30|29|28|27|26|25|24|23|22 21|20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5|4 3 2 1 0|
+ * |1 |immlo|1 |0 |0 |0 |0 |                       immhi                       |    Rd   |
+ */
+#define IMM_HI_SHIFT 5
+#define IMM_HI_LEN 19
+#define IMM_HI_MASK ((1UL << IMM_HI_LEN) - 1)
+#define IMM_LO_SHIFT 29
+#define IMM_LO_LEN 2
+#define IMM_LO_MASK ((1UL << IMM_LO_LEN) - 1)
+#define OPCODE_ADRP (0x9UL << 28)
+#define OPCODE_ADRP_MASK (0x9FUL << 24)
+#define REG_LEN 5U
+#define ADRP_RD_MASK ((1U << REG_LEN) - 1)
+
+static unsigned get_adrp_Rd(unsigned binary)
+{
+	return (binary & ADRP_RD_MASK);
+}
+
+static unsigned get_adrp_addr(unsigned binary, unsigned long offset)
+{
+	unsigned imm_hi = (binary >> IMM_HI_SHIFT) & IMM_HI_MASK;
+	unsigned imm_lo = (binary >> IMM_LO_SHIFT) & IMM_LO_MASK;
+	unsigned imm = (imm_hi << IMM_LO_LEN) + imm_lo;
+	offset &= PAGE_MASK;
+	return (imm << PAGE_SHIFT) + offset;
+}
+
+static unsigned gen_adrp_binary(unsigned obj_addr, unsigned insn_offset, unsigned binary)
+{
+	obj_addr &= PAGE_MASK;
+	insn_offset &= PAGE_MASK;
+	// we have negative values
+	int imm = obj_addr - insn_offset;
+	imm >>= PAGE_SHIFT;
+	unsigned imm_hi = ((imm >> IMM_LO_LEN) & IMM_HI_MASK) << IMM_HI_SHIFT;
+	unsigned imm_lo = (imm & IMM_LO_MASK) << IMM_LO_SHIFT;
+	imm = imm_hi | imm_lo;
+	return OPCODE_ADRP | imm | (binary & ADRP_RD_MASK);
+}
+
+static inline bool is_adrp_instruction(unsigned binary)
+{
+	return ((binary & OPCODE_ADRP_MASK) == OPCODE_ADRP);
 }
 
 /* B.cond */
@@ -199,6 +190,111 @@ int64_t get_offset_TBNZ(uint32_t binary)
 {
 	uint32_t imm14 = (binary & 0x7FFE0U) >> 5;
 	return sign_extend_64(imm14 << 2, 16);
+}
+
+/*
+ * LDR, STR 大类
+ * Rn是读取内存地址的寄存器，Rt是保存/读取值的寄存器
+ */
+// STRB (immediate)
+// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
+// |0 |0 |1 |1 |1 |0 |0 |1 |0 |0 |              imm12                |    Rn   |    Rt   |
+// the positive immediate byte offset is in the range 0 to 4095, defaulting to 0 and encoded in the "imm12" field
+//
+// STR (immediate)
+// 64-bit (size == 11)
+// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
+// |1 |x |1 |1 |1 |0 |0 |1 |0 |0 |              imm12                |    Rn   |    Rt   |
+// |size |                 | opc |
+// For the 64-bit variant: the positive immediate byte offset is a multiple of 8 in the range 0 to 32760, defaulting to 0
+// and encoded in the "imm12" field as <pimm>/8.
+//
+// LDRB (immediate)
+// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
+// |0 |0 |1 |1 |1 |0 |0 |1 |0 |1 |              imm12                |    Rn   |    Rt   |
+// the positive immediate byte offset, in the range 0 to 4095, defaulting to 0 and encoded in the "imm12" field
+//
+/*
+ * LDR (immediate) unsigned offset
+ * |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
+ * |1 |x |1 |1 |1 |0 |0 |1 |0 |1 |              imm12                |    Rn   |    Rt   |
+ * |size |                 | opc |
+ * For the 64-bit variant: the positive immediate byte offset is a multiple of 8 in the range 0 to 32760, defaulting to 0
+ * and encoded in the "imm12" field as <pimm>/8.
+ */
+// LDR (immediate, SIMD&FP)
+// Unsigned offset:
+// 64-bit (size == 11)
+// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
+// |x |x |1 |1 |1 |1 |0 |1 |x |1 |              imm12                |    Rn   |    Rt   |
+// |size |                 | opc |
+// 32-bit (size == 10 && opc == 01), 64-bit (size == 11 && opc == 01)
+// For the 64-bit variant: the positive immediate byte offset is a multiple of 8 in the range 0 to 32760, defaulting to 0
+// and encoded in the "imm12" field as <pimm>/8.
+
+#define REG_LEN_LDST (REG_LEN * 2)
+#define IMM_LEN_LDST 12
+#define IMM_MASK_LDST (((1UL << IMM_LEN_LDST) - 1) << REG_LEN_LDST)
+// LDR (immediate, SIMD&FP), Unsigned offset
+#define OPCODE_LDR_64_iSFU (0x3F5U << 22)
+#define OPCODE_LDR_64 (0x3E5U << 22)
+#define OPCODE_LDR_32 (0x2E5U << 22)
+#define OPCODE_LDR_16 (0x1E7U << 22)
+#define OPCODE_STR_64 (0x3E4U << 22)
+#define OPCODE_STR_32 (0x2E4U << 22)
+#define OPCODE_LDRB (0xE5U << 22)
+#define OPCODE_STRB (0xE4U << 22)
+#define OPCODE_LDST_MASK (0x3FFU << 22)
+#define ADDR_SHIFT_64 3
+#define IN_PAGE ((1UL << PAGE_SHIFT) - 1)
+#define LDR_RN_MASK ((1U << REG_LEN) - 1)
+#define ONE_BIT_LEN   1
+#define TWO_BIT_LEN   2
+#define THREE_BIT_LEN 3
+
+static unsigned get_ldst_Rn(unsigned binary)
+{
+	return ((binary >> REG_LEN) & LDR_RN_MASK);
+}
+
+/* LDR_I_UNSIGNED/STR_I_UNSIGNED */
+static uint64_t get_ldst_I_UNSIGNED_offset(uint32_t binary)
+{
+	uint64_t imm12 = (binary & 0x3FFC00U) >> 10;
+	int scale = binary >> 30;
+	return (imm12 << scale);
+}
+
+static unsigned get_ldr_addr(unsigned binary)
+{
+	unsigned opcode = binary & OPCODE_LDST_MASK;
+	if (opcode != OPCODE_LDR_64 && opcode != OPCODE_STR_64 && opcode != OPCODE_LDRB && opcode != OPCODE_STRB &&
+	    opcode != OPCODE_LDR_64_iSFU) {
+		si_panic("this LD/ST is not unsigned 64bit mode, opcode %x binary %x\n", opcode, binary);
+		return 0;
+	}
+	if (opcode == OPCODE_STRB || opcode == OPCODE_LDRB) {
+		return ((binary & IMM_MASK_LDST) >> REG_LEN_LDST);
+	}
+	return ((binary & IMM_MASK_LDST) >> REG_LEN_LDST) << ADDR_SHIFT_64;
+}
+
+// Sometimes obj_addr need to restrict to one page
+static unsigned gen_ldst_binary_inpage(unsigned obj_addr, unsigned binary)
+{
+	obj_addr &= IN_PAGE;
+	unsigned opcode = binary & OPCODE_LDST_MASK;
+	if (opcode == OPCODE_LDR_64 || opcode == OPCODE_STR_64 || opcode == OPCODE_LDR_64_iSFU) {
+		obj_addr >>= THREE_BIT_LEN;
+	} else if (opcode == OPCODE_LDR_32 || opcode == OPCODE_STR_32) {
+		obj_addr >>= TWO_BIT_LEN;
+	} else if (opcode == OPCODE_LDR_16) {
+		// the insn is ldrsh
+		obj_addr >>= ONE_BIT_LEN;
+	} else {
+		si_panic("this insn is not LD/ST, opcode %x binary %x\n", opcode, binary);
+	}
+	return (binary & ~IMM_MASK_LDST) | (obj_addr << REG_LEN_LDST);
 }
 
 uint8_t *insn_prefix_table;
@@ -290,18 +386,27 @@ int init_insn_table(void)
 	return 0;
 }
 
+enum register_status
+{
+	R_STATUS_NONE,
+	/* data[0] = offset */
+	R_STATUS_ADRP,
+};
+
 typedef struct {
 	int type;
-	uint64_t offset;
+	uint64_t insn_id;
+	uint64_t data[1];
 } register_status_one;
 
 #define REGISTER_NUM 32
 typedef struct {
-	register_status_one data[REGISTER_NUM];
+	register_status_one regs[REGISTER_NUM];
 	uint32_t *insnp;
 } traverse_status;
 
 typedef struct {
+	int rela_type;
 	bool reached;
 	bool is_func;
 } insn_status;
@@ -309,6 +414,19 @@ typedef struct {
 void clear_status_stack(traverse_status *status_stack, int depth)
 {
 	memset(&status_stack[depth], 0, sizeof(status_stack[0]));
+}
+
+#define DEPTH_MAX 128
+int push_status_stack(traverse_status *status_stack, int depth)
+{
+	int new_depth = depth + 1;
+
+	if (new_depth >= DEPTH_MAX)
+		si_panic("depth reach max\n");
+	status_stack[new_depth] = status_stack[depth];
+	// memcpy(&status_stack[new_depth], &status_stack[depth], sizeof(status_stack[0]));
+
+	return new_depth;
 }
 
 static unsigned get_branch_addr(unsigned binary, unsigned offset);
@@ -327,7 +445,23 @@ uint32_t *get_insnp_INSN_TBNZ(uint32_t *insnp)
 	return (uint32_t *)((void *)insnp + get_offset_TBNZ(*insnp));
 }
 
-/* TODO 处理跳转到abort的特殊情况 */
+const char *rela_type_to_str(int type)
+{
+	switch (type)
+	{
+	case R_AARCH64_ADR_GOT_PAGE:
+		return "R_AARCH64_ADR_GOT_PAGE";
+		break;
+	case R_AARCH64_ADR_PREL_PG_HI21:
+		return "R_AARCH64_ADR_PREL_PG_HI21";
+		break;
+	default:
+		break;
+	}
+	return "R_UNKNOWN";
+}
+
+/* TODO 处理跳转到abort的特殊情况，此时函数应该已经结束 */
 /*
  * 当函数的最后一个语句是调用其他函数时，汇编语言可能使用b指令直接跳转，而非函数跳转bl指令。
  * 因此我们不能有“函数一定连续”的假设，也不能单纯使用bl指令来判断哪里有函数。
@@ -338,8 +472,7 @@ uint32_t *get_insnp_INSN_TBNZ(uint32_t *insnp)
    35558:	d503201f 	nop
    3555c:	d503201f 	nop
  */
-#define DEPTH_MAX 128
-int traverse_func(uint32_t *start, insn_status *status_table,
+int traverse_func(elf_file_t *ef, uint32_t *start, insn_status *status_table,
 	uint32_t *text_start, uint32_t *text_end, uint64_t sh_offset,
 	uint32_t *plt_start, uint32_t *plt_end)
 {
@@ -351,13 +484,17 @@ int traverse_func(uint32_t *start, insn_status *status_table,
 	clear_status_stack(status_stack, 0);
 
 	for (uint32_t *insnp = start; ; ) {
-		int64_t id = insnp - text_start;
+		uint64_t id, BL_id, insn_id;
 		uint32_t *BL_insnp;
-		uint64_t BL_id;
 		int insn_type = get_insn_type(*insnp);
 		bool in_plt = (insnp >= plt_start && insnp < plt_end);
 		bool in_text = (insnp >= text_start && insnp < text_end);
+		int reg_id, sec_type, rela_type;
+		uint64_t offset = sh_offset + ((uint64_t)insnp - (uint64_t)text_start);
+		traverse_status *stackp = &status_stack[depth];
+		uint64_t adrp_addr, ldst_offset;
 
+		id = insnp - text_start;
 		if (!in_text && !in_plt) {
 			si_panic("insnp goes out of plt/text range, id: %ld\n", id);
 			ret = -EINVAL;
@@ -395,11 +532,8 @@ int traverse_func(uint32_t *start, insn_status *status_table,
 		case INSN_CBZ:
 		case INSN_TBNZ:
 		case INSN_TBZ:
-			status_stack[depth].insnp = insnp + 1;
-			depth++;
-			if (depth >= DEPTH_MAX)
-				si_panic("depth reach max\n");
-			clear_status_stack(status_stack, depth);
+			stackp->insnp = insnp + 1;
+			depth = push_status_stack(status_stack, depth);
 
 			switch (insn_type) {
 			case INSN_B_COND:
@@ -426,8 +560,7 @@ int traverse_func(uint32_t *start, insn_status *status_table,
 			/* BL跳转的目的地址一定是准确的函数地址 */
 			if (!in_text && !in_plt) {
 				// printf("panic function_start: %lx, value: %x\n",
-				// 	(uint64_t)insnp - (uint64_t)text_start + sh_offset,
-				// 	*insnp);
+				// 	offset, *insnp);
 				si_panic("BL_insnp goes out of plt/text range, id: %ld\n",
 					BL_id);
 				ret = -EINVAL;
@@ -439,6 +572,73 @@ int traverse_func(uint32_t *start, insn_status *status_table,
 		case INSN_RET:
 			/* 不修改当前指令位置，下次循环会判断为is_reached，自动返回 */
 			continue;
+		case INSN_ADRP:
+			reg_id = get_adrp_Rd(*insnp);
+			stackp->regs[reg_id].type = R_STATUS_ADRP;
+			stackp->regs[reg_id].insn_id = id;
+			stackp->regs[reg_id].data[0] = get_adrp_addr(*insnp, offset);
+			/* 
+			 * 目前跨函数的指令无法匹配，先置一个默认值
+			 * 例：
+			 * 348a4:	b00005e0 	adrp	x0, f1000 <_rl_enable_paren_matching+0xa0>
+			 * 348a8:	9114e000 	add	x0, x0, #0x538
+			 * 348ac:	9402237d 	bl	bd6a0 <getenv>
+			 * 
+			 * 00000000000bd6a0 <getenv>:
+			 * bd6a0:	39c00001 	ldrsb	w1, [x0]
+			 */
+			status_table[id].rela_type = R_AARCH64_ADR_PREL_PG_HI21;
+			break;
+		/* TODO 可能有其他LDR/STR类型的需要补充 */
+		case INSN_LDR_I_UNSIGNED:
+		case INSN_STR_I_UNSIGNED:
+			ldst_offset = get_ldst_I_UNSIGNED_offset(*insnp);
+
+			reg_id = get_ldst_Rn(*insnp);
+			if (stackp->regs[reg_id].type != R_STATUS_ADRP)
+				break;
+			insn_id = stackp->regs[reg_id].insn_id;
+			adrp_addr = stackp->regs[reg_id].data[0];
+			sec_type = elf_find_sec_type_by_addr(ef, adrp_addr + ldst_offset);
+			switch (sec_type) {
+			case SEC_GOT:
+				rela_type = R_AARCH64_ADR_GOT_PAGE;
+				break;
+			case SEC_BSS:
+			case SEC_DATA:
+			case SEC_DATA_REL_RO:
+			case SEC_TEXT:
+			case SEC_RODATA:
+			case SEC_DYNAMIC:
+				rela_type = R_AARCH64_ADR_PREL_PG_HI21;
+				break;
+			case -EINVAL:
+				/*
+				 * 目前有些指令偏移计算不对，先置一个默认值
+				 * 例：
+				 * afaa8:	90000463 	adrp	x3, 13b000 <__FRAME_END__+0xdfe4>
+				 * afaac:	912f0063 	add	x3, x3, #0xbc0
+				 * afab4:	8b000063 	add	x3, x3, x0
+				 * afac4:	b9400460 	ldr	w0, [x3, #4]
+				 */
+				// si_panic("%s: ldst points to invalid addr, 0x%lx\n",
+				// 	__func__, adrp_addr + ldst_offset);
+				rela_type = R_AARCH64_ADR_PREL_PG_HI21;
+				printf("offset: %lx\n", offset);
+				break;
+			default:
+				rela_type = R_AARCH64_NONE;
+				si_panic("%s: ldst points to unknown section: %s\n",
+					__func__, sec_type_to_str(sec_type));
+				break;
+			}
+			/*
+			 * 目前有些地方寄存器信息不应该继续保存下去，导致识别错误，先hack一下
+			 * 比如先adrp x0, 后面有其他指令将x0覆盖后，需要将x0信息清空。
+			 */
+			if (status_table[insn_id].rela_type != R_AARCH64_ADR_GOT_PAGE)
+				status_table[insn_id].rela_type = rela_type;
+			break;
 		default:
 			break;
 		}
@@ -450,7 +650,25 @@ out:
 	return ret;
 }
 
-int do_traverse_text(uint32_t *start, uint32_t *end, uint64_t sh_offset,
+void show_rela(insn_status *status_table, uint64_t size, uint64_t sh_offset)
+{
+	for (uint64_t i = 0; i < size; i++) {
+		// int rela_type = status_table[i].rela_type;
+		// if (rela_type != 0) {
+		// 	printf("%016lx  %s\n",
+		// 		sh_offset + 4*i, rela_type_to_str(rela_type));
+		// }
+
+		if (status_table[i].is_func)
+			printf("%016lx\n", sh_offset + 4*i);
+	}
+
+	// R_AARCH64_LDST16_ABS_LO12_NC
+
+	printf("b903a841 insn: %s\n", insn_type_to_str(get_insn_type(0xb903a841)));
+}
+
+int do_traverse_text(elf_file_t *ef, uint32_t *start, uint32_t *end, uint64_t sh_offset,
 			uint32_t *plt_start, uint32_t *plt_end)
 {
 	int ret = 0;
@@ -458,9 +676,9 @@ int do_traverse_text(uint32_t *start, uint32_t *end, uint64_t sh_offset,
 
 	for (uint32_t *func_start = start; func_start < end; ) {
 		status_table[func_start - start].is_func = true;
-		printf("function_start: %lx, value: %x\n",
-			(uint64_t)func_start - (uint64_t)start + sh_offset, *func_start);
-		ret = traverse_func(func_start, status_table,
+		// printf("function_start: %lx, value: %x\n",
+		// 	(uint64_t)func_start - (uint64_t)start + sh_offset, *func_start);
+		ret = traverse_func(ef, func_start, status_table,
 			start, end, sh_offset, plt_start, plt_end);
 		if (ret)
 			break;
@@ -475,6 +693,8 @@ int do_traverse_text(uint32_t *start, uint32_t *end, uint64_t sh_offset,
 			status_table[id].reached = true;
 		}
 	}
+
+	show_rela(status_table, end - start, sh_offset);
 
 	free(status_table);
 	return ret;
@@ -504,6 +724,7 @@ int modify_text_section(elf_link_t *elf_link)
 	insnp_plt = elf_find_section_ptr_by_name(ef, ".plt");
 
 	ret = do_traverse_text(
+		ef,
 		insnp, (void *)insnp + text_sec->sh_size, text_sec->sh_offset,
 		insnp_plt, (void *)insnp_plt + plt_sec->sh_size
 	);
@@ -547,147 +768,6 @@ static unsigned gen_branch_binary(unsigned binary, unsigned addr, unsigned offse
 {
 	unsigned opcode = binary & OPCODE_MASK_BRANCH;
 	return opcode | (((addr - offset) >> IMM_BIT_MOVE_LEN) & IMM_MASK_BRANCH);
-}
-
-// Form PC-relative address to 4KB page adds an immediate value that is shifted left by 12 bits, to the PC value to form a PC-relative address, with
-// the bottom 12 bits masked out, and writes the result to the destination register.
-// Format
-// |31|30|29|28|27|26|25|24|23|22 21|20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5|4 3 2 1 0|
-// |1 |immlo|1 |0 |0 |0 |0 |                       immhi                       |    Rd   |
-#define IMM_HI_SHIFT 5
-#define IMM_HI_LEN 19
-#define IMM_HI_MASK ((1UL << IMM_HI_LEN) - 1)
-#define IMM_LO_SHIFT 29
-#define IMM_LO_LEN 2
-#define IMM_LO_MASK ((1UL << IMM_LO_LEN) - 1)
-#define OPCODE_ADRP (0x9UL << 28)
-#define OPCODE_ADRP_MASK (0x9FUL << 24)
-#define REG_LEN 5U
-#define ADRP_RD_MASK ((1U << REG_LEN) - 1)
-
-static unsigned get_adrp_Rd(unsigned binary)
-{
-	return (binary & ADRP_RD_MASK);
-}
-
-static unsigned get_adrp_addr(unsigned binary, unsigned long offset)
-{
-	unsigned imm_hi = (binary >> IMM_HI_SHIFT) & IMM_HI_MASK;
-	unsigned imm_lo = (binary >> IMM_LO_SHIFT) & IMM_LO_MASK;
-	unsigned imm = (imm_hi << IMM_LO_LEN) + imm_lo;
-	offset &= PAGE_MASK;
-	return (imm << PAGE_SHIFT) + offset;
-}
-
-static unsigned gen_adrp_binary(unsigned obj_addr, unsigned insn_offset, unsigned binary)
-{
-	obj_addr &= PAGE_MASK;
-	insn_offset &= PAGE_MASK;
-	// we have negative values
-	int imm = obj_addr - insn_offset;
-	imm >>= PAGE_SHIFT;
-	unsigned imm_hi = ((imm >> IMM_LO_LEN) & IMM_HI_MASK) << IMM_HI_SHIFT;
-	unsigned imm_lo = (imm & IMM_LO_MASK) << IMM_LO_SHIFT;
-	imm = imm_hi | imm_lo;
-	return OPCODE_ADRP | imm | (binary & ADRP_RD_MASK);
-}
-
-static inline bool is_adrp_instruction(unsigned binary)
-{
-	return ((binary & OPCODE_ADRP_MASK) == OPCODE_ADRP);
-}
-
-// STRB (immediate)
-// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
-// |0 |0 |1 |1 |1 |0 |0 |1 |0 |0 |              imm12                |    Rn   |    Rt   |
-// the positive immediate byte offset is in the range 0 to 4095, defaulting to 0 and encoded in the "imm12" field
-//
-// STR (immediate)
-// 64-bit (size == 11)
-// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
-// |1 |x |1 |1 |1 |0 |0 |1 |0 |0 |              imm12                |    Rn   |    Rt   |
-// |size |                 | opc |
-// For the 64-bit variant: the positive immediate byte offset is a multiple of 8 in the range 0 to 32760, defaulting to 0
-// and encoded in the "imm12" field as <pimm>/8.
-//
-// LDRB (immediate)
-// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
-// |0 |0 |1 |1 |1 |0 |0 |1 |0 |1 |              imm12                |    Rn   |    Rt   |
-// the positive immediate byte offset, in the range 0 to 4095, defaulting to 0 and encoded in the "imm12" field
-//
-// LDR (immediate)
-// 64-bit (size == 11)
-// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
-// |1 |x |1 |1 |1 |0 |0 |1 |0 |1 |              imm12                |    Rn   |    Rt   |
-// |size |                 | opc |
-// For the 64-bit variant: the positive immediate byte offset is a multiple of 8 in the range 0 to 32760, defaulting to 0
-// and encoded in the "imm12" field as <pimm>/8.
-//
-// LDR (immediate, SIMD&FP)
-// Unsigned offset:
-// 64-bit (size == 11)
-// |31|30|29|28|27|26|25|24|23|22|21 20 19 18 17 16 15 14 13 12 11 10|9 8 7 6 5|4 3 2 1 0|
-// |x |x |1 |1 |1 |1 |0 |1 |x |1 |              imm12                |    Rn   |    Rt   |
-// |size |                 | opc |
-// 32-bit (size == 10 && opc == 01), 64-bit (size == 11 && opc == 01)
-// For the 64-bit variant: the positive immediate byte offset is a multiple of 8 in the range 0 to 32760, defaulting to 0
-// and encoded in the "imm12" field as <pimm>/8.
-
-#define REG_LEN_LDST (REG_LEN * 2)
-#define IMM_LEN_LDST 12
-#define IMM_MASK_LDST (((1UL << IMM_LEN_LDST) - 1) << REG_LEN_LDST)
-// LDR (immediate, SIMD&FP), Unsigned offset
-#define OPCODE_LDR_64_iSFU (0x3F5U << 22)
-#define OPCODE_LDR_64 (0x3E5U << 22)
-#define OPCODE_LDR_32 (0x2E5U << 22)
-#define OPCODE_LDR_16 (0x1E7U << 22)
-#define OPCODE_STR_64 (0x3E4U << 22)
-#define OPCODE_STR_32 (0x2E4U << 22)
-#define OPCODE_LDRB (0xE5U << 22)
-#define OPCODE_STRB (0xE4U << 22)
-#define OPCODE_LDST_MASK (0x3FFU << 22)
-#define ADDR_SHIFT_64 3
-#define IN_PAGE ((1UL << PAGE_SHIFT) - 1)
-#define LDR_RN_MASK ((1U << REG_LEN) - 1)
-#define ONE_BIT_LEN   1
-#define TWO_BIT_LEN   2
-#define THREE_BIT_LEN 3
-
-static unsigned get_ldr_Rn(unsigned binary)
-{
-	return ((binary >> REG_LEN) & LDR_RN_MASK);
-}
-
-static unsigned get_ldr_addr(unsigned binary)
-{
-	unsigned opcode = binary & OPCODE_LDST_MASK;
-	if (opcode != OPCODE_LDR_64 && opcode != OPCODE_STR_64 && opcode != OPCODE_LDRB && opcode != OPCODE_STRB &&
-	    opcode != OPCODE_LDR_64_iSFU) {
-		si_panic("this LD/ST is not unsigned 64bit mode, opcode %x binary %x\n", opcode, binary);
-		return 0;
-	}
-	if (opcode == OPCODE_STRB || opcode == OPCODE_LDRB) {
-		return ((binary & IMM_MASK_LDST) >> REG_LEN_LDST);
-	}
-	return ((binary & IMM_MASK_LDST) >> REG_LEN_LDST) << ADDR_SHIFT_64;
-}
-
-// Sometimes obj_addr need to restrict to one page
-static unsigned gen_ldst_binary_inpage(unsigned obj_addr, unsigned binary)
-{
-	obj_addr &= IN_PAGE;
-	unsigned opcode = binary & OPCODE_LDST_MASK;
-	if (opcode == OPCODE_LDR_64 || opcode == OPCODE_STR_64 || opcode == OPCODE_LDR_64_iSFU) {
-		obj_addr >>= THREE_BIT_LEN;
-	} else if (opcode == OPCODE_LDR_32 || opcode == OPCODE_STR_32) {
-		obj_addr >>= TWO_BIT_LEN;
-	} else if (opcode == OPCODE_LDR_16) {
-		// the insn is ldrsh
-		obj_addr >>= ONE_BIT_LEN;
-	} else {
-		si_panic("this insn is not LD/ST, opcode %x binary %x\n", opcode, binary);
-	}
-	return (binary & ~IMM_MASK_LDST) | (obj_addr << REG_LEN_LDST);
 }
 
 // Add (immediate) adds a register value and an optionally-shifted immediate value, and writes the result to the destination register.
@@ -1543,7 +1623,7 @@ void correct_stop_libc_atexit(elf_link_t *elf_link)
 		si_panic("%s, didn't find __stop___libc_atexit symbol\n", __func__);
 	}
 	unsigned binary = elf_read_u32(template_ef, old_ldr_addr);
-	unsigned ldr_Rn = get_ldr_Rn(binary);
+	unsigned ldr_Rn = get_ldst_Rn(binary);
 
 	/* find adrp matching with ldr above in __run_exit_handlers() */
 	unsigned long old_adrp_addr = 0;
