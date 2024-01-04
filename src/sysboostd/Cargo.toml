@@ -22,6 +22,7 @@ toml = "0.5.9"
 inotify = "0.9"
 log = "0.4"
 goblin = "0.7"
+rust-ini = "0.19"
 
 [dev-dependencies.tempfile]
 version = "3.2.0"
