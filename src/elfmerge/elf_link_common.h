@@ -51,6 +51,8 @@
 #define ELF_LINK_STATIC_NOLIBC_S "static-nolibc"
 #define ELF_LINK_STATIC_NOLD_S "static-nold"
 
+#define RELOC_FLAG (1<<0)
+
 enum RtoMode {
 	ELF_LINK_SHARE = 0,
 	ELF_LINK_STATIC,
@@ -78,6 +80,7 @@ typedef struct {
 	elf_file_t out_ef;
 	unsigned int in_ef_nr;
 	unsigned int link_mode;
+	unsigned int flags;
 
 	elf_file_t vdso_ef;
 	elf_file_t ld_ef;

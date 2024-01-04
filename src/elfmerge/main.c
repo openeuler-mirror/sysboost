@@ -55,6 +55,7 @@ int main(int argc, char *argv[])
 		{"unset-rto", 			required_argument, 	NULL, 	'0'},
 		{"get-rto", 			required_argument, 	NULL, 	'2'},
 		{"hook", 			no_argument, 		NULL, 	'h'},
+		{"noreloc", 			no_argument, 		NULL, 	'r'},
 		{ELF_LINK_STATIC_S, 		no_argument, 		NULL, 	'S'},
 		{ELF_LINK_STATIC_NOLIBC_S, 	no_argument, 		NULL, 	'N'},
 		{ELF_LINK_STATIC_NOLD_S, 	no_argument, 		NULL, 	'I'},
@@ -121,6 +122,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'I':
 			mode = ELF_LINK_STATIC_NOLD;
+			break;
+		case 'r':
+			elf_link->flags &= (!RELOC_FLAG);
 			break;
 		default:
 			return -1;

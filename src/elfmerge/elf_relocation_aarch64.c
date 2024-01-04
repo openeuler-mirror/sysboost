@@ -733,6 +733,72 @@ int modify_text_section(elf_link_t *elf_link)
 	return ret;
 }
 
+int modify_by_rela_dyn(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *dyn_sec, Elf64_Shdr *sec)
+{
+	int len = dyn_sec->sh_size / dyn_sec->sh_entsize;
+	Elf64_Rela *relas = (void *)ef->hdr + dyn_sec->sh_offset;
+	Elf64_Rela *rela = NULL;
+	unsigned long sec_start, sec_end;
+	unsigned long old_addr = 0, new_addr = 0;
+	unsigned long old_offset = 0, new_offset = 0;
+	elf_file_t *out_ef = &elf_link->out_ef;
+	char *name = NULL;
+
+	if(!dyn_sec || !sec) {
+		SI_LOG_ERR("section is NUll\n");
+		return -1;
+	}
+	sec_start = sec->sh_addr;
+	sec_end = sec_start + sec->sh_size;
+	name = elf_get_section_name(ef, sec);
+	SI_LOG_EMERG("modify_by_rela_dyn: %s section start %lx end %lx\n", name, sec_start, sec_end);
+	for (int i = 0; i < len; i++) {
+		rela = &relas[i];
+		if (sec_start <= rela->r_offset && rela->r_offset < sec_end) {
+			/* bash.relocation和libtinfo.so.6.4.relocation中 */
+			/* .rela.dyn只有R_AARCH64_RELATIVE和R_AARCH64_GLOB_DAT两种类型 */
+			/* 根据地址判断，R_AARCH64_GLOB_DAT只包含got表中重定位，暂时无相应修改 */
+			switch (ELF64_R_TYPE(rela->r_info)){
+				case R_AARCH64_RELATIVE:
+					old_offset = rela->r_offset;
+					new_offset = get_new_addr_by_old_addr(elf_link, ef, old_offset);
+					old_addr = rela->r_addend;
+					new_addr = get_new_addr_by_old_addr(elf_link, ef, old_addr);
+					elf_write_u64(out_ef, new_offset, new_addr);
+					SI_LOG_EMERG("change offset %lx->%lx content %lx->%lx\n",
+						old_offset, new_offset, old_addr, new_addr);
+				default:
+					continue;
+			}
+		}
+	}
+	return 0;
+}
+void modify_data_section(elf_link_t *elf_link)
+{
+	elf_file_t *ef;
+	int count = elf_link->in_ef_nr;
+	Elf64_Shdr *rela_dyn_sec, *data_sec, *data_rel_ro_sec, *init_array_sec, *fini_array_sec;
+
+	for (int i = 0; i < count; i++) {
+		ef = &elf_link->in_efs[i];
+		/* sysboost_static_template暂不支持 */
+		if (!strcmp(ef->file_name, "/usr/lib/relocation/sysboost_static_template.relocation"))
+			continue;
+		SI_LOG_EMERG("file name %s\n", ef->file_name);
+		rela_dyn_sec = elf_find_section_by_name(ef, ".rela.dyn");
+		data_sec = elf_find_section_by_name(ef, ".data");
+		data_rel_ro_sec = elf_find_section_by_name(ef, ".data.rel.ro");
+		init_array_sec = elf_find_section_by_name(ef, ".init_array");
+		fini_array_sec = elf_find_section_by_name(ef, ".fini_array");
+		modify_by_rela_dyn(elf_link, ef, rela_dyn_sec, data_sec);
+		modify_by_rela_dyn(elf_link, ef, rela_dyn_sec, data_rel_ro_sec);
+		modify_by_rela_dyn(elf_link, ef, rela_dyn_sec, init_array_sec);
+		modify_by_rela_dyn(elf_link, ef, rela_dyn_sec, fini_array_sec);
+	}
+	return;
+}
+
 // B
 // Branch causes an unconditional branch to a label at a PC-relative offset, with a hint that this is not a subroutine call or return.
 // Format

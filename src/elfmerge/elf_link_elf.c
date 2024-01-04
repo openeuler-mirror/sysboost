@@ -67,6 +67,7 @@ elf_link_t *elf_link_new(void)
 	elf_link->direct_call_optimize = false;
 	elf_link->direct_vdso_optimize = false;
 	elf_link->delete_symbol_version = true;
+	elf_link->flags |= RELOC_FLAG;
 
 	// out file not create
 	elf_link->out_ef.fd = -1;
@@ -1833,6 +1834,11 @@ int elf_link_write(elf_link_t *elf_link)
 	/* 目前该函数没有实际作用，后续会代替modify_local_call的.rela.init .rela.text部分 */
 	/* .init .plt .text .fini */
 	modify_text_section(elf_link);
+
+	/*代替modify_local_call的.rela.data, .rela.data.rel.ro, .rela.init_array .rela.fini_array部分*/
+	if (!elf_link->flags & RELOC_FLAG) {
+		modify_data_section(elf_link);
+	}
 
 	// modify local call to use jump
 	// .rela.init .rela.text .rela.rodata .rela.tdata .rela.init_array .rela.data
