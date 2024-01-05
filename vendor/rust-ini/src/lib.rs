@@ -42,19 +42,22 @@
 //! }
 //! ```
 
-use std::char;
-use std::error;
-use std::fmt::{self, Display};
-use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Write};
-use std::io::{Seek, SeekFrom};
-use std::ops::{Index, IndexMut};
-use std::path::Path;
-use std::str::Chars;
+use std::{
+    char,
+    error,
+    fmt::{self, Display},
+    fs::{File, OpenOptions},
+    io::{self, Read, Seek, SeekFrom, Write},
+    ops::{Index, IndexMut},
+    path::Path,
+    str::Chars,
+};
 
 use cfg_if::cfg_if;
-use ordered_multimap::list_ordered_multimap::{Entry, Iter, IterMut, OccupiedEntry, VacantEntry};
-use ordered_multimap::ListOrderedMultimap;
+use ordered_multimap::{
+    list_ordered_multimap::{Entry, IntoIter, Iter, IterMut, OccupiedEntry, VacantEntry},
+    ListOrderedMultimap,
+};
 #[cfg(feature = "case-insensitive")]
 use unicase::UniCase;
 
@@ -88,40 +91,35 @@ pub enum EscapePolicy {
 
 impl EscapePolicy {
     fn escape_basics(self) -> bool {
-        match self {
-            EscapePolicy::Nothing => false,
-            _ => true,
-        }
+        self != EscapePolicy::Nothing
     }
 
     fn escape_reserved(self) -> bool {
-        match self {
-            EscapePolicy::Reserved => true,
-            EscapePolicy::ReservedUnicode => true,
-            EscapePolicy::ReservedUnicodeExtended => true,
-            EscapePolicy::Everything => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            EscapePolicy::Reserved
+                | EscapePolicy::ReservedUnicode
+                | EscapePolicy::ReservedUnicodeExtended
+                | EscapePolicy::Everything
+        )
     }
 
     fn escape_unicode(self) -> bool {
-        match self {
-            EscapePolicy::BasicsUnicode => true,
-            EscapePolicy::BasicsUnicodeExtended => true,
-            EscapePolicy::ReservedUnicode => true,
-            EscapePolicy::ReservedUnicodeExtended => true,
-            EscapePolicy::Everything => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            EscapePolicy::BasicsUnicode
+                | EscapePolicy::BasicsUnicodeExtended
+                | EscapePolicy::ReservedUnicode
+                | EscapePolicy::ReservedUnicodeExtended
+                | EscapePolicy::Everything
+        )
     }
 
     fn escape_unicode_extended(self) -> bool {
-        match self {
-            EscapePolicy::BasicsUnicodeExtended => true,
-            EscapePolicy::ReservedUnicodeExtended => true,
-            EscapePolicy::Everything => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            EscapePolicy::BasicsUnicodeExtended | EscapePolicy::ReservedUnicodeExtended | EscapePolicy::Everything
+        )
     }
 
     /// Given a character this returns true if it should be escaped as
@@ -450,7 +448,7 @@ impl Properties {
     }
 
     /// Remove the property with all values with the same key
-    pub fn remove_all<'a, S: AsRef<str>>(&'a mut self, s: S) -> impl DoubleEndedIterator<Item = String> + 'a {
+    pub fn remove_all<S: AsRef<str>>(&mut self, s: S) -> impl DoubleEndedIterator<Item = String> + '_ {
         self.data.remove_all(property_get_key!(s.as_ref()))
     }
 
@@ -811,37 +809,28 @@ impl Ini {
     pub fn write_to_opt<W: Write>(&self, writer: &mut W, opt: WriteOption) -> io::Result<()> {
         let mut firstline = true;
 
-        if let Some(props) = self.sections.get(&None) {
-            for (k, v) in props.iter() {
-                let k_str = escape_str(&k[..], opt.escape_policy);
-                let v_str = escape_str(&v[..], opt.escape_policy);
-                write!(writer, "{}={}{}", k_str, v_str, opt.line_separator)?;
-
-                firstline = false;
-            }
-        }
-
         for (section, props) in &self.sections {
-            if let Some(ref section) = *section {
+            if !props.data.is_empty() {
                 if firstline {
                     firstline = false;
                 } else {
                     // Write an empty line between sections
                     writer.write_all(opt.line_separator.as_str().as_bytes())?;
                 }
+            }
 
+            if let Some(ref section) = *section {
                 write!(
                     writer,
                     "[{}]{}",
                     escape_str(&section[..], opt.escape_policy),
                     opt.line_separator
                 )?;
-
-                for (k, v) in props.iter() {
-                    let k_str = escape_str(&k[..], opt.escape_policy);
-                    let v_str = escape_str(&v[..], opt.escape_policy);
-                    write!(writer, "{}{}{}{}", k_str, opt.kv_separator, v_str, opt.line_separator)?;
-                }
+            }
+            for (k, v) in props.iter() {
+                let k_str = escape_str(k, opt.escape_policy);
+                let v_str = escape_str(v, opt.escape_policy);
+                write!(writer, "{}{}{}{}", k_str, opt.kv_separator, v_str, opt.line_separator)?;
             }
         }
         Ok(())
@@ -928,10 +917,8 @@ impl Ini {
         // Check if file starts with a BOM marker
         // UTF-8: EF BB BF
         let mut bom = [0u8; 3];
-        if let Ok(..) = reader.read_exact(&mut bom) {
-            if &bom == b"\xEF\xBB\xBF" {
-                with_bom = true;
-            }
+        if reader.read_exact(&mut bom).is_ok() && &bom == b"\xEF\xBB\xBF" {
+            with_bom = true;
         }
 
         if !with_bom {
@@ -989,6 +976,29 @@ impl DoubleEndedIterator for SectionIterMut<'_> {
     }
 }
 
+/// Iterator for traversing sections
+pub struct SectionIntoIter {
+    inner: IntoIter<SectionKey, Properties>,
+}
+
+impl Iterator for SectionIntoIter {
+    type Item = (SectionKey, Properties);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl DoubleEndedIterator for SectionIntoIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner.next_back()
+    }
+}
+
 impl<'a> Ini {
     /// Immutable iterate though sections
     pub fn iter(&'a self) -> SectionIter<'a> {
@@ -1012,8 +1022,8 @@ impl<'a> Ini {
 }
 
 impl<'a> IntoIterator for &'a Ini {
-    type Item = (Option<&'a str>, &'a Properties);
     type IntoIter = SectionIter<'a>;
+    type Item = (Option<&'a str>, &'a Properties);
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -1021,11 +1031,22 @@ impl<'a> IntoIterator for &'a Ini {
 }
 
 impl<'a> IntoIterator for &'a mut Ini {
-    type Item = (Option<&'a str>, &'a mut Properties);
     type IntoIter = SectionIterMut<'a>;
+    type Item = (Option<&'a str>, &'a mut Properties);
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
+    }
+}
+
+impl IntoIterator for Ini {
+    type IntoIter = SectionIntoIter;
+    type Item = (SectionKey, Properties);
+
+    fn into_iter(self) -> Self::IntoIter {
+        SectionIntoIter {
+            inner: self.sections.into_iter(),
+        }
     }
 }
 
@@ -1182,7 +1203,7 @@ impl<'a> Parser<'a> {
                     Err(e) => return Err(e),
                 },
                 '=' | ':' => {
-                    if (&curkey[..]).is_empty() {
+                    if (curkey[..]).is_empty() {
                         return self.error("missing key");
                     }
                     match self.parse_val() {
@@ -1571,7 +1592,7 @@ mod test {
                 ..Default::default()
             },
         );
-        assert!(!ini.is_ok());
+        assert!(ini.is_err());
 
         let err = ini.unwrap_err();
         assert_eq!(err.line, 2);
@@ -2126,6 +2147,9 @@ a3 = n3
         use std::str;
 
         let mut ini = Ini::new();
+        ini.with_section(None::<String>)
+            .set("Key1", "Value")
+            .set("Key2", "Value");
         ini.with_section(Some("Section1"))
             .set("Key1", "Value")
             .set("Key2", "Value");
@@ -2146,12 +2170,12 @@ a3 = n3
         // Test different line endings in Windows and Unix
         if cfg!(windows) {
             assert_eq!(
-                "[Section1]\r\nKey1 = Value\r\nKey2 = Value\r\n\r\n[Section2]\r\nKey1 = Value\r\nKey2 = Value\r\n",
+                "Key1 = Value\r\nKey2 = Value\r\n\r\n[Section1]\r\nKey1 = Value\r\nKey2 = Value\r\n\r\n[Section2]\r\nKey1 = Value\r\nKey2 = Value\r\n",
                 str::from_utf8(&buf).unwrap()
             );
         } else {
             assert_eq!(
-                "[Section1]\nKey1 = Value\nKey2 = Value\n\n[Section2]\nKey1 = Value\nKey2 = Value\n",
+                "Key1 = Value\nKey2 = Value\n\n[Section1]\nKey1 = Value\nKey2 = Value\n\n[Section2]\nKey1 = Value\nKey2 = Value\n",
                 str::from_utf8(&buf).unwrap()
             );
         }
@@ -2320,7 +2344,7 @@ c = d
         let policy = EscapePolicy::Nothing;
         assert_eq!(escape_str(test_str, policy), test_str);
     }
-    
+
     #[test]
     fn escape_str_basics() {
         let test_backslash = r"\backslashes\";
@@ -2333,14 +2357,21 @@ c = d
         assert_eq!(escape_str(test_controls, EscapePolicy::Nothing), test_controls);
         assert_eq!(escape_str(test_whitespace, EscapePolicy::Nothing), test_whitespace);
 
-        for policy in vec![
-            EscapePolicy::Basics, EscapePolicy::BasicsUnicode, EscapePolicy::BasicsUnicodeExtended,
-            EscapePolicy::Reserved, EscapePolicy::ReservedUnicode, EscapePolicy::ReservedUnicodeExtended,
+        for policy in [
+            EscapePolicy::Basics,
+            EscapePolicy::BasicsUnicode,
+            EscapePolicy::BasicsUnicodeExtended,
+            EscapePolicy::Reserved,
+            EscapePolicy::ReservedUnicode,
+            EscapePolicy::ReservedUnicodeExtended,
             EscapePolicy::Everything,
         ] {
             assert_eq!(escape_str(test_backslash, policy), r"\\backslashes\\");
             assert_eq!(escape_str(test_nul, policy), r"string with \0nulls\0 in it");
-            assert_eq!(escape_str(test_controls, policy), r"|\a| bell, |\b| backspace, |\x007f| delete, |\x001b| escape");
+            assert_eq!(
+                escape_str(test_controls, policy),
+                r"|\a| bell, |\b| backspace, |\x007f| delete, |\x001b| escape"
+            );
             assert_eq!(escape_str(test_whitespace, policy), r"\t \r\n");
         }
     }
@@ -2353,17 +2384,21 @@ c = d
         let test_punctuation = "!@$%^&*()-_+/?.>,<[]{}``";
 
         // These policies should *not* escape reserved characters.
-        for policy in vec![
+        for policy in [
             EscapePolicy::Nothing,
-            EscapePolicy::Basics, EscapePolicy::BasicsUnicode, EscapePolicy::BasicsUnicodeExtended,
+            EscapePolicy::Basics,
+            EscapePolicy::BasicsUnicode,
+            EscapePolicy::BasicsUnicodeExtended,
         ] {
             assert_eq!(escape_str(test_reserved, policy), ":=;#");
             assert_eq!(escape_str(test_punctuation, policy), test_punctuation);
         }
 
         // These should.
-        for policy in vec![
-            EscapePolicy::Reserved, EscapePolicy::ReservedUnicodeExtended, EscapePolicy::ReservedUnicode,
+        for policy in [
+            EscapePolicy::Reserved,
+            EscapePolicy::ReservedUnicodeExtended,
+            EscapePolicy::ReservedUnicode,
             EscapePolicy::Everything,
         ] {
             assert_eq!(escape_str(test_reserved, policy), r"\:\=\;\#");
@@ -2389,7 +2424,7 @@ c = d
 
         // The "Unicode" policies should escape standard BMP unicode, but should *not* escape emoji or supplementary CJK codepoints.
         // The Basics/Reserved policies should behave identically in this regard.
-        for policy in vec![EscapePolicy::BasicsUnicode, EscapePolicy::ReservedUnicode] {
+        for policy in [EscapePolicy::BasicsUnicode, EscapePolicy::ReservedUnicode] {
             assert_eq!(escape_str(test_unicode, policy), r"\x00e9\x00a3\x2233\x5b57\x2728");
             assert_eq!(escape_str(test_emoji, policy), test_emoji);
             assert_eq!(escape_str(test_cjk, policy), test_cjk);
@@ -2397,7 +2432,10 @@ c = d
         }
 
         // UnicodeExtended policies should escape both BMP and supplementary plane characters.
-        for policy in vec![EscapePolicy::BasicsUnicodeExtended, EscapePolicy::ReservedUnicodeExtended] {
+        for policy in [
+            EscapePolicy::BasicsUnicodeExtended,
+            EscapePolicy::ReservedUnicodeExtended,
+        ] {
             assert_eq!(escape_str(test_unicode, policy), r"\x00e9\x00a3\x2233\x5b57\x2728");
             assert_eq!(escape_str(test_emoji, policy), r"\x1f431\x1f609");
             assert_eq!(escape_str(test_cjk, policy), r"\x2020c\x20547");
