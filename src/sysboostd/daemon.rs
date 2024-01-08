@@ -9,13 +9,13 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-4-20
 
-use crate::aot::find_libs;
 use crate::aot::gen_app_rto;
-use crate::aot::parse_elf_file;
 use crate::aot::set_app_link_flag;
 use crate::bolt::bolt_optimize;
-use crate::config::read_config;
+use crate::config::SYSBOOST_CONFIG_PATH;
+use crate::config::INIT_CONF;
 use crate::config::RtoConfig;
+use crate::coredump_monitor::is_app_crashed;
 use crate::kmod_util::insmod_sysboost_ko;
 use crate::kmod_util::set_hpage_rto_flag;
 use crate::kmod_util::set_ko_rto_flag;
@@ -26,166 +26,65 @@ use inotify::{EventMask, Inotify, WatchMask};
 use log::{self};
 use std::fs;
 use std::os::unix::fs as UnixFs;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::thread;
 use std::time::Duration;
 
-const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
+pub const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
 //const LDSO: &str = "ld-";
 //const LIBCSO: &str = "libc.so";
 
 // sleep some time wait for next event
 const MIN_SLEEP_TIME: u64 = 10000;
 
-// only 10 program can use boost
-const MAX_BOOST_PROGRAM: u32 = 10;
-
-fn db_add_link(conf: &RtoConfig) -> i32 {
+pub fn db_add_link(conf: &RtoConfig) -> i32 {
 	// symlink app.link to app, different modes correspond to different directories
 	let file_name = Path::new(&conf.elf_path).file_name().unwrap().to_str().unwrap();
 	let link_path = format!("{}{}.link", SYSBOOST_DB_PATH, file_name);
 	let ret_e = UnixFs::symlink(&conf.elf_path, &link_path);
 	match ret_e {
-		Ok(_) => {}
+		Ok(_) => log::info!("symlink sucess {}", link_path),
 		Err(_) => {
 			log::error!("symlink fail {}", link_path);
 			return -1;
 		}
 	};
-
-	return 0;
+	0
 }
 
 pub fn db_remove_link(path: &String) {
 	let ret = fs::remove_file(&path);
 	match ret {
-		Ok(_) => return,
-		Err(e) => {
-			log::error!("remove link fail: {}", e);
-		}
+		Ok(_) => log::info!("remove link {} success", path),
+		Err(e) => log::error!("remove link fail: {}", e),
 	};
 }
 
 // TODO: use bolt to optimize dynamic library and then merge them
 fn sysboost_core_process(conf: &RtoConfig) -> i32 {
+	let mut ret= 0;
 	match conf.mode.as_str() {
 		"bolt" => {
-			let ret = bolt_optimize(&conf);
+			ret = bolt_optimize(&conf);
 			if ret != 0 {
 				log::error!("Error: bolt mode start fault.");
 				return ret;
 			}
 		}
 		"static" | "static-nolibc" | "share" => {
-			let ret = gen_app_rto(&conf);
+			ret = gen_app_rto(&conf);
 			if ret != 0 {
 				log::error!("Error: generate rto start fault.");
 				return ret;
 			}
+			log::info!("generate {} rto success.",&conf.name);
 		}
 		_ => {
 			log::info!("Warning: read elf file fault, please check config.");
 			// handle other cases
 		}
 	}
-
-	let ret = db_add_link(&conf);
-	if ret != 0 {
-		log::error!("Error: db add link fault.");
-		return ret;
-	}
-
-	let ret = set_app_link_flag(&conf.elf_path, true);
-	if ret != 0 {
-		log::error!("Error: set app link flag fail.");
-		return ret;
-	}
-	return ret;
-}
-
-fn process_config(path: PathBuf) -> Option<RtoConfig> {
-	let conf_e = read_config(&path);
-	let mut conf = match conf_e {
-		Some(conf) => conf,
-		None => return None,
-	};
-
-	// let elf = match parse_elf_file(&conf.elf_path) {
-	// 	Some(elf) => elf,
-	// 	None => return None,
-	// };
-
-	// auto get lib path
-	// In static-nolibc mode, ld and libc need to be deleted after detection.
-	// In share mode, no detection is performed based on libs.
-	if conf.mode == "static" {
-		// let libs = find_libs(&conf, &elf);
-		// conf.libs = libs;
-	} else if conf.mode == "static-nolibc" {
-		//let mut libs = find_libs(&conf, &elf);
-		//libs.retain(|s| !s.contains(LDSO));
-		//libs.retain(|s| !s.contains(LIBCSO));
-		//conf.libs = libs;
-	}
-
-	// add elf file to watch list
-	conf.watch_paths.push(conf.elf_path.clone());
-	for lib in conf.libs.iter() {
-		conf.watch_paths.push(lib.split_whitespace().collect());
-	}
-
-	// add config file to watch list
-	let path_str = path.clone().into_os_string().into_string().unwrap();
-	conf.watch_paths.push(path_str);
-
-	let ret = sysboost_core_process(&conf);
-	if ret != 0 {
-		log::error!("Error: db add link fault.");
-		return None;
-	}
-
-	return Some(conf);
-}
-
-fn refresh_all_config(rto_configs: &mut Vec<RtoConfig>) {
-	// read configs /etc/sysboost.d, like bash.toml
-	let dir_e = fs::read_dir(&Path::new("/etc/sysboost.d"));
-	let dir = match dir_e {
-		Ok(dir) => dir,
-		Err(e) => {
-			log::error!("{}", e);
-			return;
-		}
-	};
-
-	let mut i = 0;
-	for entry in dir {
-		let entry = entry.ok().unwrap();
-		let path = entry.path();
-		if path.is_dir() {
-			continue;
-		}
-		if path.file_name() == None {
-			continue;
-		}
-
-		if i == MAX_BOOST_PROGRAM {
-			log::error!("too many boost program");
-			break;
-		}
-		let ret = process_config(path);
-		match ret {
-			Some(conf) => rto_configs.push(conf),
-			None => {}
-		}
-		log::info!("refresh all config {}", i);
-		i += 1;
-	}
-
-	if rto_configs.len() > 0 {
-		set_ko_rto_flag(true);
-		set_hpage_rto_flag(true);
-	}
+	ret
 }
 
 fn clean_last_rto() {
@@ -213,16 +112,21 @@ fn clean_last_rto() {
 		}
 		let file_name = path.file_name().unwrap();
 		let p = format!("{}{}", SYSBOOST_DB_PATH, file_name.to_string_lossy());
-		set_app_link_flag(&p, false);
+		// 回滚场景, 路径是软链接要转换为真实路径
+		let real_path = match fs::canonicalize(&p) {
+			Ok(p) => p,
+			Err(e) => {
+				log::error!("get realpath failed: {}", e);
+				continue;
+			}
+		};
+		set_app_link_flag(&format!("{}",real_path.to_string_lossy()), false);
 		db_remove_link(&p);
-	}
-	let ret = fs::remove_file("/usr/bin/bash.rto");
-	match ret {
-		Ok(_) => return,
-		Err(e) => {
-			log::info!("remove bash.rto failed: {}", e);
+		match fs::remove_file(format!("{}.rto", real_path.to_string_lossy())) {
+			Ok(_) => log::info!("remove {} success", format!("{}.rto", real_path.to_string_lossy())),
+			Err(e) => log::info!("remove {} failed: {}", format!("{}.rto", real_path.to_string_lossy()), e),
 		}
-	};
+	}
 }
 
 fn watch_old_files_perapp(conf: &RtoConfig, inotify: &mut Inotify) {
@@ -267,40 +171,33 @@ fn check_files_modify(inotify: &mut Inotify) -> bool {
 }
 
 fn start_service() {
+	let conf_reader = INIT_CONF.read().unwrap();
+
 	set_ko_rto_flag(true);
 	set_hpage_rto_flag(true);
 	clean_last_rto();
 
-	let mut rto_configs: Vec<RtoConfig> = Vec::new();
-	refresh_all_config(&mut rto_configs);
+	for conf in conf_reader.elfsections.iter() {
+		log::info!("parse config: {:?}", conf);
+		if is_app_crashed(conf.elf_path.clone()) {
+			continue;
+		}
+		sysboost_core_process(conf);
+	}
+	log::info!("parse all config");
 	let mut inotify = Inotify::init().unwrap();
-	let mut try_again = true;
-	// TODO: 为什么写死路径? 这些代码都要重写;
-	match inotify.add_watch("/etc/sysboost.d/bash.toml", WatchMask::MODIFY) {
-		Ok(_) => {
-			try_again = false;
-		}
+	match inotify.add_watch(SYSBOOST_CONFIG_PATH, WatchMask::MODIFY) {
 		Err(e) => {
-			log::info!("init watch bash.toml failed {}", e);
+			log::info!("watch init file failed {}", e);
 		}
+		_ => {}
 	};
 	let mut buffer = [0; 1024];
-
-	let mut file_inotify = watch_old_files(&rto_configs);
+	let mut file_inotify = watch_old_files(&conf_reader.elfsections);
 
 	loop {
 		// wait some time
 		thread::sleep(Duration::from_secs(MIN_SLEEP_TIME));
-		if try_again {
-			match inotify.add_watch("/etc/sysboost.d/bash.toml", WatchMask::MODIFY) {
-				Ok(_) => {
-					return;
-				}
-				Err(e) => {
-					log::info!("init watch bash.toml failed {}", e);
-				}
-			};
-		}
 		// do not support config dynamic modify, need restart service
 		let events = inotify.read_events(&mut buffer).unwrap();
 		for event in events {

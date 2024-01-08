@@ -10,16 +10,20 @@
 // Create: 2023-8-28
 
 use crate::common::SYSBOOST_PATH;
-use crate::common::SYSBOOST_CONFIG_PATH;
 
+use ini::Properties;
 use serde::Deserialize;
-use std::fs;
-use std::path::PathBuf;
-use std::str::FromStr;
+use ini::Ini;
+use lazy_static::lazy_static;
+use std::sync::RwLock;
 
-// 选型toml格式作为配置文件格式, toml格式可读性最佳
+pub const SYSBOOST_CONFIG_PATH: &str = "/etc/sysboost.d/sysboost.ini";
+// only 10 program can use boost
+const MAX_BOOST_PROGRAM: u32 = 10;
+
 #[derive(Debug, Deserialize)]
 pub struct RtoConfig {
+	pub name: String,
 	// 目标程序的全路径
 	pub elf_path: String,
 	// 优化模式
@@ -36,55 +40,94 @@ pub struct RtoConfig {
 	pub watch_paths: Vec<String>,
 }
 
-impl FromStr for RtoConfig {
-	type Err = toml::de::Error;
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		toml::from_str(s)
+pub struct GeneralSection {
+	pub coredump_monitor_flag: bool,
+}
+
+// INI格式配置文件
+// [general]
+// coredump_monitor_flag = false
+//
+// [/usr/bin/bash]
+// mode = static
+// libs = /usr/lib64/libtinfo.so.6, xxxx
+pub struct InitConfig {
+	pub general: GeneralSection, // use inner value to get mutable access
+	pub elfsections: Vec<RtoConfig>
+}
+
+// 考虑内部可变性和线程安全
+// 可使用Mutex和RwLock
+// 性能：sysboost只在全局配置文件解析写，其余都只读
+lazy_static! {
+    pub static ref INIT_CONF: RwLock<InitConfig> = RwLock::new(
+			InitConfig {
+				general: GeneralSection{coredump_monitor_flag: true},
+				elfsections: Vec::new()
+			}
+		);
+}
+
+pub fn parse_sysinit_config() {
+	let conf_file = Ini::load_from_file(SYSBOOST_CONFIG_PATH).unwrap();
+	let mut i = 0;
+	for (sec, prop) in &conf_file {
+		if i >= MAX_BOOST_PROGRAM {
+			log::error!("too many boost program");
+			break;
+		}
+		match sec {
+			Some("general") => {
+				parse_general(prop);
+			},
+			Some(elf_section) => {
+				parse_rto_config(elf_section.to_string(), prop);
+				i += 1;
+				log::info!("parse elf section config {}", i);
+			},
+			None => continue
+		}
 	}
 }
 
-// elf_path = "/usr/bin/bash"
-// mode = "static"
-// libs = "/usr/lib64/libtinfo.so.6"
-fn parse_config(contents: String) -> Option<RtoConfig> {
-	let conf_e = contents.parse::<RtoConfig>();
-	match conf_e {
-		Ok(ref c) => log::info!("parse config: {:?}", c),
-		Err(e) => {
-			log::error!("parse config fail: {}", e);
-			return None;
-		}
+fn parse_general(prop: &Properties) {
+	match prop.get("coredump_monitor_flag") {
+		Some("false") => {
+			INIT_CONF.write().unwrap().general.coredump_monitor_flag = false;
+		},
+		_ => {}
+	}
+}
+
+fn is_mode_invalid(mode: String) -> bool {
+	if mode != "static" && mode != "static-nolibc" && mode != "share" && mode != "bolt" {
+		true
+	}
+	else {
+		false
+	}
+}
+
+fn parse_rto_config(sec: String, prop: &Properties) {
+	let sec_name:Vec<&str> = sec.as_str().split("/").collect();
+	let mut rtoconf = RtoConfig {
+		name: sec_name[sec_name.len()-1].to_string(),
+		elf_path: sec.clone(),
+		mode: prop.get("mode").unwrap().to_string(),
+		libs: prop.get("libs").unwrap().split(",").map(|s| s.to_string()).collect(), 
+	 	profile_path: prop.get("profile_path").map(|s| s.to_string()),
+		path: prop.get("path").map(|s| s.to_string()),
+		watch_paths: Vec::new(),
 	};
 
-	let conf = conf_e.unwrap();
-	if conf.mode != "static" && conf.mode != "static-nolibc" && conf.mode != "share" && conf.mode != "bolt" {
-		return None;
+	if rtoconf.elf_path == SYSBOOST_PATH || is_mode_invalid(rtoconf.mode.clone()){
+		log::error!("invalid config in {}", sec);
+		return;
 	}
-	if conf.elf_path == SYSBOOST_PATH {
-		// the tool can not renew self code
-		return None;
+	// add elf file to watch list
+	rtoconf.watch_paths.push(rtoconf.elf_path.clone());
+	for lib in rtoconf.libs.iter() {
+		rtoconf.watch_paths.push(lib.split_whitespace().collect());
 	}
-
-	return Some(conf);
-}
-
-pub fn read_config(path: &PathBuf) -> Option<RtoConfig> {
-	let ext = path.extension();
-	if ext == None || ext.unwrap() != "toml" {
-		return None;
-	}
-
-	let contents = match fs::read_to_string(path) {
-		Ok(c) => c,
-		Err(e) => {
-			log::error!("reading file fail {}", e);
-			return None;
-		}
-	};
-	return parse_config(contents);
-}
-
-pub fn get_config(name: &str) -> Option<RtoConfig> {
-	let conf_path = format!("{}/{}.toml", SYSBOOST_CONFIG_PATH, name);
-	return read_config(&PathBuf::from(conf_path));
+	INIT_CONF.write().unwrap().elfsections.push(rtoconf);
 }

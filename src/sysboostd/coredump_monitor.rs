@@ -12,13 +12,77 @@
 use std::path::Path;
 use log::{self};
 use std::fs;
+use lazy_static::lazy_static;
+use std::sync::RwLock;
+use std::fs::OpenOptions;
+use std::io::{Write, Read};
 
 use crate::netlink_client::{open_netlink, read_event};
 use crate::aot::set_app_link_flag;
 use crate::daemon;
+use crate::daemon::SYSBOOST_DB_PATH;
 
-const SYSBOOST_DB_PATH: &str = "/var/lib/sysboost/";
-const SYSBOOST_TOML_PATH: &str = "/etc/sysboost.d/";
+pub const SYSBOOST_LOG_PATH: &str = "/etc/sysboost.d/log.ini";
+
+lazy_static! {
+        pub static ref CRASH_PATH: RwLock<Vec<String>> = RwLock::new(
+                Vec::new()
+        );
+}
+
+pub fn parse_crashed_log() {
+        let file_name = Path::new(&SYSBOOST_LOG_PATH);
+        let mut file = match std::fs::File::open(file_name) {
+                Ok(f) => {f}
+                Err(e) => {
+                        log::error!("open log.ini failed {}", e);
+                        return;
+                }
+        };
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        let mut writer = CRASH_PATH.write().unwrap();
+        *writer = contents.split("\n").map(|s| s.to_string()).collect();
+
+}
+pub fn is_app_crashed(path: String) -> bool {
+        for cpath in CRASH_PATH.read().unwrap().iter() {
+                if cpath.to_string() == path {
+                        log::info!("{} has crashed, ingnore", path);
+                        return true;
+                }
+        }
+        false
+}
+
+fn record_crashed_path(path: String) {
+        let exist = Path::new(&SYSBOOST_LOG_PATH).exists();
+        if !exist {
+                std::fs::File::create(SYSBOOST_LOG_PATH.to_string()).expect("log.ini create failed");  
+        }
+        let file_name = Path::new(&SYSBOOST_LOG_PATH);
+        let mut file = match OpenOptions::new().append(true).open(file_name) {
+                Ok(f) => {f}
+                Err(e) => {
+                        log::error!("open log.ini failed {}", e);
+                        return;
+                }
+        };
+        match file.write_all(path.as_bytes()) {
+                Ok(_) => {}
+                Err(e) => {
+                        log::error!("write log.ini failed {}", e);
+                        return;
+                }   
+        }
+        match file.write_all("\n".as_bytes()) {
+                Ok(_) => {}
+                Err(e) => {
+                        log::error!("write log.ini failed {}", e);
+                        return;
+                } 
+        }
+}
 
 fn do_rollback(path: &String) -> i32 {
         let paths: Vec<&str> = path.split(".rto").collect();
@@ -49,20 +113,8 @@ fn do_rollback(path: &String) -> i32 {
                         }
                 }
         }
-        
-        // rename .toml
-        let toml_path = format!("{}{}.toml", SYSBOOST_TOML_PATH, binary_name);
-        let exist = Path::new(&toml_path).exists(); 
-        if exist {
-                let toml = Path::new(&toml_path);
-                let toml_err = toml.with_extension("toml.err");
-                match fs::rename(&toml, &toml_err) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log::error!("Mv toml failed: {}", e);
-                        }
-                }
-        }       
+        // 添加路径记录,防止再次优化
+        record_crashed_path(file_path.to_string());     
         0      
 }
 
