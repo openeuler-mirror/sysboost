@@ -179,7 +179,7 @@ static int preload_rto(struct file *file)
 		return -ENOENT;
 	}
 	if (debug)
-		pr_info("loading file %s\n", FILE_TO_NAME(rto_file))
+		pr_info("loading file %s\n", FILE_TO_NAME(rto_file));
 
 	loaded_rto = loaded_rto_alloc(inode);
 	if (!loaded_rto) {

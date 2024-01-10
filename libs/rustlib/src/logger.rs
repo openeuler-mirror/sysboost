@@ -61,7 +61,7 @@ impl log::Log for SysLogger {
     }
 
     fn log(&self, record: &log::Record) {
-        let msg = record.args().to_string();
+        let msg = record.args().to_string() + "\0";
         let level = match record.level() {
             log::Level::Error => libc::LOG_ERR,
             log::Level::Warn => libc::LOG_WARNING,
