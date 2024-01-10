@@ -14,15 +14,21 @@ use log::{self};
 use std::fs;
 use lazy_static::lazy_static;
 use std::sync::RwLock;
-use std::fs::OpenOptions;
 use std::io::{Write, Read};
+use std::fs::OpenOptions;
+use std::os::linux::fs::MetadataExt;
 
+use crate::lib::process_ext::run_child;
 use crate::netlink_client::{open_netlink, read_event};
 use crate::aot::set_app_link_flag;
 use crate::daemon;
 use crate::daemon::SYSBOOST_DB_PATH;
 
-pub const SYSBOOST_LOG_PATH: &str = "/etc/sysboost.d/log.ini";
+
+const SYSBOOST_LOG_NAME: &str = ".sysboost.err";
+pub const SYSBOOST_LOG_PATH: &str = "/etc/sysboost.d/.sysboost.err";
+const LOG_FILE_ST_MODE: u32 = 0o100644;
+
 
 lazy_static! {
         pub static ref CRASH_PATH: RwLock<Vec<String>> = RwLock::new(
@@ -30,15 +36,33 @@ lazy_static! {
         );
 }
 
+// 设置SYSBOOST_LOG_PATH的权限仅root可写
+fn set_mode() {
+        let mut set_mod: Vec<String> = Vec::new();
+	set_mod.push("644".to_string());
+	set_mod.push(SYSBOOST_LOG_PATH.to_string());
+	let _ = run_child("/usr/bin/chmod", &set_mod);
+}
+
+// 确保SYSBOOST_LOG_PATH的权限仅root可写
+fn check_mode() -> bool {
+        let meta = fs::metadata(SYSBOOST_LOG_PATH.to_string()).unwrap();
+	if meta.st_mode() != LOG_FILE_ST_MODE {
+                return false;
+	}
+        true
+}
+
 pub fn parse_crashed_log() {
         let file_name = Path::new(&SYSBOOST_LOG_PATH);
         let mut file = match std::fs::File::open(file_name) {
                 Ok(f) => {f}
-                Err(e) => {
-                        log::error!("open log.ini failed {}", e);
-                        return;
-                }
+                Err(_) => return
         };
+        if !check_mode() {
+                log::warn!("file {} may has changed!", SYSBOOST_LOG_NAME);
+                return;
+        }
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
         let mut writer = CRASH_PATH.write().unwrap();
@@ -48,7 +72,6 @@ pub fn parse_crashed_log() {
 pub fn is_app_crashed(path: String) -> bool {
         for cpath in CRASH_PATH.read().unwrap().iter() {
                 if cpath.to_string() == path {
-                        log::info!("{} has crashed, ingnore", path);
                         return true;
                 }
         }
@@ -58,29 +81,24 @@ pub fn is_app_crashed(path: String) -> bool {
 fn record_crashed_path(path: String) {
         let exist = Path::new(&SYSBOOST_LOG_PATH).exists();
         if !exist {
-                std::fs::File::create(SYSBOOST_LOG_PATH.to_string()).expect("log.ini create failed");  
+                let _ = std::fs::File::create(SYSBOOST_LOG_PATH.to_string());
+                set_mode();
         }
         let file_name = Path::new(&SYSBOOST_LOG_PATH);
         let mut file = match OpenOptions::new().append(true).open(file_name) {
                 Ok(f) => {f}
                 Err(e) => {
-                        log::error!("open log.ini failed {}", e);
+                        log::error!("open {} failed: {}", SYSBOOST_LOG_NAME, e);
                         return;
                 }
         };
-        match file.write_all(path.as_bytes()) {
+        let content = format!("{}\n", path);
+        match file.write_all(content.as_bytes()) {
                 Ok(_) => {}
                 Err(e) => {
-                        log::error!("write log.ini failed {}", e);
+                        log::error!("write {} failed: {}", SYSBOOST_LOG_NAME, e);
                         return;
                 }   
-        }
-        match file.write_all("\n".as_bytes()) {
-                Ok(_) => {}
-                Err(e) => {
-                        log::error!("write log.ini failed {}", e);
-                        return;
-                } 
         }
 }
 

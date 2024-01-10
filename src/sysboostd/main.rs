@@ -83,6 +83,13 @@ fn main() {
 			}
 		}
 	}
+	
+	if is_debug {
+		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
+	} else {
+		logger::init_log(APP_NAME, log::LevelFilter::Info, "syslog", None);
+	}
+
 	// 配置文件解析
 	parse_sysinit_config();
 	parse_crashed_log();
@@ -91,11 +98,6 @@ fn main() {
 		std::process::exit(gen_profile(name, timeout));
 	}
 
-	if is_debug {
-		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
-	} else {
-		logger::init_log(APP_NAME, log::LevelFilter::Info, "syslog", None);
-	}
 	log::info!("{} running", APP_NAME);
 
 	if is_daemon {

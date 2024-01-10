@@ -11,7 +11,7 @@
 
 use crate::lib::process_ext::run_child;
 
-pub const SYSBOOST_PATH: &str = "/usr/bin/sysboost";
+pub const SYSBOOST_PATH: &str = "/usr/bin/elfmerge";
 
 // echo always > /sys/kernel/mm/transparent_hugepage/enabled
 pub fn set_thp() -> i32 {

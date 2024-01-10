@@ -180,6 +180,7 @@ fn start_service() {
 	for conf in conf_reader.elfsections.iter() {
 		log::info!("parse config: {:?}", conf);
 		if is_app_crashed(conf.elf_path.clone()) {
+			log::info!("{} has crashed, ingnore", &conf.elf_path);
 			continue;
 		}
 		sysboost_core_process(conf);
