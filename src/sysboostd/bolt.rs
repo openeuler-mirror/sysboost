@@ -10,9 +10,8 @@
 // Create: 2023-8-28
 
 use crate::common::is_arch_x86_64;
-use crate::config::RtoConfig;
+use crate::config::{RtoConfig, INIT_CONF};
 use crate::lib::process_ext::run_child;
-use crate::config::get_config;
 use crate::aot::set_rto_link_flag;
 
 use std::fs;
@@ -191,16 +190,13 @@ fn gen_app_profile(name: &str, elf_path: &String, timeout: u32) -> i32 {
 // profile文件与ELF文件不配套的时候, 影响BOLT优化性能
 pub fn gen_profile(name: &str, timeout: u32) -> i32 {
 	// 获得app路径
-	let conf_e = get_config(name);
-	let conf = match conf_e {
-		Some(conf) => conf,
-		None => {
-			println!("get {} config fail", name);
-			return -1;
+	let conf_reader = INIT_CONF.read().unwrap();
+	for conf in conf_reader.elfsections.iter() {
+		if conf.name == name.to_string(){
+			return gen_app_profile(name, &conf.elf_path, timeout);
 		}
-	};
-
-	return gen_app_profile(name, &conf.elf_path, timeout);
+	}
+	-1
 }
 
 #[cfg(test)]
@@ -213,6 +209,7 @@ mod tests {
 	#[test]
 	fn test_get_profile_path() {
 		let conf = RtoConfig {
+			name :"mysqld".to_string(),
 			elf_path: "/usr/bin/mysqld".to_string(),
 			mode: "static".to_string(),
 			libs: Vec::new(),

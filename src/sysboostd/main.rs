@@ -19,10 +19,13 @@ mod kmod_util;
 mod lib;
 mod netlink_client;
 
+use crate::config::parse_sysinit_config;
 use crate::coredump_monitor::coredump_monitor_loop;
+use crate::coredump_monitor::parse_crashed_log;
 use crate::daemon::daemon_loop;
 use crate::kmod_util::test_kmod;
 use crate::bolt::gen_profile;
+use crate::config::INIT_CONF;
 
 use basic::logger::{self};
 use daemonize::Daemonize;
@@ -80,17 +83,21 @@ fn main() {
 			}
 		}
 	}
-
-	if is_gen_porfile {
-		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
-		std::process::exit(gen_profile(name, timeout));
-	}
-
+	
 	if is_debug {
 		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
 	} else {
 		logger::init_log(APP_NAME, log::LevelFilter::Info, "syslog", None);
 	}
+
+	// 配置文件解析
+	parse_sysinit_config();
+	parse_crashed_log();
+	if is_gen_porfile {
+		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
+		std::process::exit(gen_profile(name, timeout));
+	}
+
 	log::info!("{} running", APP_NAME);
 
 	if is_daemon {
@@ -105,12 +112,12 @@ fn main() {
 	}
 
 	// start up coredump monitor
-	let _coredump_monitor_handle = thread::spawn(||{
+	if INIT_CONF.read().unwrap().general.coredump_monitor_flag {
+		let _coredump_monitor_handle = thread::spawn(||{
 			coredump_monitor_loop();
-	});
+		});
+	}
 	
 	// daemon service gen rto ELF with config
 	daemon_loop();
-	
-	_coredump_monitor_handle.join().unwrap()
 }

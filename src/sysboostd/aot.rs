@@ -9,7 +9,7 @@
 // See the Mulan PSL v2 for more details.
 // Create: 2023-8-26
 
-use crate::common::SYSBOOST_PATH;
+use crate::{common::SYSBOOST_PATH, daemon::db_add_link};
 use crate::config::RtoConfig;
 use crate::lib::fs_ext;
 use crate::lib::process_ext::run_child;
@@ -91,46 +91,28 @@ pub fn find_libs(conf: &RtoConfig, elf: &Elf) -> Vec<String> {
 
 pub fn set_app_link_flag(path: &String, is_set: bool) -> i32 {
 	let mut args: Vec<String> = Vec::new();
+
 	if is_set {
 		args.push("--set".to_string());
 	} else {
 		args.push("--unset".to_string());
 	}
-
-	// 回滚场景, 路径是软链接要转换为真实路径
-	let real_path = match fs::canonicalize(path) {
-		Ok(p) => p,
-		Err(e) => {
-			log::error!("get realpath failed: {}", e);
-			return -1;
-		}
-	};
-
-	args.push(format!("{}", real_path.to_string_lossy()));
+	args.push(path.to_string());
 	let ret = run_child(SYSBOOST_PATH, &args);
-	return ret;
+	ret
 }
 
 pub fn set_rto_link_flag(path: &String, is_set: bool) -> i32 {
 	let mut args: Vec<String> = Vec::new();
+
 	if is_set {
 		args.push("--set-rto".to_string());
 	} else {
 		args.push("--unset-rto".to_string());
 	}
-
-	// 回滚场景, 路径是软链接要转换为真实路径
-	let real_path = match fs::canonicalize(path) {
-		Ok(p) => p,
-		Err(e) => {
-			log::error!("get realpath failed: {}", e);
-			return -1;
-		}
-	};
-
-	args.push(format!("{}", real_path.to_string_lossy()));
+	args.push(path.to_string());
 	let ret = run_child(SYSBOOST_PATH, &args);
-	return ret;
+	ret
 }
 
 // 生成rto文件
@@ -158,11 +140,9 @@ pub fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	if ret != 0 {
 		return ret;
 	}
-	let mut set: Vec<String> = Vec::new();
-	set.push("--set-rto".to_string());
-	set.push(format!("{}.rto", conf.elf_path));
-	ret = run_child(SYSBOOST_PATH, &set);
+	ret = set_rto_link_flag(&format!("{}.rto", conf.elf_path), true);
 	if ret != 0 {
+		log::error!("Error: set rto link flag fail.");
 		return ret;
 	}
 	let mut set_mod: Vec<String> = Vec::new();
@@ -172,9 +152,15 @@ pub fn gen_app_rto(conf: &RtoConfig) -> i32 {
 	if ret != 0 {
 		return ret;
 	}
-
-	// 设置链接标志位
 	ret = set_app_link_flag(&conf.elf_path, true);
-
+	if ret != 0 {
+		log::error!("Error: set app link flag fail.");
+		return ret;
+	}
+	ret = db_add_link(&conf);
+	if ret != 0 {
+		log::error!("Error: db add link fault.");
+		return ret;
+	}
 	return ret;
 }
