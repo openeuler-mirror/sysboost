@@ -120,7 +120,18 @@ fn parse_rto_config(sec: String, prop: &Properties) {
 		name: sec_name[sec_name.len()-1].to_string(),
 		elf_path: sec.clone(),
 		mode: prop.get("mode").unwrap().to_string(),
-		libs: prop.get("libs").unwrap().split(",").map(|s| s.to_string()).collect(), 
+		// 需要处理配置文件中libs = ;和没有libs属性的情况
+		libs: match prop.get("libs") {
+			Some(p) => {
+				if p.trim().is_empty() {
+					Vec::new()
+				}
+				else {
+					p.split(",").map(|s| s.to_string()).collect()
+				}
+			}
+			None => {Vec::new()}
+			},
 	 	profile_path: prop.get("profile_path").map(|s| s.to_string()),
 		path: prop.get("path").map(|s| s.to_string()),
 		watch_paths: Vec::new(),
