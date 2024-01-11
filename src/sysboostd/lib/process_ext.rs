@@ -52,7 +52,7 @@ pub fn run_child(cmd: &str, args: &Vec<String>) -> i32 {
 	};
 
 	if exit_code != 0 {
-		log::warn!("Command exited with code: {}", exit_code);
+		log::debug!("Command exited with code: {}", exit_code);
 	}
 
 	exit_code

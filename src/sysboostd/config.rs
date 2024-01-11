@@ -69,7 +69,13 @@ lazy_static! {
 }
 
 pub fn parse_sysinit_config() {
-	let conf_file = Ini::load_from_file(SYSBOOST_CONFIG_PATH).unwrap();
+	let conf_file = match Ini::load_from_file(SYSBOOST_CONFIG_PATH){
+		Ok(c) => {c}
+		Err(e) => {
+			log::info!("load file {} error: {}",SYSBOOST_CONFIG_PATH, e);
+			return;
+		}
+	};
 	let mut i = 0;
 	for (sec, prop) in &conf_file {
 		if i >= MAX_BOOST_PROGRAM {
