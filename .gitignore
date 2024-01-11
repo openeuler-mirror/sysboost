@@ -5,7 +5,7 @@ target
 *.pyc
 ~*
 .idea/
-Cargo.lock
+src/sysboostd/Cargo.lock
 *.rto
 
 # readelf/objdump
