@@ -16,6 +16,8 @@ use serde::Deserialize;
 use ini::Ini;
 use lazy_static::lazy_static;
 use std::sync::RwLock;
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 
 pub const SYSBOOST_CONFIG_PATH: &str = "/etc/sysboost.d/sysboost.ini";
 // only 10 program can use boost
@@ -66,6 +68,42 @@ lazy_static! {
 				elfsections: Vec::new()
 			}
 		);
+}
+
+fn detect_so(path: &String, rtoconfig: &mut RtoConfig) {
+	let args: &Vec<String> = &vec![path.to_string();1];
+	let mut run_thread = match Command::new("/usr/bin/ldd").args(args).stdout(Stdio::piped()).spawn() {
+		Ok(run_thread) => run_thread,
+		Err(e) => {
+			log::error!("Failed to execute command: {}", e);
+			return;
+		}
+	};
+	let stdout = match run_thread.stdout.take() {
+		Some(stdout) => stdout,
+		None => {
+			log::error!("Failed to capture stdout");
+			return;
+		}
+	};
+	let reader = BufReader::new(stdout);
+	for line in reader.lines() {
+		let line = line.unwrap_or_else(|_| "<read error>".to_owned());
+		let start = match line.find('/') {
+			Some(s) => {s},
+			None => continue
+		};
+		let end = match line.find('(') {
+			Some(e) => {e},
+			None => continue
+		};
+		let lib_path = line[start..end].trim();
+		if lib_path == "/usr/lib64/libc.so.6" || lib_path == "/lib/ld-linux-aarch64.so.1" {
+			continue;
+		}
+		rtoconfig.libs.push(lib_path.to_string());
+	}
+	log::debug!("Automatically detect {} dependent so files: {:?}",rtoconfig.name, &rtoconfig.libs);
 }
 
 pub fn parse_sysinit_config() {
@@ -136,10 +174,13 @@ fn parse_rto_config(sec: String, prop: &Properties) {
 		path: prop.get("path").map(|s| s.to_string()),
 		watch_paths: Vec::new(),
 	};
-
 	if rtoconf.elf_path == SYSBOOST_PATH || is_mode_invalid(rtoconf.mode.clone()){
-		log::error!("invalid config in {}", sec);
+		log::error!("invalid config in {}", &sec);
 		return;
+	}
+	//如果用户没有配置libs, 则自动检测libs
+	if prop.get("libs") == None {
+		detect_so(&sec, &mut rtoconf);
 	}
 	// add elf file to watch list
 	rtoconf.watch_paths.push(rtoconf.elf_path.clone());
