@@ -628,6 +628,18 @@ static void write_data(elf_link_t *elf_link)
 	p->p_align = SI_HUGEPAGE_ALIGN_SIZE;
 }
 
+//比较dynamic段中的libtinfo.so.6和in_elfs中的/usr/lib/relocation/usr/lib64/libtinfo.so.6.4.relocation
+static bool is_contain_soname(char *so_name, const char *inef_name) {
+	int idx = 0;
+	while (so_name[idx] != '\0') {
+		if (inef_name[idx] == '\0' || so_name[idx] != inef_name[idx]) {
+			return false;
+		}
+		idx++;	
+	}
+	return true;
+}
+
 static bool is_lib_in_elf(elf_link_t *elf_link, char *name)
 {
 	elf_file_t *ef;
@@ -635,7 +647,7 @@ static bool is_lib_in_elf(elf_link_t *elf_link, char *name)
 
 	for (int i = 0; i < count; i++) {
 		ef = &elf_link->in_efs[i];
-		if (strcmp(name, si_basename(ef->file_name)) == 0) {
+		if (is_contain_soname(name, si_basename(ef->file_name))) {
 			return true;
 		}
 	}

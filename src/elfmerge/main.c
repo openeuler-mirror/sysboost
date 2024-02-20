@@ -59,6 +59,7 @@ int main(int argc, char *argv[])
 		{ELF_LINK_STATIC_S, 		no_argument, 		NULL, 	'S'},
 		{ELF_LINK_STATIC_NOLIBC_S, 	no_argument, 		NULL, 	'N'},
 		{ELF_LINK_STATIC_NOLD_S, 	no_argument, 		NULL, 	'I'},
+		{ELF_LINK_SHARE_S,		no_argument,		NULL,	'p'},
 		{NULL, 				0, 			NULL, 	0}
 	};
 
@@ -122,6 +123,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'I':
 			mode = ELF_LINK_STATIC_NOLD;
+			break;
+		case 'p':
+			mode = ELF_LINK_SHARE;
 			break;
 		case 'r':
 			elf_link->flags &= (!RELOC_FLAG);

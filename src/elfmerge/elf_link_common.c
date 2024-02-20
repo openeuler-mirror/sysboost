@@ -785,6 +785,8 @@ static unsigned long _get_new_addr_by_sym_name(elf_link_t *elf_link, char *sym_n
 		si_panic("not found symbol %s\n", sym_name);
 	}
 
+	return NOT_FOUND;
+
 out:
 	if (ELF64_ST_TYPE(sym->st_info) == STT_GNU_IFUNC) {
 		return get_ifunc_new_addr(elf_link, ef, sym, sym_name);
@@ -989,11 +991,11 @@ static unsigned long _get_new_addr_by_sym(elf_link_t *elf_link, elf_file_t *ef,
 	char *sym_name = elf_get_sym_name(ef, sym);
 
 	// WEAK func is used by GNU debug, libc do not have that func
-	if (is_gnu_weak_symbol(sym) == true) {
+	if (is_gnu_weak_symbol(sym) == true && !is_share_mode(elf_link)) {
 		return NOT_FOUND;
 	}
 
-	if (is_symbol_maybe_undefined(sym_name)) {
+	if (is_symbol_maybe_undefined(sym_name) && !is_share_mode(elf_link)) {
 		return NOT_FOUND;
 	}
 

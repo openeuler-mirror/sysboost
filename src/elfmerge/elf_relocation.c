@@ -140,7 +140,7 @@ static void modify_rela_to_RELATIVE(elf_link_t *elf_link, elf_file_t *src_ef, El
 		// 1008:	48 8b 05 d9 2f 00 00 	mov    0x2fd9(%rip),%rax        # 3fe8 <__gmon_start__@Base>
 		// some addr need be 0, use by cmp jump
 		char *name = elf_get_sym_name(src_ef, sym);
-		if (!is_symbol_maybe_undefined(name)) {
+		if (!is_symbol_maybe_undefined(name) && !is_share_mode(elf_link)) {
 			si_panic("symbol can not be UND, %s %s\n", src_ef->file_name, name);
 		}
 
