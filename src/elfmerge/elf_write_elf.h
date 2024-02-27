@@ -51,4 +51,7 @@ Elf64_Shdr *merge_all_ef_section(elf_link_t *elf_link, const char *name);
 int create_elf_file(char *file_name, elf_file_t *elf_file, mode_t mode, uid_t owner, gid_t group);
 void truncate_elf_file(elf_link_t *elf_link);
 
+//merge rela sections
+void merge_rela(elf_link_t *elf_link);
+
 #endif /* _ELF_WRITE_ELF_H */

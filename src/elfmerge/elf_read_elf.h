@@ -86,6 +86,22 @@ typedef struct {
 	MACRO(SEC_DEBUG_STR,		".debug_str"		)\
 	MACRO(SEC_DEBUG_LINE_STR,	".debug_line_str"	)\
 	MACRO(SEC_DEBUG_ABBREV,		".debug_abbrev"		)\
+	/* for merge rela sections */	\
+	MACRO(SEC_INIT,			".init"			)\
+	MACRO(SEC_RELA_INIT,	".rela.init"			)\
+	MACRO(SEC_PLT,			".plt"			)\
+	MACRO(SEC_RELA_TEXT,	".rela.text"			)\
+	MACRO(SEC_FINI,			".fini"			)\
+	MACRO(SEC_EH_FRAME,			".eh_frame"			)\
+	MACRO(SEC_RELA_EH_FRAME,			".rela.eh_frame"			)\
+	MACRO(SEC_RELA_INIT_ARRAY,			".rela.init_array"			)\
+	MACRO(SEC_RELA_FINI_ARRAY,			".rela.fini_array"			)\
+	MACRO(SEC_RELA_DATA_REL_RO,			".rela.data.rel.ro"			)\
+	MACRO(SEC_RELA_DATA,			".rela.data"			)\
+	MACRO(SEC_TM_CLONE_TABLE,			".tm_clone_table"			)\
+	//MACRO(SEC_RELA_DEBUG_INFO,			".rela.debug_info"			)
+	//MACRO(SEC_RELA_DEBUG_LINE,			".rela.debug_line"			)
+	
 
 extern char *needed_sections[];
 
@@ -98,6 +114,28 @@ enum section_types
 
 #define GENERATE_STRING(x, ...) #x,
 extern const char *sec_type_strings[];
+
+static char *has_rela_names[] = {
+    ".init_array",
+	".init",
+    ".text",
+	".eh_frame",
+	".fini_array",
+	".data.rel.ro",
+	".data",
+};
+#define HAS_RELA_NAMES_LEN (sizeof(has_rela_names) / sizeof(has_rela_names[0]))
+
+static char *rela_names[] = {
+    ".rela.init",
+    ".rela.text",
+	".rela.eh_frame",
+	".rela.init_array",
+	".rela.fini_array",
+	".rela.data.rel.ro",
+	".rela.data",
+};
+#define RELA_NAMES_LEN (sizeof(rela_names) / sizeof(rela_names[0]))
 
 static inline const char *sec_type_to_str(int sec_type)
 {
@@ -337,6 +375,28 @@ static inline bool elf_is_rela_plt_name(const char *name)
 	return false;
 }
 
+static inline bool elf_is_rela_name(const char *name)
+{
+	for (unsigned i = 0; i < RELA_NAMES_LEN; i++) {
+		if (strcmp(name, rela_names[i]) == 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static inline bool is_has_rela(const char *name)
+{
+	for (unsigned i = 0; i < HAS_RELA_NAMES_LEN; i++) {
+		if (strcmp(name, has_rela_names[i]) == 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static inline bool elf_is_dynstr_name(const char *name)
 {
 	if (strcmp(name, ".dynstr") == 0) {
@@ -422,6 +482,22 @@ bool debug_str_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool debug_line_str_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool debug_abbrev_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool elf_is_same_area(const elf_file_t *ef, const Elf64_Shdr *a, const Elf64_Shdr *b);
+
+bool init_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool plt_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool fini_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_text_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_init_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool ehframe_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_ehframe_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_initarr_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_finiarr_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_datarelro_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_data_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_debuginfo_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_debugline_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool tmclonetable_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+
 
 // ELF
 void elf_parse_hdr(elf_file_t *ef);

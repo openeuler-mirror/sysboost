@@ -62,6 +62,7 @@ elf_link_t *elf_link_new(void)
 
 	elf_link->rela_plt_arr = si_array_new(sizeof(elf_obj_mapping_t));
 	elf_link->rela_dyn_arr = si_array_new(sizeof(elf_obj_mapping_t));
+	elf_link->rela_arr = si_array_new(sizeof(elf_obj_mapping_t));
 
 	elf_link->hook_func = false;
 	elf_link->direct_call_optimize = false;
@@ -506,6 +507,7 @@ static void write_rodata(elf_link_t *elf_link)
 
 	merge_rodata_sections(elf_link);
 	merge_all_ef_section(elf_link, ".eh_frame_hdr");
+	merge_all_ef_section(elf_link, ".eh_frame");
 
 	// rodata
 	elf_file_t *out_ef = &elf_link->out_ef;
@@ -1776,21 +1778,25 @@ static void elf_link_write_sections(elf_link_t *elf_link)
 	/* .dynamic (merge per section) */
 	modify_dynamic(elf_link);
 
-	/* .symtab (merge per section) */
-	write_symtab(elf_link);
-
-	/* .strtab (merge per section) */
-	write_strtab(elf_link);
-
-	/* .shstrtab (merge per section) */
-	write_shstrtab(elf_link);
-
 	/*
 	 * merge per section for below sections:
 	 * .debug_info .debug_line .debug_str .debug_line_str .debug_abbrev
 	 */
 	write_debug_info(elf_link);
 
+	/* .symtab (merge per section) */
+	write_symtab(elf_link);
+
+	/* .strtab (merge per section) */
+	write_strtab(elf_link);
+
+	/* .rela.init, .rela.text */
+	if (is_share_mode(elf_link)) {
+		merge_rela(elf_link);
+	}
+
+	/* .shstrtab (merge per section) */
+	write_shstrtab(elf_link);
 	/*
 	 * .comment is useless, it's used to hold comments about the generated ELF
 	 * (details such as compiler version and execution platform).
@@ -1843,6 +1849,11 @@ int elf_link_write(elf_link_t *elf_link)
 	// .rela.plt .plt.got
 	modify_got(elf_link);
 
+	// .rela.init, .rela.text
+	// 目前只支持share模式，因为现有代码会将静态模板的tdata等合并到rodata中，tdata符号缺失
+	if(is_share_mode(elf_link)) {
+		modify_rela_sections(elf_link);
+	}
 	/* 目前该函数没有实际作用，后续会代替modify_local_call的.rela.init .rela.text部分 */
 	/* .init .plt .text .fini */
 	modify_text_section(elf_link);

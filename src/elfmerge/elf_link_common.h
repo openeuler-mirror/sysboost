@@ -95,6 +95,9 @@ typedef struct {
 	si_array_t *rela_plt_arr;
 	si_array_t *rela_dyn_arr;
 
+	//.rela.init, .rela.text, .rela.data
+	si_array_t *rela_arr;
+
 	// direct symbol mapping
 	si_array_t *symbol_mapping_arr;
 

@@ -219,7 +219,7 @@ int elf_find_func_range_by_name(elf_file_t *ef, const char *func_name,
 	return 0;
 }
 
-unsigned elf_find_symbol_index_by_name(elf_file_t *ef, const char *name)
+unsigned int elf_find_symbol_index_by_name(elf_file_t *ef, const char *name)
 {
 	Elf64_Sym *syms = elf_get_symtab_array(ef);
 	int count = elf_get_symtab_count(ef);
@@ -402,13 +402,59 @@ bool elf_is_relro_section(const elf_file_t *ef, const Elf64_Shdr *sechdr)
 	return false;
 }
 
+bool init_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".init") == 0){
+		return true;
+	}
+	return false;
+}
+
+bool plt_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".plt") == 0){
+		return true;
+	}
+	return false;
+}
+
 bool text_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
 {
 	(void)ef;
-	if (!(sec->sh_flags & SHF_EXECINSTR)) {
-		return false;
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".text") == 0){
+		return true;
 	}
-	return true;
+	return false;
+}
+
+bool fini_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".fini") == 0){
+		return true;
+	}
+	return false;
+}
+
+bool rela_init_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.init") == 0){
+		return true;
+	}
+	return false;
+}
+
+bool rela_text_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.text") == 0){
+		return true;
+	}
+	return false;
 }
 
 bool rodata_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
@@ -434,8 +480,77 @@ bool rodata_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
 	if (strcmp(name, ".eh_frame_hdr") == 0) {
 		return false;
 	}
+	if (strcmp(name, ".eh_frame") == 0) {
+		return false;
+	}
 
 	return true;
+}
+
+bool ehframe_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".eh_frame") == 0) {
+		return true;
+	}
+	return false;
+}
+
+bool rela_ehframe_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.eh_frame") == 0) {
+		return true;
+	}
+	return false;
+}
+bool rela_initarr_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.init_array") == 0) {
+		return true;
+	}
+	return false;
+}
+bool rela_finiarr_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.fini_array") == 0) {
+		return true;
+	}
+	return false;
+}
+bool rela_datarelro_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.data.rel.ro") == 0) {
+		return true;
+	}
+	return false;
+}
+bool rela_data_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.data") == 0) {
+		return true;
+	}
+	return false;
+}
+bool rela_debuginfo_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.debug_info") == 0) {
+		return true;
+	}
+	return false;
+}
+bool rela_debugline_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.debug_line") == 0) {
+		return true;
+	}
+	return false;
 }
 
 bool got_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
@@ -465,8 +580,22 @@ bool rwdata_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
 	if (sec->sh_type != SHT_PROGBITS) {
 		return false;
 	}
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".tm_clone_table") == 0) {
+		return false;
+	}
 
 	return true;
+}
+
+bool tmclonetable_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".tm_clone_table") == 0) {
+		return true;
+	}
+
+	return false;
 }
 
 bool bss_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)

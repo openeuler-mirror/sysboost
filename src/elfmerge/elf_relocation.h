@@ -28,4 +28,7 @@ void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr);
 void modify_plt_got(elf_link_t *elf_link);
 void correct_stop_libc_atexit(elf_link_t *elf_link);
 
+void modify_rela_sections(elf_link_t *elf_link);
+void modify_rela_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela);
+
 #endif /* _ELF_RELOCATION_H */

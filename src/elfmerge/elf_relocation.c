@@ -358,6 +358,19 @@ void modify_rela_dyn(elf_link_t *elf_link)
 	}
 }
 
+void modify_rela_sections(elf_link_t *elf_link) {
+	int len = elf_link->rela_arr->len;
+	elf_obj_mapping_t *obj_rels = elf_link->rela_arr->data;
+	elf_obj_mapping_t *obj_rel = NULL;
+	for (int i = 0; i < len; i++) {
+		obj_rel = &obj_rels[i];
+		Elf64_Rela *src_rela = obj_rel->src_obj;
+		Elf64_Rela *dst_rela = obj_rel->dst_obj;
+		elf_file_t *src_ef = obj_rel->src_ef;
+		modify_rela_item(elf_link, src_ef, src_rela, dst_rela);	
+	}
+}
+
 void modify_got(elf_link_t *elf_link)
 {
 	Elf64_Shdr *got_sec = find_tmp_section_by_name(elf_link, ".got");
@@ -388,4 +401,59 @@ void modify_got(elf_link_t *elf_link)
 
 	// modify .plt.got
 	modify_plt_got(elf_link);
+}
+
+void modify_rela_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *src_rela, Elf64_Rela *dst_rela)
+{
+	// modify r_offset and index
+	dst_rela->r_offset = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_offset);
+	unsigned int old_index = ELF64_R_SYM(src_rela->r_info);
+	Elf64_Sym *old_syms = elf_get_symtab_array(src_ef);
+	Elf64_Sym *old_sym = &old_syms[old_index];
+	const char *name = elf_get_sym_name(src_ef, old_sym);
+	unsigned int new_index = elf_find_symbol_index_by_name(&elf_link->out_ef, name);
+	dst_rela->r_info = ELF64_R_INFO(new_index, ELF64_R_TYPE(src_rela->r_info));
+	int type = ELF64_R_TYPE(src_rela->r_info);
+	Elf64_Sym *new_syms = elf_get_symtab_array(&elf_link->out_ef);
+	Elf64_Sym *new_sym = &new_syms[new_index];
+	unsigned long old_addr, new_addr;
+	switch (type) {
+		case R_AARCH64_ABS32:
+		case R_AARCH64_ABS64:
+		case R_AARCH64_PREL32:
+		case R_AARCH64_CALL26:
+		case R_AARCH64_JUMP26:
+		case R_AARCH64_ADD_ABS_LO12_NC:
+		case R_AARCH64_ADR_PREL_PG_HI21:
+		case R_AARCH64_LDST16_ABS_LO12_NC:
+		case R_AARCH64_LDST8_ABS_LO12_NC:
+		case R_AARCH64_LDST32_ABS_LO12_NC:
+		case R_AARCH64_LDST128_ABS_LO12_NC:
+		case R_AARCH64_LDST64_ABS_LO12_NC:
+		case R_AARCH64_ADR_GOT_PAGE:
+		case R_AARCH64_LD64_GOT_LO12_NC:
+			old_addr = old_sym->st_value + src_rela->r_addend;
+			new_addr = get_new_addr_by_old_addr(elf_link, src_ef, old_addr);
+			if (new_addr == -1UL) {
+				si_panic("ABS64: addr is missing\n");
+			}
+			dst_rela->r_addend = new_addr - new_sym->st_value;
+			SI_LOG_DEBUG("type %d change offset %lx->%lx content %lx->%lx addend %d -> %d\n", type, src_rela->r_offset, dst_rela->r_offset, old_addr, new_addr,src_rela->r_addend, dst_rela->r_addend);
+			return;
+		case R_AARCH64_RELATIVE:
+			if (!elf_is_rela_symbol_null(src_rela)) {
+				si_panic("%s %lx\n", src_ef->file_name, src_rela->r_offset);
+			}
+			// relative type have no sym index
+			dst_rela->r_addend = get_new_addr_by_old_addr(elf_link, src_ef, src_rela->r_addend);
+			return;
+		
+		default:
+			SI_LOG_ERR("%s %lx\n", src_ef->file_name, src_rela->r_offset);
+			si_panic("error not supported type %d\n", type);
+	 }
+
+	// SI_LOG_DEBUG("old r_offset %016lx r_info %016lx r_addend %016lx -> new r_offset %016lx r_info %016lx r_addend %016lx\n",
+	// 	     src_rela->r_offset, src_rela->r_info, src_rela->r_addend,
+	// 	     dst_rela->r_offset, dst_rela->r_info, dst_rela->r_addend);
 }

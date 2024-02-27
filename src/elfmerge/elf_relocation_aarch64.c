@@ -1624,13 +1624,9 @@ void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 			// 00000000003fffc8  0000000800000402 R_AARCH64_JUMP_SLOT    0000000000000000 puts@GLIBC_2.17 + 0
 			sym = elf_get_dynsym_by_rela(obj_rel->src_ef, src_rela);
 			ret = get_new_addr_by_symobj(elf_link, obj_rel->src_ef, sym);
-			if (ret == NOT_FOUND) {
-				ret = 0;
+			if (ret != NOT_FOUND) {
+				dst_rela->r_addend = ret - sym->st_value;
 			}
-			else {
-				dst_rela->r_info = ELF64_R_INFO(0, ELF64_R_TYPE(R_AARCH64_RELATIVE));
-			}
-			dst_rela->r_addend = ret;
 			break;
 		default:
 			si_panic("unsupported .rela.plt %ld\n", type);
