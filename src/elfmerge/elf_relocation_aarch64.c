@@ -1329,7 +1329,7 @@ static void modify_branch_insn(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela 
 	unsigned long new_insn = 0, new_sym_addr = 0, new_offset = 0;
 	elf_file_t *out_ef = &elf_link->out_ef;
 
-	if (is_gmon_start_symbol(ef, sym)) {
+	if (is_gmon_start_symbol(ef, sym) && !is_share_mode(elf_link)) {
 		// __gmon_start__ rela offset point nop, do nothing
 		return;
 	}
@@ -1349,7 +1349,7 @@ static void modify_branch_insn(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela 
 	}
 
 	// WEAK func is used by GNU debug, libc do not have that func
-	if (is_gnu_weak_symbol(sym) == true) {
+	if (is_gnu_weak_symbol(sym) == true && !is_share_mode(elf_link)) {
 		goto out;
 	}
 
@@ -1624,10 +1624,9 @@ void modify_rela_plt(elf_link_t *elf_link, si_array_t *arr)
 			// 00000000003fffc8  0000000800000402 R_AARCH64_JUMP_SLOT    0000000000000000 puts@GLIBC_2.17 + 0
 			sym = elf_get_dynsym_by_rela(obj_rel->src_ef, src_rela);
 			ret = get_new_addr_by_symobj(elf_link, obj_rel->src_ef, sym);
-			if (ret == NOT_FOUND) {
-				ret = 0;
+			if (ret != NOT_FOUND) {
+				dst_rela->r_addend = ret - sym->st_value;
 			}
-			dst_rela->r_addend = ret;
 			break;
 		default:
 			si_panic("unsupported .rela.plt %ld\n", type);

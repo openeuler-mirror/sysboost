@@ -142,13 +142,33 @@ void copy_elf_file(elf_file_t *in, off_t in_offset, elf_file_t *out, off_t out_o
 	(void)memcpy(dest, src, len);
 }
 
+static int get_has_rela_sec_index(elf_link_t *elf_link, const char *name)
+{
+	for (unsigned i = 0; i < HAS_RELA_NAMES_LEN; i++) {
+		if (strstr(name, has_rela_names[i]) != 0) {
+			Elf64_Shdr *sec = elf_find_section_by_name(&elf_link->out_ef, has_rela_names[i]);		
+			int j = sec - elf_link->out_ef.sechdrs + 1;
+			return j;
+
+		}
+	}
+	si_panic("no section has rela %s\n", name);
+	return -1;
+}
+
 static Elf64_Shdr *add_tmp_section(elf_link_t *elf_link, elf_file_t *ef, Elf64_Shdr *src_sec)
 {
 	if (is_section_needed(elf_link, ef, src_sec) == false) {
 		return NULL;
 	}
 
+	const char* name = elf_get_section_name(ef, src_sec);
+
 	int j = elf_link->out_ef.hdr->e_shnum;
+	if (elf_is_rela_name(name)) {
+		j = get_has_rela_sec_index(elf_link, name);
+	}
+	
 	if (j == MAX_ELF_SECTION - 1) {
 		si_panic("not more new elf sections can be created\n");
 	}
@@ -158,7 +178,13 @@ static Elf64_Shdr *add_tmp_section(elf_link_t *elf_link, elf_file_t *ef, Elf64_S
 		memcpy(dst_sec, src_sec, sizeof(Elf64_Shdr));
 		append_obj_mapping(elf_link, ef, NULL, src_sec, dst_sec);
 	}
+	if (elf_is_rela_name(name)) {
+		return dst_sec;
+	}
 
+	if (is_has_rela(name) && is_share_mode(elf_link)) {
+		j++;
+	}
 	j++;
 	elf_link->out_ef.hdr->e_shnum = j;
 
@@ -407,7 +433,7 @@ static void append_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t
 	}
 	// TODO clean code
 	char *name = elf_get_section_name(ef, sec);
-	if (strstr(name, "debug") != NULL) {
+	if (strstr(name, "debug") != NULL || elf_is_rela_name(name)) {
 		is_align_file_offset = false;
 	}
 	// offset in PAGE inherit from in ELF
@@ -416,14 +442,29 @@ static void append_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t
 	// first in section to dst section
 	if (dst_sec->sh_offset == 0) {
 		dst_sec->sh_offset = elf_link->next_file_offset;
-		if (elf_is_debug_section(ef, dst_sec) || elf_is_rela_debug_section(ef, dst_sec)) {
+		if (elf_is_debug_section(ef, dst_sec) || elf_is_rela_debug_section(ef, dst_sec) || elf_is_rela_name(name)) {
 			dst_sec->sh_addr = 0;
 		} else {
 			dst_sec->sh_addr = elf_link->next_mem_addr;
 		}
 	}
-
-	write_elf_file_section(elf_link, ef, sec, dst_sec);
+	void *dst = NULL;
+	dst = write_elf_file_section(elf_link, ef, sec, dst_sec);
+	if (elf_is_rela_name(name)) {
+		si_array_t *arr = elf_link->rela_arr;
+		void *src = ((void *)ef->hdr) + sec->sh_offset;
+		int obj_nr = sec->sh_size / sec->sh_entsize;
+		for (int j = 0; j < obj_nr; j++) {
+			elf_obj_mapping_t obj_rel = {0};
+			obj_rel.src_ef = ef;
+			obj_rel.src_sec = sec;
+			obj_rel.src_obj = src;
+			obj_rel.dst_obj = dst;
+			si_array_append(arr, &obj_rel);
+			src = src + sec->sh_entsize;
+			dst = dst + sec->sh_entsize;
+		}
+	}
 }
 
 static void merge_section(elf_link_t *elf_link, Elf64_Shdr *dst_sec, elf_file_t *ef, Elf64_Shdr *sec)
@@ -518,9 +559,26 @@ void merge_debug_sections(elf_link_t *elf_link)
 	merge_filter_sections(elf_link, ".debug_line_str", debug_line_str_section_filter);
 }
 
+void merge_rela(elf_link_t *elf_link)
+{
+	merge_filter_sections(elf_link, ".rela.init", rela_init_section_filter );
+	merge_filter_sections(elf_link, ".rela.text", rela_text_section_filter);
+	merge_filter_sections(elf_link, ".rela.eh_frame", rela_ehframe_section_filter);
+	merge_filter_sections(elf_link, ".rela.init_array", rela_initarr_section_filter);
+	merge_filter_sections(elf_link, ".rela.fini_array", rela_finiarr_section_filter);
+	merge_filter_sections(elf_link, ".rela.data.rel.ro", rela_datarelro_section_filter);
+	merge_filter_sections(elf_link, ".rela.data", rela_data_section_filter);
+	//merge_filter_sections(elf_link, ".rela.debug_info", rela_debuginfo_section_filter);
+	//merge_filter_sections(elf_link, ".rela.debug_line", rela_debugline_section_filter);
+}
+
+
 void merge_text_sections(elf_link_t *elf_link)
 {
+	merge_filter_sections(elf_link, ".init", init_section_filter);
+	merge_filter_sections(elf_link, ".plt", plt_section_filter);
 	merge_filter_sections(elf_link, ".text", text_section_filter);
+	merge_filter_sections(elf_link, ".fini", fini_section_filter);
 }
 
 void merge_rodata_sections(elf_link_t *elf_link)
@@ -536,7 +594,7 @@ static void merge_got_section(elf_link_t *elf_link)
 void merge_rwdata_sections(elf_link_t *elf_link)
 {
 	merge_filter_sections(elf_link, ".data", rwdata_section_filter);
-
+	merge_filter_sections(elf_link, ".tm_clone_table", tmclonetable_section_filter);
 	// .bss __libc_freeres_ptrs
 	merge_filter_sections(elf_link, ".bss", bss_section_filter);
 }
