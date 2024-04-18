@@ -11,8 +11,9 @@
 
 [package]
 edition = "2021"
+rust-version = "1.64.0"
 name = "ordered-multimap"
-version = "0.7.1"
+version = "0.7.3"
 authors = ["Scott Godwin <sgodwincs@gmail.com>"]
 description = "Insertion ordered multimap"
 readme = "README.md"
