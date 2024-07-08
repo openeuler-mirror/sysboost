@@ -1327,353 +1327,353 @@ static void modify_elf_header(elf_link_t *elf_link)
 	elf_set_hugepage(elf_link);
 }
 
-/* debug modify start */
+// /* debug modify start */
 
-#include <libdwarf.h>
-#include <dwarf.h>
-#include <dwarf_util.h>
-#include <dwarf_error.h>
-#include <dwarf_base_types.h>
-#include <dwarf_opaque.h>
-#include <dwarf_die_deliv.h>
+// #include <libdwarf.h>
+// #include <dwarf.h>
+// #include <dwarf_util.h>
+// #include <dwarf_error.h>
+// #include <dwarf_base_types.h>
+// #include <dwarf_opaque.h>
+// #include <dwarf_die_deliv.h>
 
-struct dwarf_unit_header
-{
-	uint32_t length;
-	uint16_t version;
-	uint8_t unit_type;
-	uint8_t pointer_size;
-	uint32_t abbrev_offset;
-};
+// struct dwarf_unit_header
+// {
+// 	uint32_t length;
+// 	uint16_t version;
+// 	uint8_t unit_type;
+// 	uint8_t pointer_size;
+// 	uint32_t abbrev_offset;
+// };
 
-void check_unit_header(struct dwarf_unit_header *unit_header)
-{
-	/*
-	 * 32-bit DWARF format's length must < 0xfffffff0,
-	 * we only support 32-bit now.
-	 */
-	if (unit_header->length >= 0xfffffff0)
-		si_panic("64-bit DWARF format is not supported\n");
+// void check_unit_header(struct dwarf_unit_header *unit_header)
+// {
+// 	/*
+// 	 * 32-bit DWARF format's length must < 0xfffffff0,
+// 	 * we only support 32-bit now.
+// 	 */
+// 	if (unit_header->length >= 0xfffffff0)
+// 		si_panic("64-bit DWARF format is not supported\n");
 
-	if (unit_header->version != 5)
-		si_panic("only support DWARF version 5\n");
+// 	if (unit_header->version != 5)
+// 		si_panic("only support DWARF version 5\n");
 	
-	if (unit_header->pointer_size != 8)
-		si_panic("only support 64-bit target machine\n");
-}
+// 	if (unit_header->pointer_size != 8)
+// 		si_panic("only support 64-bit target machine\n");
+// }
 
-void check_cu_header(struct dwarf_unit_header *cu_header)
-{
-	check_unit_header(cu_header);
+// void check_cu_header(struct dwarf_unit_header *cu_header)
+// {
+// 	check_unit_header(cu_header);
 
-	if (cu_header->unit_type != DW_UT_compile)
-		si_panic("current unit_header is not cu_header\n");
-}
+// 	if (cu_header->unit_type != DW_UT_compile)
+// 		si_panic("current unit_header is not cu_header\n");
+// }
 
-/* modify abbrev offset stored in .debug_info */
-void modify_debug_info_abbrev_offset(elf_link_t *elf_link)
-{
-	elf_file_t *ef;
-	uint32_t da_offset = 0;
-	void *di_base = elf_find_section_ptr_by_name(get_out_ef(elf_link), ".debug_info");
-	uint32_t cu_offset = 0;
+// /* modify abbrev offset stored in .debug_info */
+// void modify_debug_info_abbrev_offset(elf_link_t *elf_link)
+// {
+// 	elf_file_t *ef;
+// 	uint32_t da_offset = 0;
+// 	void *di_base = elf_find_section_ptr_by_name(get_out_ef(elf_link), ".debug_info");
+// 	uint32_t cu_offset = 0;
 
-	foreach_infile(elf_link, ef) {
-		Elf64_Shdr *di_sec = elf_find_section_by_name(ef, ".debug_info");
-		Elf64_Shdr *da_sec = elf_find_section_by_name(ef, ".debug_abbrev");
-		uint32_t in_ef_cu_offset = 0;
+// 	foreach_infile(elf_link, ef) {
+// 		Elf64_Shdr *di_sec = elf_find_section_by_name(ef, ".debug_info");
+// 		Elf64_Shdr *da_sec = elf_find_section_by_name(ef, ".debug_abbrev");
+// 		uint32_t in_ef_cu_offset = 0;
 
-		while (in_ef_cu_offset < di_sec->sh_size) {
-			struct dwarf_unit_header *cu_header = di_base + cu_offset;
-			check_cu_header(cu_header);
-			cu_header->abbrev_offset += da_offset;
-			/*
-			 * each cu have additional 4 bytes,
-			 * because length doesn't count itself's space.
-			 */
-			cu_offset += cu_header->length + 4;
-			in_ef_cu_offset += cu_header->length + 4;
-		}
+// 		while (in_ef_cu_offset < di_sec->sh_size) {
+// 			struct dwarf_unit_header *cu_header = di_base + cu_offset;
+// 			check_cu_header(cu_header);
+// 			cu_header->abbrev_offset += da_offset;
+// 			/*
+// 			 * each cu have additional 4 bytes,
+// 			 * because length doesn't count itself's space.
+// 			 */
+// 			cu_offset += cu_header->length + 4;
+// 			in_ef_cu_offset += cu_header->length + 4;
+// 		}
 
-		da_offset += da_sec->sh_size;
-	}
-}
+// 		da_offset += da_sec->sh_size;
+// 	}
+// }
 
-Dwarf_Debug dwarf_init(const char *path)
-{
-	static char true_pathbuf[FILENAME_MAX];
-	Dwarf_Debug dbg = 0;
-	int res;
+// Dwarf_Debug dwarf_init(const char *path)
+// {
+// 	static char true_pathbuf[FILENAME_MAX];
+// 	Dwarf_Debug dbg = 0;
+// 	int res;
 
-	res = dwarf_init_path(
-		path, true_pathbuf,
-		FILENAME_MAX, DW_GROUPNUMBER_ANY, NULL,
-		NULL, &dbg, NULL
-	);
+// 	res = dwarf_init_path(
+// 		path, true_pathbuf,
+// 		FILENAME_MAX, DW_GROUPNUMBER_ANY, NULL,
+// 		NULL, &dbg, NULL
+// 	);
 
-	if (res != DW_DLV_OK)
-		return NULL;
+// 	if (res != DW_DLV_OK)
+// 		return NULL;
 
-	return dbg;
-}
+// 	return dbg;
+// }
 
-int dwarf_get_first_die_of_next_cu(Dwarf_Debug dbg, Dwarf_Die* first_die)
-{
-	int ret;
-	// Dwarf_Error error;
-	ret = dwarf_next_cu_header_d(dbg, true, NULL, NULL, NULL, NULL, 
-		NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+// int dwarf_get_first_die_of_next_cu(Dwarf_Debug dbg, Dwarf_Die* first_die)
+// {
+// 	int ret;
+// 	// Dwarf_Error error;
+// 	ret = dwarf_next_cu_header_d(dbg, true, NULL, NULL, NULL, NULL, 
+// 		NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 
-	/* no next cu */
-	if (ret == DW_DLV_NO_ENTRY)
-		return ret;
+// 	/* no next cu */
+// 	if (ret == DW_DLV_NO_ENTRY)
+// 		return ret;
 
-	if (ret != DW_DLV_OK) {
-		si_panic("dwarf_next_cu_header_d ERROR, ret: %d\n", ret);
-		return ret;
-	}
-	//  else printf("OK\n");
+// 	if (ret != DW_DLV_OK) {
+// 		si_panic("dwarf_next_cu_header_d ERROR, ret: %d\n", ret);
+// 		return ret;
+// 	}
+// 	//  else printf("OK\n");
 
-	ret = dwarf_siblingof_b(dbg, NULL, true, first_die, NULL);
-	/*
-	 * if there is no entry, dwarf_siblingof_b will return DW_DLV_NO_ENTRY,
-	 * but now we just ignore this condition for quick dev.
-	 */
-	if (ret != DW_DLV_OK) {
-		si_panic("dwarf_siblingof_b ERROR %d\n", ret);
-		return ret;
-	}
-	return ret;
-}
+// 	ret = dwarf_siblingof_b(dbg, NULL, true, first_die, NULL);
+// 	/*
+// 	 * if there is no entry, dwarf_siblingof_b will return DW_DLV_NO_ENTRY,
+// 	 * but now we just ignore this condition for quick dev.
+// 	 */
+// 	if (ret != DW_DLV_OK) {
+// 		si_panic("dwarf_siblingof_b ERROR %d\n", ret);
+// 		return ret;
+// 	}
+// 	return ret;
+// }
 
-struct dwarf_bias_info {
-	uint64_t text;
-	uint64_t debug_str;
-	uint64_t debug_line_str;
-};
+// struct dwarf_bias_info {
+// 	uint64_t text;
+// 	uint64_t debug_str;
+// 	uint64_t debug_line_str;
+// };
 
-int dwarf_modify_di_abbrev(Dwarf_Die die, void *di_ptr, struct dwarf_bias_info *bias_info)
-{
-	Dwarf_Debug dbg = die->di_cu_context->cc_dbg;
-	Dwarf_Byte_Ptr die_info_end =
-		_dwarf_calculate_info_section_end_ptr(die->di_cu_context);
-	void *abbrev_ptr = die->di_debug_ptr;
-	Dwarf_Error error;
+// int dwarf_modify_di_abbrev(Dwarf_Die die, void *di_ptr, struct dwarf_bias_info *bias_info)
+// {
+// 	Dwarf_Debug dbg = die->di_cu_context->cc_dbg;
+// 	Dwarf_Byte_Ptr die_info_end =
+// 		_dwarf_calculate_info_section_end_ptr(die->di_cu_context);
+// 	void *abbrev_ptr = die->di_debug_ptr;
+// 	Dwarf_Error error;
 
-	Dwarf_Unsigned unused = 0;
-	Dwarf_Unsigned len;
-	int ret = dwarf_decode_leb128(
-		abbrev_ptr, &len, &unused, (char *)die_info_end
-	);
-	if (ret != DW_DLV_OK)
-		return ret;
-	abbrev_ptr += len;
-	void *di_base = dbg->de_debug_info.dss_data;
+// 	Dwarf_Unsigned unused = 0;
+// 	Dwarf_Unsigned len;
+// 	int ret = dwarf_decode_leb128(
+// 		abbrev_ptr, &len, &unused, (char *)die_info_end
+// 	);
+// 	if (ret != DW_DLV_OK)
+// 		return ret;
+// 	abbrev_ptr += len;
+// 	void *di_base = dbg->de_debug_info.dss_data;
 
-	for (Dwarf_Unsigned i = 0; i < die->di_abbrev_list->abl_abbrev_count; i++) {
-		Dwarf_Unsigned attr_form = die->di_abbrev_list->abl_form[i];
-		Dwarf_Unsigned sov = 0;
-		int ret;
+// 	for (Dwarf_Unsigned i = 0; i < die->di_abbrev_list->abl_abbrev_count; i++) {
+// 		Dwarf_Unsigned attr_form = die->di_abbrev_list->abl_form[i];
+// 		Dwarf_Unsigned sov = 0;
+// 		int ret;
 
-		/* todo test if this is needed */
-		if (attr_form == DW_FORM_implicit_const) {
-			continue;
-		}
+// 		/* todo test if this is needed */
+// 		if (attr_form == DW_FORM_implicit_const) {
+// 			continue;
+// 		}
 
-		ret = _dwarf_get_size_of_val(
-			dbg, attr_form,
-			die->di_cu_context->cc_version_stamp,
-			die->di_cu_context->cc_address_size,
-			abbrev_ptr,
-			die->di_cu_context->cc_length_size,
-			&sov,
-			die_info_end,
-			&error
-		);
-		if (ret != DW_DLV_OK)
-			si_panic("_dwarf_get_size_of_val fail, ret: %d\n", ret);
+// 		ret = _dwarf_get_size_of_val(
+// 			dbg, attr_form,
+// 			die->di_cu_context->cc_version_stamp,
+// 			die->di_cu_context->cc_address_size,
+// 			abbrev_ptr,
+// 			die->di_cu_context->cc_length_size,
+// 			&sov,
+// 			die_info_end,
+// 			&error
+// 		);
+// 		if (ret != DW_DLV_OK)
+// 			si_panic("_dwarf_get_size_of_val fail, ret: %d\n", ret);
 
-		uint32_t *dst_ptr = di_ptr + (abbrev_ptr - di_base);
-		switch (die->di_abbrev_list->abl_form[i]) {
-			case DW_FORM_addr:
-				*dst_ptr += bias_info->text;
-				break;
-			case DW_FORM_line_strp:
-				*dst_ptr += bias_info->debug_line_str;
-				break;
-			case DW_FORM_strp:
-				*dst_ptr += bias_info->debug_str;
-				// printf("offset: %lx, *abbrev_ptr: %x *dst_ptr: %x\n",
-				// 	(abbrev_ptr - di_base), 
-				// 	*(uint32_t *)abbrev_ptr, *dst_ptr);
-				break;
-			case DW_FORM_data1:
-			case DW_FORM_data2:
-			case DW_FORM_data4:
-			case DW_FORM_data8:
-				/* no need to modify */
-				break;
-			case DW_FORM_block2:
-			case DW_FORM_string:
-			case DW_FORM_sdata:
-			case DW_FORM_ref4:
-			case DW_FORM_implicit_const:
-			case DW_FORM_exprloc:
-			case DW_FORM_flag_present:
-			case DW_FORM_sec_offset:
-				/* TODO */
-				break;
-			case DW_FORM_block4:
-			case DW_FORM_block:
-			case DW_FORM_block1:
-			case DW_FORM_flag:
-			case DW_FORM_udata:
-			case DW_FORM_ref_addr:
-			case DW_FORM_ref1:
-			case DW_FORM_ref2:
-			case DW_FORM_ref8:
-			case DW_FORM_ref_udata:
-			case DW_FORM_indirect:
-			case DW_FORM_strx:
-			case DW_FORM_addrx:
-			case DW_FORM_addrx1:
-			case DW_FORM_addrx2:
-			case DW_FORM_addrx3:
-			case DW_FORM_addrx4:
-			case DW_FORM_ref_sup4:
-			case DW_FORM_strp_sup:
-			case DW_FORM_data16:
-			case DW_FORM_loclistx:
-			case DW_FORM_rnglistx:
-			case DW_FORM_ref_sup8:
-			case DW_FORM_strx1:
-			case DW_FORM_strx2:
-			case DW_FORM_strx3:
-			case DW_FORM_strx4:
-			case DW_FORM_ref_sig8:
-				/* not present in bash */
-				si_panic("unsupported die FORM 0x%x\n",
-					die->di_abbrev_list->abl_form[i]);
-				break;
-			default:
-				si_panic("unknown die FORM 0x%x\n",
-					die->di_abbrev_list->abl_form[i]);
-				break;
-		}
-		abbrev_ptr += sov;
-	}
+// 		uint32_t *dst_ptr = di_ptr + (abbrev_ptr - di_base);
+// 		switch (die->di_abbrev_list->abl_form[i]) {
+// 			case DW_FORM_addr:
+// 				*dst_ptr += bias_info->text;
+// 				break;
+// 			case DW_FORM_line_strp:
+// 				*dst_ptr += bias_info->debug_line_str;
+// 				break;
+// 			case DW_FORM_strp:
+// 				*dst_ptr += bias_info->debug_str;
+// 				// printf("offset: %lx, *abbrev_ptr: %x *dst_ptr: %x\n",
+// 				// 	(abbrev_ptr - di_base), 
+// 				// 	*(uint32_t *)abbrev_ptr, *dst_ptr);
+// 				break;
+// 			case DW_FORM_data1:
+// 			case DW_FORM_data2:
+// 			case DW_FORM_data4:
+// 			case DW_FORM_data8:
+// 				/* no need to modify */
+// 				break;
+// 			case DW_FORM_block2:
+// 			case DW_FORM_string:
+// 			case DW_FORM_sdata:
+// 			case DW_FORM_ref4:
+// 			case DW_FORM_implicit_const:
+// 			case DW_FORM_exprloc:
+// 			case DW_FORM_flag_present:
+// 			case DW_FORM_sec_offset:
+// 				/* TODO */
+// 				break;
+// 			case DW_FORM_block4:
+// 			case DW_FORM_block:
+// 			case DW_FORM_block1:
+// 			case DW_FORM_flag:
+// 			case DW_FORM_udata:
+// 			case DW_FORM_ref_addr:
+// 			case DW_FORM_ref1:
+// 			case DW_FORM_ref2:
+// 			case DW_FORM_ref8:
+// 			case DW_FORM_ref_udata:
+// 			case DW_FORM_indirect:
+// 			case DW_FORM_strx:
+// 			case DW_FORM_addrx:
+// 			case DW_FORM_addrx1:
+// 			case DW_FORM_addrx2:
+// 			case DW_FORM_addrx3:
+// 			case DW_FORM_addrx4:
+// 			case DW_FORM_ref_sup4:
+// 			case DW_FORM_strp_sup:
+// 			case DW_FORM_data16:
+// 			case DW_FORM_loclistx:
+// 			case DW_FORM_rnglistx:
+// 			case DW_FORM_ref_sup8:
+// 			case DW_FORM_strx1:
+// 			case DW_FORM_strx2:
+// 			case DW_FORM_strx3:
+// 			case DW_FORM_strx4:
+// 			case DW_FORM_ref_sig8:
+// 				/* not present in bash */
+// 				si_panic("unsupported die FORM 0x%x\n",
+// 					die->di_abbrev_list->abl_form[i]);
+// 				break;
+// 			default:
+// 				si_panic("unknown die FORM 0x%x\n",
+// 					die->di_abbrev_list->abl_form[i]);
+// 				break;
+// 		}
+// 		abbrev_ptr += sov;
+// 	}
 
-	return DW_DLV_OK;
-}
+// 	return DW_DLV_OK;
+// }
 
-int dwarf_traverse_die(Dwarf_Debug dbg, Dwarf_Die parent_die,
-		       void *di_ptr, struct dwarf_bias_info *bias_info)
-{
-	Dwarf_Die son_die;
-	int res;
+// int dwarf_traverse_die(Dwarf_Debug dbg, Dwarf_Die parent_die,
+// 		       void *di_ptr, struct dwarf_bias_info *bias_info)
+// {
+// 	Dwarf_Die son_die;
+// 	int res;
 
-	dwarf_modify_di_abbrev(parent_die, di_ptr, bias_info);
+// 	dwarf_modify_di_abbrev(parent_die, di_ptr, bias_info);
 
-	res = dwarf_child(parent_die, &son_die, NULL);
-	while (res == DW_DLV_OK) {
-		dwarf_traverse_die(dbg, son_die, di_ptr, bias_info);
-		res = dwarf_siblingof_b(dbg, son_die, true, &son_die, NULL);
-	}
-	if (res == DW_DLV_NO_ENTRY) {
-		// no more child
-		return DW_DLV_OK;
-	} else {
-		printf("dwarf_child or dwarf_siblingof_b ERROR\n");
-		return res;
-	}
-}
+// 	res = dwarf_child(parent_die, &son_die, NULL);
+// 	while (res == DW_DLV_OK) {
+// 		dwarf_traverse_die(dbg, son_die, di_ptr, bias_info);
+// 		res = dwarf_siblingof_b(dbg, son_die, true, &son_die, NULL);
+// 	}
+// 	if (res == DW_DLV_NO_ENTRY) {
+// 		// no more child
+// 		return DW_DLV_OK;
+// 	} else {
+// 		printf("dwarf_child or dwarf_siblingof_b ERROR\n");
+// 		return res;
+// 	}
+// }
 
-void dwarf_traverse_cu(Dwarf_Debug dbg, void *di_ptr, struct dwarf_bias_info *bias_info)
-{
-	int res = 0;
+// void dwarf_traverse_cu(Dwarf_Debug dbg, void *di_ptr, struct dwarf_bias_info *bias_info)
+// {
+// 	int res = 0;
 
-	Dwarf_Die first_die;
-	for (;;) {
-		res = dwarf_get_first_die_of_next_cu(dbg, &first_die);
-		if (res == DW_DLV_NO_ENTRY) {
-			/* no entry */
-			break;
-		}
-		dwarf_traverse_die(dbg, first_die, di_ptr, bias_info);
-	}
-}
+// 	Dwarf_Die first_die;
+// 	for (;;) {
+// 		res = dwarf_get_first_die_of_next_cu(dbg, &first_die);
+// 		if (res == DW_DLV_NO_ENTRY) {
+// 			/* no entry */
+// 			break;
+// 		}
+// 		dwarf_traverse_die(dbg, first_die, di_ptr, bias_info);
+// 	}
+// }
 
-/* delete it later */
-char *temp_get_file_name(char *name)
-{
-	char *result = malloc(strlen(name));
-	memset(result, 0, strlen(name));
-	memcpy(result, name, strlen(name) - 11);
-	return result;
-}
+// /* delete it later */
+// char *temp_get_file_name(char *name)
+// {
+// 	char *result = malloc(strlen(name));
+// 	memset(result, 0, strlen(name));
+// 	memcpy(result, name, strlen(name) - 11);
+// 	return result;
+// }
 
-void prep_bias_info(elf_link_t *elf_link, elf_file_t *ef, struct dwarf_bias_info *bias_info)
-{
-	/* .text starts from .init */
-	unsigned long text_base_addr =
-		elf_find_section_by_name(ef, ".init")->sh_addr;
-	unsigned long ds_base_offset =
-		elf_find_section_by_name(get_out_ef(elf_link), ".debug_str")->sh_offset;
-	unsigned long dls_base_offset =
-		elf_find_section_by_name(get_out_ef(elf_link), ".debug_line_str")->sh_offset;
+// void prep_bias_info(elf_link_t *elf_link, elf_file_t *ef, struct dwarf_bias_info *bias_info)
+// {
+// 	/* .text starts from .init */
+// 	unsigned long text_base_addr =
+// 		elf_find_section_by_name(ef, ".init")->sh_addr;
+// 	unsigned long ds_base_offset =
+// 		elf_find_section_by_name(get_out_ef(elf_link), ".debug_str")->sh_offset;
+// 	unsigned long dls_base_offset =
+// 		elf_find_section_by_name(get_out_ef(elf_link), ".debug_line_str")->sh_offset;
 
-	Elf64_Shdr *text_sec = elf_find_section_by_name(ef, ".init");
-	unsigned long text_addr = get_new_addr_by_old_addr(
-		elf_link, ef, text_sec->sh_addr
-	);
-	Elf64_Shdr *ds_sec = elf_find_section_by_name(ef, ".debug_str");
-	unsigned long ds_offset = get_new_offset_by_old_offset(
-		elf_link, ef, ds_sec->sh_offset
-	);
-	Elf64_Shdr *dls_sec = elf_find_section_by_name(ef, ".debug_line_str");
-	unsigned long dls_offset = get_new_offset_by_old_offset(
-		elf_link, ef, dls_sec->sh_offset
-	);
+// 	Elf64_Shdr *text_sec = elf_find_section_by_name(ef, ".init");
+// 	unsigned long text_addr = get_new_addr_by_old_addr(
+// 		elf_link, ef, text_sec->sh_addr
+// 	);
+// 	Elf64_Shdr *ds_sec = elf_find_section_by_name(ef, ".debug_str");
+// 	unsigned long ds_offset = get_new_offset_by_old_offset(
+// 		elf_link, ef, ds_sec->sh_offset
+// 	);
+// 	Elf64_Shdr *dls_sec = elf_find_section_by_name(ef, ".debug_line_str");
+// 	unsigned long dls_offset = get_new_offset_by_old_offset(
+// 		elf_link, ef, dls_sec->sh_offset
+// 	);
 
-	bias_info->text = text_addr - text_base_addr;
-	bias_info->debug_str = ds_offset - ds_base_offset;
-	bias_info->debug_line_str = dls_offset - dls_base_offset;
-	SI_LOG_DEBUG("%s, text: %lx, debug_str: %lx, debug_line_str: %lx\n",
-		ef->file_name,
-		bias_info->text, bias_info->debug_str, bias_info->debug_line_str);
-	SI_LOG_DEBUG("text_addr: %lx, out_text_base_addr: %lx\n",
-		text_addr, text_base_addr);
-}
+// 	bias_info->text = text_addr - text_base_addr;
+// 	bias_info->debug_str = ds_offset - ds_base_offset;
+// 	bias_info->debug_line_str = dls_offset - dls_base_offset;
+// 	SI_LOG_DEBUG("%s, text: %lx, debug_str: %lx, debug_line_str: %lx\n",
+// 		ef->file_name,
+// 		bias_info->text, bias_info->debug_str, bias_info->debug_line_str);
+// 	SI_LOG_DEBUG("text_addr: %lx, out_text_base_addr: %lx\n",
+// 		text_addr, text_base_addr);
+// }
 
-int modify_debug_info(elf_link_t *elf_link)
-{
-	elf_file_t *ef;
-	char *temp_path;
-	struct dwarf_bias_info bias_info;
+// int modify_debug_info(elf_link_t *elf_link)
+// {
+// 	elf_file_t *ef;
+// 	char *temp_path;
+// 	struct dwarf_bias_info bias_info;
 
-	foreach_infile(elf_link, ef) {
-		Elf64_Shdr *di_sec = elf_find_section_by_name(ef, ".debug_info");
-		unsigned long dst_offset = get_new_offset_by_old_offset(
-			elf_link, ef, di_sec->sh_offset
-		);
-		void *di_ptr = get_out_ef(elf_link)->data + dst_offset;
-		prep_bias_info(elf_link, ef, &bias_info);
+// 	foreach_infile(elf_link, ef) {
+// 		Elf64_Shdr *di_sec = elf_find_section_by_name(ef, ".debug_info");
+// 		unsigned long dst_offset = get_new_offset_by_old_offset(
+// 			elf_link, ef, di_sec->sh_offset
+// 		);
+// 		void *di_ptr = get_out_ef(elf_link)->data + dst_offset;
+// 		prep_bias_info(elf_link, ef, &bias_info);
 
-		temp_path = temp_get_file_name(ef->file_name);
-		Dwarf_Debug dbg = dwarf_init(temp_path);
-		if (!dbg)
-			si_panic("dwarf_init fail, file: %s\n", temp_path);
-		dwarf_traverse_cu(dbg, di_ptr, &bias_info);
-		dwarf_finish(dbg);
-	}
-	return 0;
-}
+// 		temp_path = temp_get_file_name(ef->file_name);
+// 		Dwarf_Debug dbg = dwarf_init(temp_path);
+// 		if (!dbg)
+// 			si_panic("dwarf_init fail, file: %s\n", temp_path);
+// 		dwarf_traverse_cu(dbg, di_ptr, &bias_info);
+// 		dwarf_finish(dbg);
+// 	}
+// 	return 0;
+// }
 
-static void modify_debug(elf_link_t *elf_link)
-{
-	modify_debug_info_abbrev_offset(elf_link);
-	modify_debug_info(elf_link);
-}
+// static void modify_debug(elf_link_t *elf_link)
+// {
+// 	modify_debug_info_abbrev_offset(elf_link);
+// 	modify_debug_info(elf_link);
+// }
 
 /* debug modify end */
 
@@ -1867,7 +1867,7 @@ int elf_link_write(elf_link_t *elf_link)
 	// .rela.init .rela.text .rela.rodata .rela.tdata .rela.init_array .rela.data
 	modify_local_call(elf_link);
 
-	modify_debug(elf_link);	
+	//modify_debug(elf_link);	
 
 	// modify ELF header and write sections
 	modify_elf_header(elf_link);

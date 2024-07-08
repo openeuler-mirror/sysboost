@@ -77,40 +77,40 @@ static char *global_symbol_names[] = {
 #endif
 };
 
-#ifdef CONFIG_X86
-// p4d_alloc -> __p4d_alloc
-#define p4d_alloc rto_p4d_alloc
-static inline p4d_t *rto_p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
-		unsigned long address)
-{
-	return (unlikely(pgd_none(*pgd)) && ppl_sym.__p4d_alloc(mm, pgd, address)) ?
-		NULL : p4d_offset(pgd, address);
-}
+// #ifdef CONFIG_X86
+// // p4d_alloc -> __p4d_alloc
+// #define p4d_alloc rto_p4d_alloc
+// static inline p4d_t *rto_p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
+// 		unsigned long address)
+// {
+// 	return (unlikely(pgd_none(*pgd)) && ppl_sym.__p4d_alloc(mm, pgd, address)) ?
+// 		NULL : p4d_offset(pgd, address);
+// }
 
-// pud_trans_unstable()
-//     pud_none_or_trans_huge_or_dev_or_clear_bad()
-//         pud_clear_bad()
-#define pud_trans_unstable rto_pud_trans_unstable
+// // pud_trans_unstable()
+// //     pud_none_or_trans_huge_or_dev_or_clear_bad()
+// //         pud_clear_bad()
+// #define pud_trans_unstable rto_pud_trans_unstable
 
-static inline int rto_pud_none_or_trans_huge_or_dev_or_clear_bad(pud_t *pud)
-{
-	pud_t pudval = READ_ONCE(*pud);
+// static inline int rto_pud_none_or_trans_huge_or_dev_or_clear_bad(pud_t *pud)
+// {
+// 	pud_t pudval = READ_ONCE(*pud);
 
-	if (pud_none(pudval) || pud_trans_huge(pudval) || pud_devmap(pudval))
-		return 1;
-	if (unlikely(pud_bad(pudval))) {
-		ppl_sym.pud_clear_bad(pud);
-		return 1;
-	}
-	return 0;
-}
+// 	if (pud_none(pudval) || pud_trans_huge(pudval) || pud_devmap(pudval))
+// 		return 1;
+// 	if (unlikely(pud_bad(pudval))) {
+// 		ppl_sym.pud_clear_bad(pud);
+// 		return 1;
+// 	}
+// 	return 0;
+// }
 
-static inline int rto_pud_trans_unstable(pud_t *pud)
-{
-	return rto_pud_none_or_trans_huge_or_dev_or_clear_bad(pud);
-}
+// static inline int rto_pud_trans_unstable(pud_t *pud)
+// {
+// 	return rto_pud_none_or_trans_huge_or_dev_or_clear_bad(pud);
+// }
 
-#endif
+// #endif
 
 static int init_symbols(void)
 {
@@ -129,7 +129,7 @@ static vm_fault_t __rto_do_huge_pmd_anonymous_page(struct vm_fault *vmf,
 {
 	struct vm_area_struct *vma = vmf->vma;
 	// pgtable_t pgtable;
-	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
+	//unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
 	vm_fault_t ret = 0;
 
 // vma_set_anonymous(vma);
@@ -166,15 +166,15 @@ static vm_fault_t __rto_do_huge_pmd_anonymous_page(struct vm_fault *vmf,
 	 */
 	// __SetPageUptodate(page);
 
-	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
-	if (unlikely(!pmd_none(*vmf->pmd))) {
-		goto unlock_release;
-	} else {
-		pmd_t entry;
+	// vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	// if (unlikely(!pmd_none(*vmf->pmd))) {
+	// 	goto unlock_release;
+	// } else {
+	// 	pmd_t entry;
 
-		ret = check_stable_address_space(vma->vm_mm);
-		if (ret)
-			goto unlock_release;
+	// 	ret = check_stable_address_space(vma->vm_mm);
+	// 	if (ret)
+	// 		goto unlock_release;
 
 		/* Deliver the page fault to userland */
 		// if (userfaultfd_missing(vma)) {
@@ -188,7 +188,7 @@ static vm_fault_t __rto_do_huge_pmd_anonymous_page(struct vm_fault *vmf,
 		// 	return ret2;
 		// }
 
-		entry = mk_huge_pmd(page, vma->vm_page_prot);
+		//entry = mk_huge_pmd(page, vma->vm_page_prot);
 		// we don't need write access for text segment.
 		// entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
 
@@ -199,26 +199,26 @@ static vm_fault_t __rto_do_huge_pmd_anonymous_page(struct vm_fault *vmf,
 		// we won't split thp, no need to deposit
 		// pgtable_trans_huge_deposit(vma->vm_mm, vmf->pmd, pgtable);
 
-		set_pmd_at(vma->vm_mm, haddr, vmf->pmd, entry);
+		//set_pmd_at(vma->vm_mm, haddr, vmf->pmd, entry);
 		// pr_info("set_pmd_at entry: 0x%pK, entry_size: %d\n",
 			// entry, sizeof(entry));
 		// add_mm_counter(vma->vm_mm, MM_ANONPAGES, HPAGE_PMD_NR);
 		// reliable_page_counter(page, vma->vm_mm, HPAGE_PMD_NR);
-		mm_inc_nr_ptes(vma->vm_mm);
-		spin_unlock(vmf->ptl);
+		//mm_inc_nr_ptes(vma->vm_mm);
+		//spin_unlock(vmf->ptl);
 
 		// count_vm_event(THP_FAULT_ALLOC);
 		// count_memcg_event_mm(vma->vm_mm, THP_FAULT_ALLOC);
-	}
+	//}
 
-	return 0;
-unlock_release:
-	spin_unlock(vmf->ptl);
+// 	return 0;
+// unlock_release:
+// 	spin_unlock(vmf->ptl);
 // release:
 	// if (pgtable)
 	// 	pte_free(vma->vm_mm, pgtable);
 	// put_page(page);
-	return ret;
+	// return ret;
 
 }
 
@@ -371,7 +371,7 @@ retry_pud:
 	// 	}
 	// }
 
-	pmd = pmd_offset(vmf.pud, address);
+	//pmd = pmd_offset(vmf.pud, address);
 	// if (pmd)
 		// pr_info("pmd: %pK\n", pmd);
 	// else
@@ -380,10 +380,10 @@ retry_pud:
 	if (!vmf.pmd)
 		return VM_FAULT_OOM;
 	
-	if (!pmd_none(*vmf.pmd)) {
-		// pr_info("vmf.pmd: %pK, value: 0x%lx, return\n", vmf.pmd, pmd_val(*vmf.pmd));
-		return VM_FAULT_OOM;
-	}
+	// if (!pmd_none(*vmf.pmd)) {
+	// 	// pr_info("vmf.pmd: %pK, value: 0x%lx, return\n", vmf.pmd, pmd_val(*vmf.pmd));
+	// 	return VM_FAULT_OOM;
+	// }
 
 	/* Huge pud page fault raced with pmd_alloc? */
 	if (pud_trans_unstable(vmf.pud))
@@ -391,21 +391,20 @@ retry_pud:
 
 	// if (pmd_none(*vmf.pmd) && __transparent_hugepage_enabled(vma)) {
 		ret = create_huge_pmd(&vmf, hpage);
-		if (debug) {
-			if (vmf.pmd) {
-				pr_info("vmf.pmd: %pK, value: 0x%llx, pmd_trans_huge: 0x%d\n",
-					vmf.pmd, pmd_val(*vmf.pmd), pmd_trans_huge(*pmd));
-			} else {
-				pr_info("vmf.pmd is null\n");
-			}
-		}
+		// if (debug) {
+		// 	if (vmf.pmd) {
+		// 		//pr_info("vmf.pmd: %pK, value: 0x%llx, pmd_trans_huge: 0x%d\n",
+		// 			//vmf.pmd, pmd_val(*vmf.pmd), pmd_trans_huge(*pmd));
+		// 	} else {
+		// 		pr_info("vmf.pmd is null\n");
+		// 	}
+		// }
 		if (!(ret & VM_FAULT_FALLBACK))
 			return ret;
 	// }
 	
 
-	BUG();
-	return 0;
+	return -ENOMEM;
 }
 
 /*
@@ -445,8 +444,8 @@ static vm_fault_t rto_handle_mm_fault(struct vm_area_struct *vma, unsigned long 
 	// else
 		ret = __rto_handle_mm_fault(vma, address, flags, hpage);
 
-	if (flags & FAULT_FLAG_USER) {
-		mem_cgroup_exit_user_fault();
+	// if (flags & FAULT_FLAG_USER) {
+	// 	mem_cgroup_exit_user_fault();
 		/*
 		 * The task may have entered a memcg OOM situation but
 		 * if the allocation error was handled gracefully (no
@@ -456,7 +455,7 @@ static vm_fault_t rto_handle_mm_fault(struct vm_area_struct *vma, unsigned long 
 		// TODO don't consider oom now
 		// if (task_in_memcg_oom(current) && !(ret & VM_FAULT_OOM))
 		// 	mem_cgroup_oom_synchronize(false);
-	}
+	//}
 
 	// mm_account_fault(regs, address, flags, ret);
 
@@ -469,7 +468,7 @@ static vm_fault_t rto_handle_mm_fault(struct vm_area_struct *vma, unsigned long 
  * is, *@locked will be set to 0 and -EBUSY returned.
  */
 static int rto_faultin_page(struct vm_area_struct *vma,
-	unsigned long address, unsigned int *flags, int *locked, struct page *hpage)
+	unsigned long address, unsigned int *flags, bool unshare, int *locked, struct page *hpage)
 {
 	unsigned int fault_flags = 0;
 	vm_fault_t ret;
@@ -492,6 +491,11 @@ static int rto_faultin_page(struct vm_area_struct *vma,
 		 */
 		fault_flags |= FAULT_FLAG_TRIED;
 	}
+	// if (unshare) {
+	// 	fault_flags |= FAULT_FLAG_UNSHARE;
+	// 	/* FAULT_FLAG_WRITE and FAULT_FLAG_UNSHARE are incompatible */
+	// 	VM_BUG_ON(fault_flags & FAULT_FLAG_WRITE);
+	// }
 
 	ret = rto_handle_mm_fault(vma, address, fault_flags, NULL, hpage);
 	if (ret & VM_FAULT_ERROR) {
@@ -517,8 +521,8 @@ static int rto_faultin_page(struct vm_area_struct *vma,
 	 * which a read fault here might prevent (a readonly page might get
 	 * reCOWed by userspace write).
 	 */
-	if ((ret & VM_FAULT_WRITE) && !(vma->vm_flags & VM_WRITE))
-		*flags |= FOLL_COW;
+	// if ((ret & VM_FAULT_WRITE) && !(vma->vm_flags & VM_WRITE))
+	// 	*flags |= FOLL_COW;
 	return 0;
 }
 
@@ -607,11 +611,11 @@ static long rto_get_user_pages(struct mm_struct *mm,
 	 * fault information is unrelated to the reference behaviour of a task
 	 * using the address space
 	 */
-	if (!(gup_flags & FOLL_FORCE))
-		gup_flags |= FOLL_NUMA;
+	// if (!(gup_flags & FOLL_FORCE))
+	// 	gup_flags |= FOLL_NUMA;
 
 	do {
-		struct page *page, *hpage, *new_hpage;
+		struct page *page = NULL, *hpage, *new_hpage;
 		unsigned int foll_flags = gup_flags;
 		unsigned int page_increm;
 
@@ -636,10 +640,10 @@ static long rto_get_user_pages(struct mm_struct *mm,
 			// 	goto next_page;
 			// }
 
-			// if (!vma || ppl_sym.check_vma_flags(vma, gup_flags)) {
-			// 	ret = -EFAULT;
-			// 	goto out;
-			// }
+			if (!vma) {
+				ret = -EFAULT;
+				goto out;
+			}
 
 			// if (is_vm_hugetlb_page(vma)) {
 			// 	i = follow_hugetlb_page(mm, vma, pages, vmas,
@@ -672,52 +676,55 @@ static long rto_get_user_pages(struct mm_struct *mm,
 		/* TODO try comment here to increase efficiency */
 		// page = ppl_sym.follow_page_mask(vma, start, foll_flags, &ctx);
 		hpage = list_entry(hpage_pos, struct page, lru);
-		if (TestPageNeedCopy(hpage)) {
-			int i;
-			// pr_info("alloc new_hpage for page: 0x%pK\n", hpage);
-			new_hpage = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP,
-						HUGETLB_PAGE_ORDER);
-			if (!new_hpage)
-				BUG();
-			for (i = 0; i < 1000; i++) {
-				get_page(new_hpage);
-			}
-			memcpy(page_to_virt(new_hpage), page_to_virt(hpage), HPAGE_SIZE);
-			hpage = new_hpage;
-		} else {
+		// if (TestPageNeedCopy(hpage)) {
+		// 	int i;
+		// 	// pr_info("alloc new_hpage for page: 0x%pK\n", hpage);
+		// 	new_hpage = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP,
+		// 				HUGETLB_PAGE_ORDER);
+		// 	if (!new_hpage)
+		// 		BUG();
+		// 	for (i = 0; i < 1000; i++) {
+		// 		get_page(new_hpage);
+		// 	}
+		// 	memcpy(page_to_virt(new_hpage), page_to_virt(hpage), HPAGE_SIZE);
+		// 	hpage = new_hpage;
+		// } else {
 			get_page(hpage);
-		}
+		//}
 		if (debug)
 			pr_info("consume hpage 0x%pK, page: 0x%pK\n", hpage, page);
 		if (!page) {
-			ret = rto_faultin_page(vma, start, &foll_flags, locked, hpage);
+			ret = rto_faultin_page(vma, start, &foll_flags, PTR_ERR(page) == -EMLINK, locked, hpage);
 			switch (ret) {
 			case 0:
 				// pr_info("retry\n");
 				goto next_page;
 				// goto retry;
 			case -EBUSY:
+			case -EAGAIN:
 				ret = 0;
 				fallthrough;
 			case -EFAULT:
 			case -ENOMEM:
 			case -EHWPOISON:
 				goto out;
-			case -ENOENT:
-				goto next_page;
+			// case -ENOENT:
+			// 	goto next_page;
+			// }
+			BUG();
 			}
-			BUG();
-		} else if (PTR_ERR(page) == -EEXIST) {
-			/*
-			 * Proper page table entry exists, but no corresponding
-			 * struct page.
-			 */
-			BUG();
-			goto next_page;
-		} else if (IS_ERR(page)) {
-			ret = PTR_ERR(page);
-			goto out;
 		}
+		// } else if (PTR_ERR(page) == -EEXIST) {
+		// 	/*
+		// 	 * Proper page table entry exists, but no corresponding
+		// 	 * struct page.
+		// 	 */
+		// 	BUG();
+		// 	goto next_page;
+		// } else if (IS_ERR(page)) {
+		// 	ret = PTR_ERR(page);
+		// 	goto out;
+		// }
 		// if (pages) {
 		// 	pages[i] = page;
 		// 	flush_anon_page(vma, page, start);
@@ -766,22 +773,29 @@ out:
  * If @locked is non-NULL, it must held for read only and may be
  * released.  If it's released, *@locked will be set to 0.
  */
-static long rto_populate_vma_page_range(struct vm_area_struct *vma,
-	unsigned long start, unsigned long end, int *locked, struct list_head *hpages)
+long rto_populate_vma_page_range(struct vm_area_struct *vma,
+		unsigned long start, unsigned long end, int *locked, struct list_head *hpages)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long nr_pages = (end - start) / PAGE_SIZE;
+	int local_locked = 1;
 	int gup_flags;
+	long ret;
 
-	VM_BUG_ON(start & ~PAGE_MASK);
-	VM_BUG_ON(end   & ~PAGE_MASK);
+	VM_BUG_ON(!PAGE_ALIGNED(start));
+	VM_BUG_ON(!PAGE_ALIGNED(end));
 	VM_BUG_ON_VMA(start < vma->vm_start, vma);
 	VM_BUG_ON_VMA(end   > vma->vm_end, vma);
 	mmap_assert_locked(mm);
 
-	gup_flags = FOLL_TOUCH | FOLL_POPULATE | FOLL_MLOCK;
+	/*
+	 * Rightly or wrongly, the VM_LOCKONFAULT case has never used
+	 * faultin_page() to break COW, so it has no work to do here.
+	 */
 	if (vma->vm_flags & VM_LOCKONFAULT)
-		gup_flags &= ~FOLL_POPULATE;
+		return nr_pages;
+
+	gup_flags = FOLL_TOUCH;
 	/*
 	 * We want to touch writable mappings with a write fault in order
 	 * to break COW, except for shared mappings because these don't COW
@@ -801,8 +815,10 @@ static long rto_populate_vma_page_range(struct vm_area_struct *vma,
 	 * We made sure addr is within a VMA, so the following will
 	 * not result in a stack expansion that recurses back here.
 	 */
-	return rto_get_user_pages(mm, start, nr_pages, gup_flags,
-				NULL, NULL, locked, hpages);
+	ret = rto_get_user_pages(mm, start, nr_pages, gup_flags,
+				NULL, NULL, locked ? locked : &local_locked, hpages);
+	// lru_add_drain();
+	return ret;
 }
 
 int rto_populate(struct file *file, unsigned long vaddr,
