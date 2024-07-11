@@ -18,11 +18,16 @@ mod daemon;
 mod kmod_util;
 mod lib;
 mod netlink_client;
+mod interface;
 
 use crate::config::parse_sysinit_config;
 use crate::coredump_monitor::coredump_monitor_loop;
 use crate::coredump_monitor::parse_crashed_log;
 use crate::daemon::daemon_loop;
+use crate::interface::delete_one_record;
+use crate::interface::gen_bolt_optimize_bin;
+use crate::interface::stop_one_elf;
+use crate::interface::write_back_config;
 use crate::kmod_util::test_kmod;
 use crate::bolt::gen_profile;
 use crate::config::INIT_CONF;
@@ -49,6 +54,13 @@ fn main() {
 	let mut timeout = DEFAULT_TIMEOUT;
 	let mut name = "";
 
+	let mut is_bolt = false;
+	let mut bolt_option = "";
+	let mut profile_path = "";
+	let mut bolt_elf_name = "";
+
+	let mut is_stop = false;
+	let mut stop_elf_name = "";
 	// arg0 is program name, parameter is from arg1
 	for i in 1..args.len() {
 		if args[i].contains("--gen-profile=") {
@@ -67,7 +79,40 @@ fn main() {
 			}
 			continue;
 		}
-
+		if args[i].contains("--gen-bolt=") {
+			if let Some(index) = args[i].find('=') {
+				is_bolt = true;
+				bolt_elf_name = &args[i][index + 1..];
+			} else {
+				parameter_wrong_exit();
+			}
+			continue;
+		}
+		if args[i].contains("--bolt-option=") {
+			if let Some(index) = args[i].find('=') {
+				bolt_option = &args[i][index + 1..];
+			} else {
+				parameter_wrong_exit();
+			}
+			continue;
+		}
+		if args[i].contains("--profile-path=") {
+			if let Some(index) = args[i].find('=') {
+				profile_path = &args[i][index + 1..];
+			} else {
+				parameter_wrong_exit();
+			}
+			continue;
+		}
+		if args[i].contains("--stop=") {
+			if let Some(index) = args[i].find('=') {
+				is_stop = true;
+				stop_elf_name = &args[i][index + 1..];
+			} else {
+				parameter_wrong_exit();
+			}
+			continue;
+		}
 		match args[i].as_str() {
 			"--debug" => {
 				is_debug = true;
@@ -93,6 +138,24 @@ fn main() {
 	// 配置文件解析
 	parse_sysinit_config();
 	parse_crashed_log();
+	//sysboostd --gen-bolt="/path/to/mysqld" --bolt-option="xxx" --profile-path="/path/to/mysqld.profile"
+	if is_bolt {
+		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
+		let ret = gen_bolt_optimize_bin(bolt_elf_name, bolt_option, profile_path);
+		if ret < 0 {
+			std::process::exit(-1);
+		}
+		std::process::exit(write_back_config(bolt_elf_name));
+	}
+	//sysboostd --stop=/path/to/mysqld
+	if is_stop {
+		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
+		let ret = stop_one_elf(stop_elf_name);
+		if ret < 0 {
+			std::process::exit(-1);
+		}
+		std::process::exit(delete_one_record(stop_elf_name));
+	}
 	if is_gen_porfile {
 		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
 		std::process::exit(gen_profile(name, timeout));
