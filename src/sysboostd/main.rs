@@ -40,6 +40,7 @@ use std::thread;
 
 const APP_NAME: &str = "sysboostd";
 const DEFAULT_TIMEOUT: u32 = 10;
+const PROFILE_PATH_DEFAULT: &str = "/usr/lib/sysboost.d/profile/mysqld.profile";
 
 fn parameter_wrong_exit() {
 	println!("parameter is wrong");
@@ -83,24 +84,18 @@ fn main() {
 			if let Some(index) = args[i].find('=') {
 				is_bolt = true;
 				bolt_elf_name = &args[i][index + 1..];
-			} else {
-				parameter_wrong_exit();
 			}
 			continue;
 		}
 		if args[i].contains("--bolt-option=") {
 			if let Some(index) = args[i].find('=') {
 				bolt_option = &args[i][index + 1..];
-			} else {
-				parameter_wrong_exit();
 			}
 			continue;
 		}
 		if args[i].contains("--profile-path=") {
 			if let Some(index) = args[i].find('=') {
 				profile_path = &args[i][index + 1..];
-			} else {
-				parameter_wrong_exit();
 			}
 			continue;
 		}
@@ -108,7 +103,8 @@ fn main() {
 			if let Some(index) = args[i].find('=') {
 				is_stop = true;
 				stop_elf_name = &args[i][index + 1..];
-			} else {
+			}
+			if stop_elf_name.is_empty() {
 				parameter_wrong_exit();
 			}
 			continue;
@@ -140,7 +136,9 @@ fn main() {
 	parse_crashed_log();
 	//sysboostd --gen-bolt="/path/to/mysqld" --bolt-option="xxx" --profile-path="/path/to/mysqld.profile"
 	if is_bolt {
-		logger::init_log_to_console(APP_NAME, log::LevelFilter::Debug);
+		if profile_path.is_empty() {
+			profile_path = PROFILE_PATH_DEFAULT;
+		}
 		let ret = gen_bolt_optimize_bin(bolt_elf_name, bolt_option, profile_path);
 		if ret < 0 {
 			std::process::exit(-1);

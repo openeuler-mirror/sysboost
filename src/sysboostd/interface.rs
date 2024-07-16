@@ -91,7 +91,19 @@ pub fn bolt_add_link(file_name: &str) -> i32 {
 
 pub fn gen_bolt_optimize_bin(name: &str, bolt_option: &str, profile_path: &str) -> i32 {
 	let mut args: Vec<String> = Vec::new();
-	args.push(bolt_option.to_string());
+	if bolt_option.is_empty() {
+		args.push("-reorder-blocks=ext-tsp".to_string());
+		args.push("-reorder-functions=hfsort".to_string());
+		args.push("-split-functions".to_string());
+		args.push("-split-all-cold".to_string());
+		args.push("-split-eh".to_string());
+		args.push("-dyno-stats".to_string());
+	} else {
+		let options: Vec<&str> = bolt_option.split(" ").collect();
+		for option in options{
+			args.push(option.to_string());
+		}
+	}
 	let elf_path = Path::new(name);
 	let elf_path = match fs::canonicalize(elf_path) {
 		Ok(p) => p,
@@ -104,17 +116,14 @@ pub fn gen_bolt_optimize_bin(name: &str, bolt_option: &str, profile_path: &str) 
 	args.push(name.to_string());
 	args.push("-o".to_string());
 	args.push(rto_path.to_str().unwrap().to_string());
+	args.push(format!("-data={}", profile_path));
 	let mut ret = run_child("/usr/bin/llvm-bolt", &args);
-	println!("yp test {}", ret);
 	if ret != 0 {
 		return ret;
 	}
 	ret = set_rto_link_flag(&rto_path.to_str().unwrap().to_string(), true);
-	println!("yp test {}", ret);
 	ret = set_app_link_flag(&name.to_string(), true);
-	println!("yp test {}", ret);
 	ret = bolt_add_link(name);
-	println!("yp test {}", ret);
 	return ret;
 
 }
