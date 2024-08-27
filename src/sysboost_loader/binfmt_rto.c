@@ -10,6 +10,7 @@
  * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
 
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/log2.h>
@@ -19,6 +20,7 @@
 #include <linux/signal.h>
 #include <linux/binfmts.h>
 #include <linux/string.h>
+#include <linux/file.h>
 #include <linux/slab.h>
 #include <linux/personality.h>
 #include <linux/elfcore.h>
@@ -36,6 +38,7 @@
 #include <linux/utsname.h>
 #include <linux/coredump.h>
 #include <linux/sched.h>
+#include <linux/sched/mm.h>
 #include <linux/sched/coredump.h>
 #include <linux/sched/task_stack.h>
 #include <linux/sched/cputime.h>
@@ -51,8 +54,8 @@
 #include <asm/page.h>
 #ifdef CONFIG_X86
 #include <asm/vdso.h>
-/* x86, 22.03 LTS map_vdso is undefine  */
-extern int map_vdso(const struct vdso_image *image, unsigned long addr);
+// /* x86, 22.03 LTS map_vdso is undefine  */
+// extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 #endif
 #include "main.h"
 #include "binfmt_rto.h"
@@ -62,12 +65,13 @@ extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 #endif
 
 #ifdef CONFIG_ELF_SYSBOOST
-#include "../elf_ext.h"
-
-/* compat 22.03 LTS, 22.03 LTS SP2 */
-#ifndef MM_SAVED_AUXV
-#define MM_SAVED_AUXV(mm) mm->saved_auxv
+#include "../elfmerge/elf_ext.h"
 #endif
+
+// /* compat 22.03 LTS, 22.03 LTS SP2 */
+// #ifndef MM_SAVED_AUXV
+// #define MM_SAVED_AUXV(mm) mm->saved_auxv
+// #endif
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
@@ -98,6 +102,11 @@ static struct global_symbols {
 	proc_symbol(task_cputime);
 	proc_symbol(thread_group_cputime);
 	proc_symbol(do_mm_populate);
+	// proc_symbol(elf_core_extra_phdrs);
+	// proc_symbol(elf_core_extra_data_size);
+	// proc_symbol(elf_core_write_extra_phdrs);
+	// proc_symbol(elf_core_write_extra_data);
+	proc_symbol(get_mm_exe_file);
 } rto_sym;
 
 #define proc_symbol_char(x) #x
@@ -128,6 +137,11 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(task_cputime),
 	proc_symbol_char(thread_group_cputime),
 	proc_symbol_char(do_mm_populate),
+	// proc_symbol_char(elf_core_extra_phdrs),
+	// proc_symbol_char(elf_core_extra_data_size),
+	// proc_symbol_char(elf_core_write_extra_phdrs),
+	// proc_symbol_char(elf_core_write_extra_data),
+	proc_symbol_char(get_mm_exe_file),
 };
 
 static int init_symbols(void)
@@ -142,20 +156,6 @@ static int init_symbols(void)
 	return 0;
 }
 
-#ifdef ELF_HWCAP
-#undef ELF_HWCAP
-#define ELF_HWCAP (__cpu_get_elf_hwcap())
-static inline unsigned long __cpu_get_elf_hwcap(void)
-{
-#ifdef CONFIG_ARM64
-	return rto_sym.cpu_get_elf_hwcap();
-#else
-	// x86 boot_cpu_data is export
-	return (boot_cpu_data.x86_capability[CPUID_1_EDX]);
-#endif
-}
-#endif
-
 #ifdef ELF_HWCAP2
 #undef ELF_HWCAP2
 #define ELF_HWCAP2 (__cpu_get_elf_hwcap2())
@@ -166,6 +166,38 @@ static inline unsigned long __cpu_get_elf_hwcap2(void)
 #else
 	// x86 is global val elf_hwcap2, not export
 	return *(u32 *)rto_sym.elf_hwcap2;
+#endif
+}
+#endif
+
+#ifdef CONFIG_ARM64
+#ifdef start_thread
+#undef start_thread
+#endif
+
+#define start_thread ___start_thread
+
+// arm64 start_thread is inline function, so copy it
+static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
+				    unsigned long sp)
+{
+	start_thread_common(regs, pc);
+	regs->pstate = PSR_MODE_EL0t;
+	rto_sym.spectre_v4_enable_task_mitigation(current);
+	regs->sp = sp;
+}
+#endif /* CONFIG_ARM64 */
+
+#ifdef ELF_HWCAP
+#undef ELF_HWCAP
+#define ELF_HWCAP (__cpu_get_elf_hwcap())
+static inline unsigned long __cpu_get_elf_hwcap(void)
+{
+#ifdef CONFIG_ARM64
+	return rto_sym.cpu_get_elf_hwcap();
+#else
+	// x86 boot_cpu_data is export
+	return (boot_cpu_data.x86_capability[CPUID_1_EDX]);
 #endif
 }
 #endif
@@ -194,11 +226,11 @@ do {									\
 // TODO: vdso layout for ARM64
 #define __arch_setup_additional_pages(bprm, uses_interp, load_bias, is_rto_format) (rto_sym.arch_setup_additional_pages(bprm, uses_interp))
 
-#ifdef arch_elf_adjust_prot
-#undef arch_elf_adjust_prot
-#endif
+// #ifdef arch_elf_adjust_prot
+// #undef arch_elf_adjust_prot
+// #endif
 
-#define arch_elf_adjust_prot rto_sym.arch_elf_adjust_prot
+// #define arch_elf_adjust_prot rto_sym.arch_elf_adjust_prot
 
 #else
 // x86
@@ -244,6 +276,21 @@ int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp, un
 
 #endif
 
+
+#ifdef CONFIG_ELF_SYSBOOST
+
+#define AT_RSEQ_FEATURE_SIZE	27	/* rseq supported feature size */
+#define AT_RSEQ_ALIGN		28	/* rseq allocation alignment */
+
+/* compat 22.03 LTS, 22.03 LTS SP2 */
+#ifndef MM_SAVED_AUXV
+#define MM_SAVED_AUXV(mm) mm->saved_auxv
+#endif
+
+#ifdef CONFIG_X86
+extern int map_vdso(const struct vdso_image *image, unsigned long addr);
+#endif
+
 #endif /* CONFIG_ELF_SYSBOOST */
 
 #ifndef ELF_COMPAT
@@ -280,6 +327,12 @@ static int elf_core_dump(struct coredump_params *cprm);
 #define elf_core_dump	NULL
 #endif
 
+#if ELF_EXEC_PAGESIZE > PAGE_SIZE
+#define ELF_MIN_ALIGN	ELF_EXEC_PAGESIZE
+#else
+#define ELF_MIN_ALIGN	PAGE_SIZE
+#endif
+
 #ifndef ELF_CORE_EFLAGS
 #define ELF_CORE_EFLAGS	0
 #endif
@@ -288,8 +341,10 @@ static struct linux_binfmt elf_format = {
 	.module		= THIS_MODULE,
 	.load_binary	= load_rto_binary,
 	.load_shlib	= load_elf_library,
+#ifdef CONFIG_COREDUMP
 	.core_dump	= elf_core_dump,
 	.min_coredump	= ELF_EXEC_PAGESIZE,
+#endif
 };
 
 #define BAD_ADDR(x) (unlikely((unsigned long)(x) >= TASK_SIZE))
@@ -389,6 +444,7 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 	unsigned char k_rand_bytes[16];
 	int items;
 	elf_addr_t *elf_info;
+	elf_addr_t flags = 0;
 	int ei_index;
 	const struct cred *cred = current_cred();
 	struct vm_area_struct *vma;
@@ -560,15 +616,25 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 	return 0;
 }
 
+#ifdef CONFIG_ELF_SYSBOOST
 static unsigned long elf_map(struct file *filep, unsigned long addr,
 		const struct elf_phdr *eppnt, int prot, int type,
 		unsigned long total_size, bool use_pmd_mapping, bool is_exec_seg)
+#else
+static unsigned long elf_map(struct file *filep, unsigned long addr,
+		const struct elf_phdr *eppnt, int prot, int type,
+		unsigned long total_size)
+#endif
 {
-	unsigned long map_addr, size, off;
+	unsigned long map_addr;
+
+#ifdef CONFIG_ELF_SYSBOOST
+	unsigned long size, off;
 
 	if (use_pmd_mapping) {
 		size = eppnt->p_filesz + ELF_HPAGEOFFSET(eppnt->p_vaddr);
 		off = eppnt->p_offset - ELF_HPAGEOFFSET(eppnt->p_vaddr);
+		pr_info("vm_mmap, addr: %lx, size: %lx, off: %lx", addr, size, off);
 		addr = ELF_HPAGESTART(addr);
 		if (is_exec_seg)
 			size = ELF_HPAGEALIGN(size);
@@ -580,6 +646,12 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 		addr = ELF_PAGESTART(addr);
 		size = ELF_PAGEALIGN(size);
 	}
+#else
+	unsigned long size = eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr);
+	unsigned long off = eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr);
+	addr = ELF_PAGESTART(addr);
+	size = ELF_PAGEALIGN(size);
+#endif
 
 	/* mmap() will return -EINVAL if given a zero size, but a
 	 * segment with zero filesize is perfectly valid */
@@ -595,21 +667,24 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 	* the end. (which unmap is needed for ELF images with holes.)
 	*/
 	if (total_size) {
-		if (use_pmd_mapping)
-			total_size = ELF_HPAGEALIGN(total_size);
-		else
+		// if (use_pmd_mapping)
+		// 	total_size = ELF_HPAGEALIGN(total_size);
+		// else
 			total_size = ELF_PAGEALIGN(total_size);
 		if (debug)
 			pr_info("vm_mmap, addr: %lx, total_size: %lx, off: %lx", 
 				addr, total_size, off);
 		map_addr = vm_mmap(filep, addr, total_size, prot, type, off);
-		if (!BAD_ADDR(map_addr))
+		if (!BAD_ADDR(map_addr)) {
 			vm_munmap(map_addr+size, total_size-size);
+			pr_info("vm_mmap total_size, map_addr: %lx", map_addr);
+		}
 	} else {
 		if (debug)
 			pr_info("vm_mmap, addr: %lx, size: %lx, off: %lx", 
 				addr, size, off);
 		map_addr = vm_mmap(filep, addr, size, prot, type, off);
+			pr_info("vm_mmap size, map_addr: %lx", map_addr);
 	}
 
 	if ((type & MAP_FIXED_NOREPLACE) &&
@@ -805,7 +880,7 @@ static inline int make_prot(u32 p_flags, struct arch_elf_state *arch_state,
 	if (p_flags & PF_X)
 		prot |= PROT_EXEC;
 
-	return arch_elf_adjust_prot(prot, arch_state, has_interp, is_interp);
+	return rto_sym.arch_elf_adjust_prot(prot, arch_state, has_interp, is_interp);
 }
 
 /* This is much more generalized than the library routine read function,
@@ -813,10 +888,17 @@ static inline int make_prot(u32 p_flags, struct arch_elf_state *arch_state,
    is only provided so that we can read a.out libraries that have
    an ELF header */
 
+#ifdef CONFIG_ELF_SYSBOOST
 static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 		struct file *interpreter,
 		unsigned long no_base, struct elf_phdr *interp_elf_phdata,
 		struct arch_elf_state *arch_state, bool is_rto_format)
+#else
+static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
+		struct file *interpreter,
+		unsigned long no_base, struct elf_phdr *interp_elf_phdata,
+		struct arch_elf_state *arch_state)
+#endif
 {
 	struct elf_phdr *eppnt;
 	unsigned long load_addr = 0;
@@ -872,9 +954,13 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 			else if (no_base && interp_elf_ex->e_type == ET_DYN)
 				load_addr = -vaddr;
 
+#ifdef CONFIG_ELF_SYSBOOST
 			map_addr = elf_map(interpreter, load_addr + vaddr,
 					eppnt, elf_prot, elf_type, total_size, false, false);
-
+#else
+			map_addr = elf_map(interpreter, load_addr + vaddr,
+					eppnt, elf_prot, elf_type, total_size);
+#endif
 			total_size = 0;
 			error = map_addr;
 			if (BAD_ADDR(map_addr))
@@ -1060,40 +1146,40 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 }
 
 #ifdef CONFIG_ELF_SYSBOOST
-struct file *try_get_rto_file(struct file *file)
-{
-	char *buffer, *rto_path;
-	struct file *rto_file;
+// struct file *try_get_rto_file(struct file *file)
+// {
+// 	char *buffer, *rto_path;
+// 	struct file *rto_file;
 
-	buffer = kmalloc(PATH_MAX, GFP_KERNEL);
-	rto_path = file_path(file, buffer, PATH_MAX - 5);
-	strcat(rto_path, ".rto");
-	rto_file = open_exec(rto_path);
+// 	buffer = kmalloc(PATH_MAX, GFP_KERNEL);
+// 	rto_path = file_path(file, buffer, PATH_MAX - 5);
+// 	strcat(rto_path, ".rto");
+// 	rto_file = open_exec(rto_path);
 
-	kfree(buffer);
-	return rto_file;
-}
+// 	kfree(buffer);
+// 	return rto_file;
+// }
 
-void *load_bprm_buf(struct file *file)
-{
-	ssize_t ret;
-	char *buffer;
-	loff_t pos = 0;
+// void *load_bprm_buf(struct file *file)
+// {
+// 	ssize_t ret;
+// 	char *buffer;
+// 	loff_t pos = 0;
 
-	buffer = kmalloc(BINPRM_BUF_SIZE, GFP_KERNEL);
-	if (!buffer)
-		return ERR_PTR(-ENOMEM);
+// 	buffer = kmalloc(BINPRM_BUF_SIZE, GFP_KERNEL);
+// 	if (!buffer)
+// 		return ERR_PTR(-ENOMEM);
 
-	ret = kernel_read(file, buffer, BINPRM_BUF_SIZE, &pos);
-	if (ret != BINPRM_BUF_SIZE) {
-		kfree(buffer);
-		if (ret < 0)
-			return ERR_PTR(ret);
-		return ERR_PTR(-EIO);
-	}
+// 	ret = kernel_read(file, buffer, BINPRM_BUF_SIZE, &pos);
+// 	if (ret != BINPRM_BUF_SIZE) {
+// 		kfree(buffer);
+// 		if (ret < 0)
+// 			return ERR_PTR(ret);
+// 		return ERR_PTR(-EIO);
+// 	}
 
-	return buffer;
-}
+// 	return buffer;
+// }
 
 static int prepare_rto(struct linux_binprm *bprm)
 {
@@ -1114,14 +1200,17 @@ static inline int try_replace_file(struct linux_binprm *bprm)
 	int ret;
 
 	rto_file = try_get_rto_file(bprm->file);
-	if (IS_ERR(rto_file))
+	if (IS_ERR(rto_file)) {
+		pr_info("try_get_rto_file fail %ld\n", PTR_ERR(rto_file));
 		return PTR_ERR(rto_file);
+	}
 
 	original_file = bprm->file;
 	bprm->file = rto_file;
 	ret = prepare_rto(bprm);
 	if (ret) {
 		bprm->file = original_file;
+		pr_info("prepare_rto fail %d\n", ret);
 		return ret;
 	}
 
@@ -1129,23 +1218,23 @@ static inline int try_replace_file(struct linux_binprm *bprm)
 	return 0;
 }
 
-#ifdef CONFIG_ARM64
-#ifdef start_thread
-#undef start_thread
-#endif
+// #ifdef CONFIG_ARM64
+// #ifdef start_thread
+// #undef start_thread
+// #endif
 
-#define start_thread ___start_thread
+// #define start_thread ___start_thread
 
-// arm64 start_thread is inline function, so copy it
-static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
-				    unsigned long sp)
-{
-	start_thread_common(regs, pc);
-	regs->pstate = PSR_MODE_EL0t;
-	rto_sym.spectre_v4_enable_task_mitigation(current);
-	regs->sp = sp;
-}
-#endif /* CONFIG_ARM64 */
+// // arm64 start_thread is inline function, so copy it
+// static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
+// 				    unsigned long sp)
+// {
+// 	start_thread_common(regs, pc);
+// 	regs->pstate = PSR_MODE_EL0t;
+// 	rto_sym.spectre_v4_enable_task_mitigation(current);
+// 	regs->sp = sp;
+// }
+// #endif /* CONFIG_ARM64 */
 
 #endif /* CONFIG_ELF_SYSBOOST */
 
@@ -1177,7 +1266,7 @@ static int load_rto_binary(struct linux_binprm *bprm)
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long reloc_func_desc __maybe_unused = 0;
 	int executable_stack = EXSTACK_DEFAULT;
-	struct elfhdr *elf_ex;
+	struct elfhdr *elf_ex = (struct elfhdr *)bprm->buf;
 	struct elfhdr *interp_elf_ex = NULL;
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	struct mm_struct *mm;
@@ -1190,36 +1279,51 @@ static int load_rto_binary(struct linux_binprm *bprm)
 	struct loaded_rto *loaded_rto = NULL;
 	struct list_head *preload_seg_pos = NULL;
 	struct loaded_seg *loaded_seg;
+	bool using_hpage = false;
+#endif
+
 	// TODO check rto inode!
 
-load_rto:
-	elf_ex = (struct elfhdr *)bprm->buf;
-	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
-	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
+// load_rto:
+// 	elf_ex = (struct elfhdr *)bprm->buf;
+// 	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
+// 	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
 	retval = -ENOEXEC;
 
+#ifdef CONFIG_ELF_SYSBOOST
 	/* close feature to rmmod this ko */
 	if (!use_rto) {
 		goto out;
 	}
+
+load_rto:
+	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
+	elf_ex = (struct elfhdr *)bprm->buf;
+	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
 	if (!is_rto_format && !is_rto_symbolic_link) {
 		goto out;
 	}
 
 	/* replace app.rto file, then use binfmt */
-	if (is_rto_symbolic_link) {
-		// struct inode *inode = bprm->file->f_inode;
+	// if (is_rto_symbolic_link) {
+	if (is_rto_symbolic_link && !is_rto_format) {
+		struct inode *inode = bprm->file->f_inode;
 		int ret;
-		if (use_hpage)
+
+		if (use_hpage) {
 			loaded_rto = find_loaded_rto(bprm->file->f_inode);
+			using_hpage = true;
+		}
 		ret = try_replace_file(bprm);
 		if (ret) {
 			/* limit print */
-			printk("replace rto file fail, %d\n", ret);
+			pr_info("replace rto file fail, %d\n", ret);
 			goto out;
 		}
-		// pr_info("replace rto file success, loaded_rto: 0x%lx, inode: 0x%lx\n",
-			// loaded_rto, inode);
+		if (debug) {
+			pr_info("replace rto success, loaded_rto: %pK, inode: %pK\n",
+				loaded_rto, inode);
+		}
 		goto load_rto;
 	}
 
@@ -1300,7 +1404,7 @@ load_rto:
 		interp_elf_ex = kmalloc(sizeof(*interp_elf_ex), GFP_KERNEL);
 		if (!interp_elf_ex) {
 			retval = -ENOMEM;
-			goto out_free_ph;
+			goto out_free_file;
 		}
 
 		/* Get the exec headers */
@@ -1409,7 +1513,7 @@ out_free_interp:
 				 executable_stack);
 	if (retval < 0)
 		goto out_free_dentry;
-	
+
 	elf_bss = 0;
 	elf_brk = 0;
 
@@ -1418,25 +1522,29 @@ out_free_interp:
 	start_data = 0;
 	end_data = 0;
 
+#ifdef CONFIG_ELF_SYSBOOST
 	if (loaded_rto)
 		preload_seg_pos = &loaded_rto->segs;
+#endif
 	/* Now we do a little grungy work by mmapping the ELF image into
 	   the correct location in memory. */
 	for(i = 0, elf_ppnt = elf_phdata;
 	    i < elf_ex->e_phnum; i++, elf_ppnt++) {
-		bool is_exec_seg = elf_ppnt->p_flags & PF_X;
 		int elf_prot, elf_flags;
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
 		unsigned long alignment;
+#ifdef CONFIG_ELF_SYSBOOST
 		unsigned long size, off;
+		bool is_exec_seg = !(elf_ppnt->p_flags & PF_W);
+#endif
 
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
 
 		if (unlikely (elf_brk > elf_bss)) {
 			unsigned long nbyte;
-	            
+
 			/* There was a PT_LOAD segment with p_memsz > p_filesz
 			   before this one. Map anonymous pages, if needed,
 			   and clear the area.  */
@@ -1522,11 +1630,37 @@ out_free_interp:
 			 * ELF vaddrs will be correctly offset. The result
 			 * is then page aligned.
 			 */
-			// if (use_hpage)
+#ifdef CONFIG_ELF_SYSBOOST
+			if (using_hpage)
 				load_bias = ELF_HPAGESTART(load_bias - vaddr);
+			else
+				load_bias = ELF_PAGESTART(load_bias - vaddr);
+#else
+			load_bias = ELF_PAGESTART(load_bias - vaddr);
+#endif
+			// if (use_hpage)
+				// load_bias = ELF_HPAGESTART(load_bias - vaddr);
 			// else
 			// 	load_bias = ELF_PAGESTART(load_bias - vaddr);
 
+			/*
+			 * Calculate the entire size of the ELF mapping
+			 * (total_size), used for the initial mapping,
+			 * due to load_addr_set which is set to true later
+			 * once the initial mapping is performed.
+			 *
+			 * Note that this is only sensible when the LOAD
+			 * segments are contiguous (or overlapping). If
+			 * used for LOADs that are far apart, this would
+			 * cause the holes between LOADs to be mapped,
+			 * running the risk of having the mapping fail,
+			 * as it would be larger than the ELF file itself.
+			 *
+			 * As a result, only ET_DYN does this, since
+			 * some ET_EXEC (e.g. ia64) may have large virtual
+			 * memory holes between LOADs.
+			 *
+			 */
 			total_size = total_mapping_size(elf_phdata,
 							elf_ex->e_phnum);
 			if (!total_size) {
@@ -1535,17 +1669,24 @@ out_free_interp:
 			}
 		}
 
+#ifdef CONFIG_ELF_SYSBOOST
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
-				elf_prot, elf_flags, total_size, true, is_exec_seg);
-				// elf_prot, elf_flags, 0, use_hpage);
+				elf_prot, elf_flags, total_size, using_hpage, is_exec_seg);
+#else
+		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
+				elf_prot, elf_flags, total_size);
+#endif
 		if (BAD_ADDR(error)) {
+#ifdef CONFIG_ELF_SYSBOOST
 			if (debug)
-				pr_info("lyt elf_map error: %ld\n", PTR_ERR((void*)error));
-			retval = IS_ERR((void *)error) ?
+				pr_info("elf_map error: %ld\n", PTR_ERR((void*)error));
+#endif
+			retval = IS_ERR_VALUE(error) ?
 				PTR_ERR((void*)error) : -EINVAL;
 			goto out_free_dentry;
 		}
-		if (use_hpage && preload_seg_pos) {
+#ifdef CONFIG_ELF_SYSBOOST
+		if (using_hpage && preload_seg_pos) {
 			preload_seg_pos = preload_seg_pos->next;
 			BUG_ON(preload_seg_pos == &loaded_rto->segs);
 			loaded_seg = list_entry(preload_seg_pos,
@@ -1553,20 +1694,34 @@ out_free_interp:
 			size = elf_ppnt->p_filesz + ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
 			off = elf_ppnt->p_offset - ELF_HPAGEOFFSET(elf_ppnt->p_vaddr);
 			size = ELF_HPAGEALIGN(size);
-			if (debug)
-				pr_info("lyt vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
+			if (debug){
+				pr_info("loaded_seg: %pK\n", loaded_seg);
+				pr_info("elf_map vaddr: 0x%lx, off: 0x%lx, size: 0x%lx\n",
 					error, off, size);
+			}
 			if (is_exec_seg)
 				rto_populate(bprm->file, error, off, size, loaded_seg);
 		}
+#endif
 
 		if (!load_addr_set) {
 			load_addr_set = 1;
 			load_addr = (elf_ppnt->p_vaddr - elf_ppnt->p_offset);
 			if (elf_ex->e_type == ET_DYN) {
+#ifdef CONFIG_ELF_SYSBOOST
+				if (using_hpage) {
+					load_bias += error -
+					             ELF_HPAGESTART(load_bias + vaddr);
+				} else {
+					load_bias += error -
+					             ELF_PAGESTART(load_bias + vaddr);
+				}
+					load_addr += load_bias;
+#else
 				load_bias += error -
-				             ELF_HPAGESTART(load_bias + vaddr);
+				             ELF_PAGESTART(load_bias + vaddr);
 				load_addr += load_bias;
+#endif
 				reloc_func_desc = load_bias;
 			}
 		}
@@ -1615,6 +1770,7 @@ out_free_interp:
 		}
 	}
 
+	pr_info("load success\n");
 	e_entry = elf_ex->e_entry + load_bias;
 	phdr_addr += load_bias;
 	elf_bss += load_bias;
@@ -1638,10 +1794,17 @@ out_free_interp:
 	}
 
 	if (interpreter) {
+#ifdef CONFIG_ELF_SYSBOOST
 		elf_entry = load_elf_interp(interp_elf_ex,
 					    interpreter,
 					    load_bias, interp_elf_phdata,
 					    &arch_state, is_rto_format);
+#else
+		elf_entry = load_elf_interp(interp_elf_ex,
+					    interpreter,
+					    load_bias, interp_elf_phdata,
+					    &arch_state);
+#endif
 		if (!IS_ERR((void *)elf_entry)) {
 			rto_layout_start_addr = elf_entry;
 			/*
@@ -1676,9 +1839,13 @@ out_free_interp:
 	set_binfmt(&elf_format);
 
 #ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
+#ifdef CONFIG_ELF_SYSBOOST
 	retval = __arch_setup_additional_pages(bprm, !!interpreter, load_bias, is_rto_format);
+#else
+	retval = rto_sym.arch_setup_additional_pages(bprm, !!interpreter);
 	if (retval < 0)
 		goto out;
+#endif
 #endif /* ARCH_HAS_SETUP_ADDITIONAL_PAGES */
 
 #ifdef CONFIG_ELF_SYSBOOST
@@ -1765,6 +1932,7 @@ out:
 out_free_dentry:
 	kfree(interp_elf_ex);
 	kfree(interp_elf_phdata);
+out_free_file:
 	allow_write_access(interpreter);
 	if (interpreter)
 		fput(interpreter);
@@ -1983,7 +2151,7 @@ static int fill_psinfo(struct elf_prpsinfo *psinfo, struct task_struct *p,
 {
 	const struct cred *cred;
 	unsigned int i, len;
-	
+
 	/* first copy the parameters from user space */
 	memset(psinfo, 0, sizeof(struct elf_prpsinfo));
 
@@ -2593,6 +2761,21 @@ static void fill_extnum_info(struct elfhdr *elf, struct elf_shdr *shdr4extnum,
 	shdr4extnum->sh_info = segs;
 }
 
+static int set_crash_info(struct file *exe_file, struct crash_info *msg)
+{
+	char *path;
+	char *buf = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!buf) {
+		pr_info("send binary path to sysboostd failed: kmalloc buf failed.\n");
+		return -ENOMEM;
+	}
+	path = file_path(exe_file, buf, PATH_MAX);
+	msg->len = strlen(path);
+	strncpy(msg->path, path, msg->len);
+	kfree(buf);
+	return msg->len;
+}
+
 /*
  * Actual dumper
  *
@@ -2611,7 +2794,39 @@ static int elf_core_dump(struct coredump_params *cprm)
 	struct elf_shdr *shdr4extnum = NULL;
 	Elf_Half e_phnum;
 	elf_addr_t e_shoff;
+	struct crash_info *msg;
+	struct file *exe_file;
+	struct mm_struct *mm;
 
+	pr_info("yp test crash\n");
+
+	/* send binary path to sysboostd */
+	msg = kmalloc(sizeof(struct crash_info), GFP_KERNEL);
+	if (!msg) {
+		pr_info("send binary path to sysboostd failed: kmalloc struct crash_info failed.\n");
+		goto core_dump;
+	}
+	mm = get_task_mm(current);
+	if (!mm) {
+		pr_info("send binary path to sysboostd failed: get task mm failed.\n");
+		goto mm_error;
+	}
+	exe_file = rto_sym.get_mm_exe_file(mm);
+	mmput(mm);
+	if (!exe_file) {
+		pr_info("send binary path to sysboostd failed: get mm exe file failed.\n");
+		goto mm_error;
+	}
+	if (set_crash_info(exe_file, msg) <= 0) {
+		pr_info("send binary path to sysboostd failed: set_crash_info failed.\n");
+		goto crashinfo_error;
+	}
+	send_to_user(msg);
+crashinfo_error:
+	fput(exe_file);
+mm_error:
+	kfree(msg);
+core_dump:
 	/*
 	 * The number of segs are recored into ELF header as 16bit value.
 	 * Please check DEFAULT_MAX_MAP_COUNT definition when you modify here.
@@ -2635,7 +2850,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 
 	has_dumped = 1;
 
-	offset += sizeof(elf);				/* Elf header */
+	offset += sizeof(elf);				/* ELF header */
 	offset += segs * sizeof(struct elf_phdr);	/* Program headers */
 
 	/* Write notes phdr entry */
@@ -2701,7 +2916,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 	if (!elf_core_write_extra_phdrs(cprm, offset))
 		goto end_coredump;
 
- 	/* write out the notes section */
+	/* write out the notes section */
 	if (!write_note_info(&info, cprm))
 		goto end_coredump;
 
