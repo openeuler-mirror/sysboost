@@ -26,7 +26,7 @@ use inotify::{EventMask, Inotify, WatchMask};
 use log::{self};
 use std::fs;
 use std::os::unix::fs as UnixFs;
-use std::path::{Path};
+use std::path::Path;
 use std::thread;
 use std::time::Duration;
 
