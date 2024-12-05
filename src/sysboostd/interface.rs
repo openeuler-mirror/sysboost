@@ -38,7 +38,7 @@ pub fn write_back_config(name: &str) -> i32 {
 pub fn delete_one_record(name: &str) -> i32 {
     let exist = Path::new(&OPTIMIZED_ELF_LOG).exists();
     if !exist {
-            return -1;
+            return 0;
     }
     let file_name = Path::new(&OPTIMIZED_ELF_LOG);
     let rfile = match OpenOptions::new().read(true).open(file_name) {

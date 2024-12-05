@@ -116,7 +116,7 @@ fn clean_last_rto() {
 		let real_path = match fs::canonicalize(&p) {
 			Ok(p) => p,
 			Err(e) => {
-				log::error!("get realpath failed: {}", e);
+				log::warn!("get realpath failed: {}", e);
 				continue;
 			}
 		};
