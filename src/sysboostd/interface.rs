@@ -10,6 +10,9 @@ use crate::coredump_monitor::set_mode;
 use crate::lib::process_ext::run_child;
 use crate::daemon::{SYSBOOST_DB_PATH, self};
 
+use chrono::Utc;
+use chrono::TimeZone;
+
 pub const OPTIMIZED_ELF_LOG: &str = "/etc/sysboost.d/.optimized.log";
 
 pub fn write_back_config(name: &str) -> i32 {
@@ -26,7 +29,8 @@ pub fn write_back_config(name: &str) -> i32 {
                 return -1;
             }
         };
-        let content = format!("{}\n", name);
+        let now = Utc::now();
+        let content = format!("{} optimized elf: {}\n", now.format("%Y-%m-%d %H:%M:%S"), name);
         match file.write_all(content.as_bytes()) {
                 Ok(_) => {return 0;}
                 Err(e) => {
