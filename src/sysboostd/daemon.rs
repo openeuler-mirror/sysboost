@@ -26,7 +26,7 @@ use inotify::{EventMask, Inotify, WatchMask};
 use log::{self};
 use std::fs;
 use std::os::unix::fs as UnixFs;
-use std::path::{Path};
+use std::path::Path;
 use std::thread;
 use std::time::Duration;
 
@@ -116,7 +116,7 @@ fn clean_last_rto() {
 		let real_path = match fs::canonicalize(&p) {
 			Ok(p) => p,
 			Err(e) => {
-				log::error!("get realpath failed: {}", e);
+				log::warn!("get realpath failed: {}", e);
 				continue;
 			}
 		};

@@ -1327,6 +1327,7 @@ static void modify_elf_header(elf_link_t *elf_link)
 	elf_set_hugepage(elf_link);
 }
 
+#ifdef CONFIG_SYSBOOST_STAGING
 /* debug modify start */
 
 #include <libdwarf.h>
@@ -1503,9 +1504,6 @@ int dwarf_modify_di_abbrev(Dwarf_Die die, void *di_ptr, struct dwarf_bias_info *
 				break;
 			case DW_FORM_strp:
 				*dst_ptr += bias_info->debug_str;
-				// printf("offset: %lx, *abbrev_ptr: %x *dst_ptr: %x\n",
-				// 	(abbrev_ptr - di_base), 
-				// 	*(uint32_t *)abbrev_ptr, *dst_ptr);
 				break;
 			case DW_FORM_data1:
 			case DW_FORM_data2:
@@ -1676,6 +1674,7 @@ static void modify_debug(elf_link_t *elf_link)
 }
 
 /* debug modify end */
+#endif /* CONFIG_SYSBOOST_STAGING*/
 
 // .init_array first func is frame_dummy, frame_dummy call register_tm_clones
 // .fini_array first func is __do_global_dtors_aux, __do_global_dtors_aux call deregister_tm_clones
@@ -1866,8 +1865,6 @@ int elf_link_write(elf_link_t *elf_link)
 	// modify local call to use jump
 	// .rela.init .rela.text .rela.rodata .rela.tdata .rela.init_array .rela.data
 	modify_local_call(elf_link);
-
-	modify_debug(elf_link);	
 
 	// modify ELF header and write sections
 	modify_elf_header(elf_link);

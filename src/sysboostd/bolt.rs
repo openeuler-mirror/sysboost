@@ -11,8 +11,9 @@
 
 use crate::common::is_arch_x86_64;
 use crate::config::{RtoConfig, INIT_CONF};
+use crate::daemon::db_add_link;
 use crate::lib::process_ext::run_child;
-use crate::aot::set_rto_link_flag;
+use crate::aot::{set_rto_link_flag, set_app_link_flag};
 
 use std::fs;
 use std::path::Path;
@@ -72,6 +73,8 @@ fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
 		return ret;
 	}
 	ret = set_rto_link_flag(&rto_path.to_str().unwrap().to_string(), true);
+	ret = set_app_link_flag(&conf.elf_path, true);
+	ret = db_add_link(&conf);
 	return ret;
 }
 

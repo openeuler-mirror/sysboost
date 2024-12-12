@@ -37,10 +37,10 @@ lazy_static! {
 }
 
 // 设置SYSBOOST_LOG_PATH的权限仅root可写
-fn set_mode() {
+pub fn set_mode(path: &str) {
         let mut set_mod: Vec<String> = Vec::new();
 	set_mod.push("644".to_string());
-	set_mod.push(SYSBOOST_LOG_PATH.to_string());
+	set_mod.push(path.to_string());
 	let _ = run_child("/usr/bin/chmod", &set_mod);
 }
 
@@ -82,7 +82,7 @@ fn record_crashed_path(path: String) {
         let exist = Path::new(&SYSBOOST_LOG_PATH).exists();
         if !exist {
                 let _ = std::fs::File::create(SYSBOOST_LOG_PATH.to_string());
-                set_mode();
+                set_mode(SYSBOOST_LOG_PATH);
         }
         let file_name = Path::new(&SYSBOOST_LOG_PATH);
         let mut file = match OpenOptions::new().append(true).open(file_name) {
@@ -116,10 +116,7 @@ fn do_rollback(path: &String) -> i32 {
 	}
         // remove link
         let link_path = format!("{}{}.link", SYSBOOST_DB_PATH, binary_name);
-        let exist = Path::new(&link_path).exists();
-        if exist {
-                daemon::db_remove_link(&link_path);
-        }
+        daemon::db_remove_link(&link_path);
      
         // remove bash.rto
         let exist = Path::new(&rto_path).exists();
