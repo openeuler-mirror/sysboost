@@ -54,8 +54,6 @@
 #include <asm/page.h>
 #ifdef CONFIG_X86
 #include <asm/vdso.h>
-// /* x86, 22.03 LTS map_vdso is undefine  */
-// extern int map_vdso(const struct vdso_image *image, unsigned long addr);
 #endif
 #include "main.h"
 #include "binfmt_rto.h"
@@ -67,11 +65,6 @@
 #ifdef CONFIG_ELF_SYSBOOST
 #include "../elfmerge/elf_ext.h"
 #endif
-
-// /* compat 22.03 LTS, 22.03 LTS SP2 */
-// #ifndef MM_SAVED_AUXV
-// #define MM_SAVED_AUXV(mm) mm->saved_auxv
-// #endif
 
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
@@ -102,10 +95,6 @@ static struct global_symbols {
 	proc_symbol(task_cputime);
 	proc_symbol(thread_group_cputime);
 	proc_symbol(do_mm_populate);
-	// proc_symbol(elf_core_extra_phdrs);
-	// proc_symbol(elf_core_extra_data_size);
-	// proc_symbol(elf_core_write_extra_phdrs);
-	// proc_symbol(elf_core_write_extra_data);
 	proc_symbol(get_mm_exe_file);
 } rto_sym;
 
@@ -137,10 +126,6 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(task_cputime),
 	proc_symbol_char(thread_group_cputime),
 	proc_symbol_char(do_mm_populate),
-	// proc_symbol_char(elf_core_extra_phdrs),
-	// proc_symbol_char(elf_core_extra_data_size),
-	// proc_symbol_char(elf_core_write_extra_phdrs),
-	// proc_symbol_char(elf_core_write_extra_data),
 	proc_symbol_char(get_mm_exe_file),
 };
 
@@ -225,12 +210,6 @@ do {									\
 
 // TODO: vdso layout for ARM64
 #define __arch_setup_additional_pages(bprm, uses_interp, load_bias, is_rto_format) (rto_sym.arch_setup_additional_pages(bprm, uses_interp))
-
-// #ifdef arch_elf_adjust_prot
-// #undef arch_elf_adjust_prot
-// #endif
-
-// #define arch_elf_adjust_prot rto_sym.arch_elf_adjust_prot
 
 #else
 // x86
@@ -667,10 +646,7 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 	* the end. (which unmap is needed for ELF images with holes.)
 	*/
 	if (total_size) {
-		// if (use_pmd_mapping)
-		// 	total_size = ELF_HPAGEALIGN(total_size);
-		// else
-			total_size = ELF_PAGEALIGN(total_size);
+		total_size = ELF_PAGEALIGN(total_size);
 		if (debug)
 			pr_info("vm_mmap, addr: %lx, total_size: %lx, off: %lx", 
 				addr, total_size, off);
@@ -1146,41 +1122,6 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 }
 
 #ifdef CONFIG_ELF_SYSBOOST
-// struct file *try_get_rto_file(struct file *file)
-// {
-// 	char *buffer, *rto_path;
-// 	struct file *rto_file;
-
-// 	buffer = kmalloc(PATH_MAX, GFP_KERNEL);
-// 	rto_path = file_path(file, buffer, PATH_MAX - 5);
-// 	strcat(rto_path, ".rto");
-// 	rto_file = open_exec(rto_path);
-
-// 	kfree(buffer);
-// 	return rto_file;
-// }
-
-// void *load_bprm_buf(struct file *file)
-// {
-// 	ssize_t ret;
-// 	char *buffer;
-// 	loff_t pos = 0;
-
-// 	buffer = kmalloc(BINPRM_BUF_SIZE, GFP_KERNEL);
-// 	if (!buffer)
-// 		return ERR_PTR(-ENOMEM);
-
-// 	ret = kernel_read(file, buffer, BINPRM_BUF_SIZE, &pos);
-// 	if (ret != BINPRM_BUF_SIZE) {
-// 		kfree(buffer);
-// 		if (ret < 0)
-// 			return ERR_PTR(ret);
-// 		return ERR_PTR(-EIO);
-// 	}
-
-// 	return buffer;
-// }
-
 static int prepare_rto(struct linux_binprm *bprm)
 {
 	void *buffer;
@@ -1217,24 +1158,6 @@ static inline int try_replace_file(struct linux_binprm *bprm)
 	fput(original_file);
 	return 0;
 }
-
-// #ifdef CONFIG_ARM64
-// #ifdef start_thread
-// #undef start_thread
-// #endif
-
-// #define start_thread ___start_thread
-
-// // arm64 start_thread is inline function, so copy it
-// static inline void ___start_thread(struct pt_regs *regs, unsigned long pc,
-// 				    unsigned long sp)
-// {
-// 	start_thread_common(regs, pc);
-// 	regs->pstate = PSR_MODE_EL0t;
-// 	rto_sym.spectre_v4_enable_task_mitigation(current);
-// 	regs->sp = sp;
-// }
-// #endif /* CONFIG_ARM64 */
 
 #endif /* CONFIG_ELF_SYSBOOST */
 
@@ -1284,10 +1207,6 @@ static int load_rto_binary(struct linux_binprm *bprm)
 
 	// TODO check rto inode!
 
-// load_rto:
-// 	elf_ex = (struct elfhdr *)bprm->buf;
-// 	is_rto_format = elf_ex->e_flags & OS_SPECIFIC_FLAG_RTO;
-// 	is_rto_symbolic_link = IS_SYSBOOST_RTO_SYMBOLIC_LINK(bprm->file->f_inode);
 	retval = -ENOEXEC;
 
 #ifdef CONFIG_ELF_SYSBOOST
@@ -1305,7 +1224,6 @@ load_rto:
 	}
 
 	/* replace app.rto file, then use binfmt */
-	// if (is_rto_symbolic_link) {
 	if (is_rto_symbolic_link && !is_rto_format) {
 		struct inode *inode = bprm->file->f_inode;
 		int ret;
@@ -1638,10 +1556,6 @@ out_free_interp:
 #else
 			load_bias = ELF_PAGESTART(load_bias - vaddr);
 #endif
-			// if (use_hpage)
-				// load_bias = ELF_HPAGESTART(load_bias - vaddr);
-			// else
-			// 	load_bias = ELF_PAGESTART(load_bias - vaddr);
 
 			/*
 			 * Calculate the entire size of the ELF mapping
@@ -2798,7 +2712,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 	struct file *exe_file;
 	struct mm_struct *mm;
 
-	pr_info("yp test crash\n");
+	pr_info("test crash\n");
 
 	/* send binary path to sysboostd */
 	msg = kmalloc(sizeof(struct crash_info), GFP_KERNEL);
