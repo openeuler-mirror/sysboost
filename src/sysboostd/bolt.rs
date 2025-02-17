@@ -41,6 +41,7 @@ fn get_profile_path(conf: &RtoConfig) -> String {
 // support profile
 fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
 	let mut args: Vec<String> = Vec::new();
+	let mut command = String::new();
 
 	args.push("-reorder-blocks=ext-tsp".to_string());
 	args.push("-reorder-functions=hfsort".to_string());
@@ -68,7 +69,14 @@ fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
 	if real_profile_path != "" {
 		args.push(format!("-data={}", real_profile_path));
 	}
-	let mut ret = run_child("/usr/bin/llvm-bolt", &args);
+
+	let bolt_dir = conf.bolt_dir.clone();
+	if bolt_dir.is_empty() {
+		command = "/usr/bin/llvm-bolt".to_string();
+	} else {
+		command = format!("{}/llvm-bolt", bolt_dir);
+	}
+	let mut ret = run_child(&command, &args);
 	if ret != 0 {
 		return ret;
 	}
@@ -80,6 +88,7 @@ fn bolt_optimize_bin(conf: &RtoConfig) -> i32 {
 
 fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
 	let mut args: Vec<String> = Vec::new();
+	let mut command = String::new();
 	let mut ret = 1;
 	// change layout of basic blocks in a function
 	args.push("-reorder-blocks=ext-tsp".to_string());
@@ -110,7 +119,13 @@ fn bolt_optimize_so(conf: &RtoConfig) -> i32 {
 		args.push(lib_bak_path.to_str().unwrap().to_string());
 		args.push("-o".to_string());
 		args.push(lib.split_whitespace().collect());
-		ret = run_child("/usr/bin/llvm-bolt", &args);
+		let bolt_dir = conf.bolt_dir.clone();
+		if bolt_dir.is_empty() {
+			command = "/usr/bin/llvm-bolt".to_string();
+		} else {
+			command = format!("{}/llvm-bolt", bolt_dir);
+		}
+		ret = run_child(&command, &args);
 	}
 	return ret;
 }

@@ -93,8 +93,9 @@ pub fn bolt_add_link(file_name: &str) -> i32 {
 	0
 }
 
-pub fn gen_bolt_optimize_bin(name: &str, bolt_option: &str, profile_path: &str) -> i32 {
+pub fn gen_bolt_optimize_bin(name: &str, bolt_option: &str, profile_path: &str, bolt_dir: &str) -> i32 {
 	let mut args: Vec<String> = Vec::new();
+	let mut command = String::new();
 	if bolt_option.is_empty() {
 		args.push("-reorder-blocks=ext-tsp".to_string());
 		args.push("-reorder-functions=hfsort".to_string());
@@ -121,7 +122,12 @@ pub fn gen_bolt_optimize_bin(name: &str, bolt_option: &str, profile_path: &str) 
 	args.push("-o".to_string());
 	args.push(rto_path.to_str().unwrap().to_string());
 	args.push(format!("-data={}", profile_path));
-	let mut ret = run_child("/usr/bin/llvm-bolt", &args);
+	if bolt_dir.is_empty() {
+		command = "/usr/bin/llvm-bolt".to_string();
+	} else {
+		command = format!("{}/llvm-bolt", bolt_dir);
+	}
+	let mut ret = run_child(&command, &args);
 	if ret != 0 {
 		return ret;
 	}

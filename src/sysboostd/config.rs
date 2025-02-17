@@ -34,6 +34,8 @@ pub struct RtoConfig {
 	pub libs: Vec<String>,  // TODO: 修改为字符串, 列表形式影响可读性
 	// profile文件路径
 	pub profile_path: Option<String>,
+	// llvm-bolt命令文件夹路径
+	pub bolt_dir: String,
 	// 环境变量
 	#[serde(rename = "PATH")]
 	pub path: Option<String>,
@@ -172,6 +174,17 @@ fn parse_rto_config(sec: String, prop: &Properties) {
 			},
 	 	profile_path: prop.get("profile_path").map(|s| s.to_string()),
 		path: prop.get("path").map(|s| s.to_string()),
+		bolt_dir: match prop.get("bolt_dir") {
+			Some(p) => {
+				if p.trim().is_empty() {
+					String::new()
+				}
+				else {
+					p.to_string()
+				}
+			}
+			None => {String::new()}
+			},
 		watch_paths: Vec::new(),
 	};
 	if rtoconf.elf_path == SYSBOOST_PATH || is_mode_invalid(rtoconf.mode.clone()){
