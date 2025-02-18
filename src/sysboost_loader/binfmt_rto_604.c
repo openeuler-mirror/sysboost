@@ -94,6 +94,7 @@ static struct global_symbols {
 	proc_symbol(elf_core_write_extra_phdrs);
 	proc_symbol(elf_core_write_extra_data);
 	proc_symbol(get_mm_exe_file);
+	proc_symbol(find_extend_vma_locked);
 } g_sym;
 
 #define proc_symbol_char(x) #x
@@ -128,6 +129,7 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(elf_core_write_extra_phdrs),
 	proc_symbol_char(elf_core_write_extra_data),
 	proc_symbol_char(get_mm_exe_file),
+	proc_symbol_char(find_extend_vma_locked),
 };
 
 int init_symbols(void)
@@ -539,10 +541,10 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 	 * Grow the stack manually; some architectures have a limit on how
 	 * far ahead a user-space access may be in order to grow the stack.
 	 */
-	if (mmap_read_lock_killable(mm))
+	if (mmap_write_lock_killable(mm))
 		return -EINTR;
-	vma = find_extend_vma(mm, bprm->p);
-	mmap_read_unlock(mm);
+	vma = g_sym.find_extend_vma_locked(mm, bprm->p);
+	mmap_write_unlock(mm);
 	if (!vma)
 		return -EFAULT;
 

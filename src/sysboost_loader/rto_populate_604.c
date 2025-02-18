@@ -22,6 +22,7 @@
 #include <linux/migrate.h>
 #include <linux/mm_inline.h>
 #include <linux/sched/mm.h>
+#include <linux/version.h>
 
 #include <asm/mmu_context.h>
 #include <asm/tlbflush.h>
@@ -39,6 +40,15 @@ struct page *follow_page_mask(struct vm_area_struct *vma,
 			      struct follow_page_context *ctx);
 vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+static struct vm_area_struct *gup_vma_lookup(struct mm_struct *mm,
+	 unsigned long addr);
+
+static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags);
+
+struct vm_area_struct *find_extend_vma_locked(struct mm_struct *mm, unsigned long addr);
+#endif
+
 #define proc_symbol(SYM)	typeof(SYM) *(SYM)
 static struct global_symbols {
 	proc_symbol(follow_page_mask);
@@ -46,6 +56,12 @@ static struct global_symbols {
 	proc_symbol(__anon_vma_prepare);
 	proc_symbol(__pmd_alloc);
 	proc_symbol(do_set_pmd);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	proc_symbol(gup_vma_lookup);
+	proc_symbol(check_vma_flags);
+	proc_symbol(find_extend_vma_locked);
+#endif
+
 #ifdef CONFIG_X86
 	proc_symbol(__p4d_alloc);
 	proc_symbol(pud_clear_bad);
@@ -59,6 +75,11 @@ static char *global_symbol_names[] = {
 	proc_symbol_char(__anon_vma_prepare),
 	proc_symbol_char(__pmd_alloc),
 	proc_symbol_char(do_set_pmd),
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	proc_symbol_char(gup_vma_lookup),
+	proc_symbol_char(check_vma_flags),
+	proc_symbol_char(find_extend_vma_locked),
+#endif
 #ifdef CONFIG_X86
 	proc_symbol_char(__p4d_alloc),
 	proc_symbol_char(pud_clear_bad),
@@ -90,6 +111,10 @@ enum {
 	FOLL_FAST_ONLY = 1 << 20,
 	/* allow unlocking the mmap lock */
 	FOLL_UNLOCKABLE = 1 << 21,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	/* VMA lookup+checks compatible with MADV_POPULATE_(READ|WRITE) */
+	FOLL_MADV_POPULATE = 1 << 22,
+#endif
 };
 
 static vm_fault_t __rto_do_huge_pmd_anonymous_page(struct vm_fault *vmf,
@@ -530,7 +555,27 @@ static long rto_get_user_pages(struct mm_struct *mm,
 
 		/* first iteration or cross vma bound */
 		if (!vma || start >= vma->vm_end) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+			/*
+			 * MADV_POPULATE_(READ|WRITE) wants to handle VMA
+			 * lookups+error reporting differently.
+			 */
+			if (gup_flags & FOLL_MADV_POPULATE) {
+				vma = vma_lookup(mm, start);
+				if (!vma) {
+					ret = -ENOMEM;
+					goto out;
+				}
+				if (ppl_sym.check_vma_flags(vma, gup_flags)) {
+					ret = -EINVAL;
+					goto out;
+				}
+			} else {
+				vma = ppl_sym.gup_vma_lookup(mm, start);
+			}
+#else
 			vma = find_extend_vma(mm, start);
+#endif
 			// if (!vma && in_gate_area(mm, start)) {
 			// 	ret = get_gate_page(mm, start & PAGE_MASK,
 			// 			gup_flags, &vma,
