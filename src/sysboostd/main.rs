@@ -59,6 +59,7 @@ fn main() {
 	let mut bolt_option = "";
 	let mut profile_path = "";
 	let mut bolt_elf_name = "";
+	let mut bolt_dir = "";
 
 	let mut is_stop = false;
 	let mut stop_elf_name = "";
@@ -96,6 +97,12 @@ fn main() {
 		if args[i].contains("--profile-path=") {
 			if let Some(index) = args[i].find('=') {
 				profile_path = &args[i][index + 1..];
+			}
+			continue;
+		}
+		if args[i].contains("--bolt-dir=") {
+			if let Some(index) = args[i].find('=') {
+				bolt_dir = &args[i][index + 1..];
 			}
 			continue;
 		}
@@ -139,7 +146,7 @@ fn main() {
 		if profile_path.is_empty() {
 			profile_path = PROFILE_PATH_DEFAULT;
 		}
-		let ret = gen_bolt_optimize_bin(bolt_elf_name, bolt_option, profile_path);
+		let ret = gen_bolt_optimize_bin(bolt_elf_name, bolt_option, profile_path, bolt_dir);
 		if ret < 0 {
 			std::process::exit(-1);
 		}
