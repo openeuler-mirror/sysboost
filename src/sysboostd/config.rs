@@ -112,7 +112,7 @@ pub fn parse_sysinit_config() {
 	let conf_file = match Ini::load_from_file(SYSBOOST_CONFIG_PATH){
 		Ok(c) => {c}
 		Err(e) => {
-			log::info!("load file {} error: {}",SYSBOOST_CONFIG_PATH, e);
+			log::info!("load file {} failed",SYSBOOST_CONFIG_PATH);
 			return;
 		}
 	};

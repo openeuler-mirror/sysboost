@@ -116,7 +116,7 @@ fn clean_last_rto() {
 		let real_path = match fs::canonicalize(&p) {
 			Ok(p) => p,
 			Err(e) => {
-				log::warn!("get realpath failed: {}", e);
+				log::info!("get realpath failed: {}", e.kind());
 				continue;
 			}
 		};
@@ -189,7 +189,7 @@ fn start_service() {
 	let mut inotify = Inotify::init().unwrap();
 	match inotify.add_watch(SYSBOOST_CONFIG_PATH, WatchMask::MODIFY) {
 		Err(e) => {
-			log::info!("watch init file failed {}", e);
+			log::info!("watch init file failed: {}", e.kind());
 		}
 		_ => {}
 	};

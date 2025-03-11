@@ -147,7 +147,7 @@ fn main() {
 			profile_path = PROFILE_PATH_DEFAULT;
 		}
 		let ret = gen_bolt_optimize_bin(bolt_elf_name, bolt_option, profile_path, bolt_dir);
-		if ret < 0 {
+		if ret != 0 {
 			std::process::exit(-1);
 		}
 		std::process::exit(write_back_config(bolt_elf_name));
