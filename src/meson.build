@@ -4,6 +4,8 @@ if arch_subdir == 'x86'
     cpu_arch = 'x86_64'
 elif arch_subdir == 'arm'
     cpu_arch = 'aarch64'
+elif arch_subdir == 'riscv'
+    cpu_arch = 'riscv64'
 endif
 
 default_cflags = machine_args + ['-Wno-pointer-arith', '-Wno-pedantic']
@@ -27,10 +29,13 @@ if cc.has_argument('-Wno-format-truncation')
 endif
 
 tools = [
-        'static_template',
         'libhook',
         'elfmerge',
 ]
+
+if cpu_arch != 'riscv64'
+  tools += 'static_template'
+endif
 
 default_ldflags += ['-Wl,--whole-archive', '/usr/lib64/libsi_sys.a']
 default_ldflags += ['-Wl,--whole-archive', '/usr/lib64/libsi_array.a']

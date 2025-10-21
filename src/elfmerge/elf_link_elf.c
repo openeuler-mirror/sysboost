@@ -590,7 +590,12 @@ static void modify_tls_segment(elf_link_t *elf_link)
 
 static void write_debug_info(elf_link_t *elf_link)
 {
+#ifdef __riscv
+	(void)elf_link;
+#endif
+#ifndef __riscv
 	merge_debug_sections(elf_link);
+#endif
 }
 
 // .tdata .init_array .fini_array .dynamic .got    .got.plt .data .bss
@@ -931,6 +936,12 @@ static int dynamic_copy_obj(elf_link_t *elf_link, Elf64_Dyn *begin_dyn, int len)
 			sec = find_tmp_section_by_name(elf_link, ".fini_array");
 			new_d_val = sec->sh_size;
 			break;
+#ifdef __riscv
+		case DT_PREINIT_ARRAY:
+			sec = find_tmp_section_by_name(elf_link, ".preinit_array");
+			new_d_val = sec->sh_addr;
+			break;
+#endif
 		default:
 			*dst_dyn = *dyn;
 			dst_dyn++;
@@ -962,7 +973,7 @@ static void scan_dynamic(elf_link_t *elf_link)
 	// DT_PREINIT_ARRAY
 	len = dynamic_add_preinit(elf_link, begin_dyn, len);
 
-	// new addr of INIT FINI  STRTAB  SYMTAB
+	// new addr of INIT FINI  STRTAB  SYMTAB PREINIT_ARRAY
 	len = dynamic_copy_obj(elf_link, begin_dyn, len);
 
 	// modify len
@@ -1102,6 +1113,13 @@ static void modify_symbol(elf_link_t *elf_link, Elf64_Shdr *sec)
 		char *name = elf_get_sym_name(m->src_ef, src_sym);
 		SI_LOG_DEBUG("sym name: %s %s\n", m->src_ef->file_name, name);
 
+#ifdef __riscv
+		// __global_pointer$ value will be changed later
+		if (elf_is_same_symbol_name("__global_pointer$", name)) {
+			continue;
+		}
+#endif
+
 		dst_sym->st_value = get_symbol_new_value(elf_link, m->src_ef, src_sym, name);
 	}
 }
@@ -1236,11 +1254,65 @@ static void modify_dynsym(elf_link_t *elf_link)
 	modify_hash(&elf_link->out_ef, sec, dyn, elf_link->out_ef.dynstr_data);
 }
 
+static char *gp_src_list[] = {
+	"__SDATA_BEGIN__",
+	"__DATA_BEGIN__",
+	"__BSS_END__",
+};
+
+static int gp_calculate_list[] = {
+	0x800,
+	0x800,
+	-0x800,
+};
+
+#ifdef __riscv
+void modify_global_pointer_sym(elf_link_t *elf_link)
+{
+	// The value of __global_pointer$ is calculated as:
+	// __global_pointer$ = MIN(__SDATA_BEGIN__ + 0x800,
+	//     MAX(__DATA_BEGIN__ + 0x800, __BSS_END__ - 0x800));
+	Elf64_Sym *gp_sym = elf_find_symbol_by_name(&elf_link->out_ef, "__global_pointer$");
+	
+	if (!gp_sym) {
+		si_panic("not found symbol __global_pointer$\n");
+	}
+
+	elf_sec_mapping_t *m = elf_find_sec_mapping_by_dst(elf_link, gp_sym);
+	Elf64_Sym *src_gp_sym = get_src_sym_by_dst(elf_link, gp_sym, m);
+	
+	// NOTE: These three symbols might appear in .dynsym, requiring further adaptation.
+	for(unsigned i = 0; i < sizeof(gp_src_list)/sizeof(gp_src_list[0]); i++) {
+		Elf64_Sym *dst_sym = elf_find_symbol_by_name(&elf_link->out_ef, gp_src_list[i]);
+		if (!dst_sym) {
+			si_panic("not found symbol %s\n", gp_src_list[i]);
+		}
+		elf_sec_mapping_t *m = elf_find_sec_mapping_by_dst(elf_link, dst_sym);
+		Elf64_Sym *src_sym = get_src_sym_by_dst(elf_link, dst_sym, m);
+		
+		if(src_gp_sym->st_value == src_sym->st_value + gp_calculate_list[i]) {
+			gp_sym->st_value = dst_sym->st_value + gp_calculate_list[i];
+			Elf64_Sym * dyn_gp_sym = elf_find_dynsym_by_name(&elf_link->out_ef, "__global_pointer$");
+			if(dyn_gp_sym) {
+				dyn_gp_sym->st_value = gp_sym->st_value;
+			}
+			SI_LOG_INFO("change __global_pointer$ value: 0x%lx -> 0x%lx\n", src_gp_sym->st_value, gp_sym->st_value);
+			return;
+		}
+	}
+	si_panic("can not calculate __global_pointer$ value\n");
+}
+#endif
+
 static void modify_symtab(elf_link_t *elf_link)
 {
 	SI_LOG_DEBUG("modify symtab: \n");
 	Elf64_Shdr *sec = find_tmp_section_by_name(elf_link, ".symtab");
 	modify_symbol(elf_link, sec);
+
+#ifdef __riscv
+	modify_global_pointer_sym(elf_link);
+#endif
 
 	sort_symbol_table(&elf_link->out_ef, sec);
 
@@ -1715,7 +1787,7 @@ static void modify_init_and_fini(elf_link_t *elf_link)
 		return;
 	}
 	Elf64_Ehdr *hdr = elf_link->out_ef.hdr;
-	if (hdr->e_machine != EM_AARCH64 && hdr->e_machine != EM_X86_64) {
+	if (hdr->e_machine != EM_AARCH64 && hdr->e_machine != EM_X86_64 && hdr->e_machine != EM_RISCV) {
 		si_panic("e_machine not support\n");
 	}
 
@@ -1804,6 +1876,8 @@ static void elf_link_write_sections(elf_link_t *elf_link)
 
 int elf_link_write(elf_link_t *elf_link)
 {
+	show_in_efs(elf_link);
+	
 	if (elf_link_prepare(elf_link) < 0) {
 		return -1;
 	}

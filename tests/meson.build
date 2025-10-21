@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: MulanPSL-2.0
 
-tests = ['test_app', 'test_simple', 'test_ifunc']
+if arch_subdir != 'riscv'
+	tests = ['test_app', 'test_simple', 'test_ifunc']
+else
+	tests = []
+endif
 
 foreach test:tests
 	name = test

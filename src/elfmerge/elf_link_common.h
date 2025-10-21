@@ -332,6 +332,7 @@ void init_symbol_mapping(elf_link_t *elf_link);
 
 // common
 bool is_empty_path(const char *path);
+void show_in_efs(elf_link_t *elf_link);
 
 #define foreach_string(list, s)	\
 	for (s = list; s < list + (sizeof(list) / sizeof(list[0])); s++)
