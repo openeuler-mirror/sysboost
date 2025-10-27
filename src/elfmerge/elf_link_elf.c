@@ -1254,6 +1254,7 @@ static void modify_dynsym(elf_link_t *elf_link)
 	modify_hash(&elf_link->out_ef, sec, dyn, elf_link->out_ef.dynstr_data);
 }
 
+#ifdef __riscv
 static char *gp_src_list[] = {
 	"__SDATA_BEGIN__",
 	"__DATA_BEGIN__",
@@ -1266,7 +1267,6 @@ static int gp_calculate_list[] = {
 	-0x800,
 };
 
-#ifdef __riscv
 void modify_global_pointer_sym(elf_link_t *elf_link)
 {
 	// The value of __global_pointer$ is calculated as:
