@@ -592,8 +592,7 @@ static void write_debug_info(elf_link_t *elf_link)
 {
 #ifdef __riscv
 	(void)elf_link;
-#endif
-#ifndef __riscv
+#else
 	merge_debug_sections(elf_link);
 #endif
 }

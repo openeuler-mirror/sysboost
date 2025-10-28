@@ -120,8 +120,7 @@ static char *has_rela_names[] = {
     ".init_array",
 #ifndef __riscv
 	".init",
-#endif
-#ifdef __riscv
+#else
 	".preinit_array",
 #endif
     ".text",
@@ -135,8 +134,7 @@ static char *has_rela_names[] = {
 static char *rela_names[] = {
 #ifndef __riscv
 	".rela.init",
-#endif
-#ifdef __riscv
+#else
 	".rela.preinit_array",
 #endif
     ".rela.text",

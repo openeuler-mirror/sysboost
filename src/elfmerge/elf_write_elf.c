@@ -563,8 +563,7 @@ void merge_rela(elf_link_t *elf_link)
 {
 #ifndef __riscv
 	merge_filter_sections(elf_link, ".rela.init", rela_init_section_filter );
-#endif
-#ifdef __riscv
+#else
 	merge_filter_sections(elf_link, ".rela.preinit_array", rela_preinitarr_section_filter );
 #endif
 	merge_filter_sections(elf_link, ".rela.text", rela_text_section_filter);
