@@ -300,6 +300,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 			si_panic("error branch %s %lx\n", src_ef->file_name, src_rela->r_offset);
 		}
 		break;
+#ifdef __riscv
 	case R_RISCV_64:
 		// riscv64 use R_RISCV_64 for abs addr
 		// 000000002038  000300000002 R_RISCV_64        0000000000000000 _ITM_deregisterTM[...] + 0
@@ -312,13 +313,16 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 			si_panic("error .rela.dyn item at %s %lx\n", src_ef->file_name, src_rela->r_offset);
 		}
 		break;
+#endif
 	case R_X86_64_IRELATIVE:
 		// 000000000002f9e0  0000000000000025 R_X86_64_IRELATIVE                        15ec0
 		// 129: 0000000000015ec0    40 FUNC    LOCAL  DEFAULT   13 __x86_cpu_features_ifunc
 		fallthrough;
 	case R_X86_64_RELATIVE:
 	case R_AARCH64_RELATIVE:
+#ifdef __riscv
 	case R_RISCV_RELATIVE:
+#endif
 		if (!elf_is_rela_symbol_null(src_rela)) {
 			si_panic("%s %lx\n", src_ef->file_name, src_rela->r_offset);
 		}

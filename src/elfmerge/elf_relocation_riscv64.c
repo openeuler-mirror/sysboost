@@ -52,7 +52,7 @@ static bool is_compressed_instruction(unsigned short insn)
 #define CJ_FUNCT3_MASK 0xE003 // mask for funct3 + opcode
 #define CJ_FUNCT3_BITS 0xA001 // bits[15:13]=101, bits[1:0]=01
 #define CJ_MAX_OFFSET 2046
-#define CJ_MIN_OFFSET -2048
+#define CJ_MIN_OFFSET (-2048)
 
 static bool is_cj_insn(unsigned short binary)
 {
@@ -113,7 +113,7 @@ static unsigned short gen_cj_binary(unsigned obj_addr, unsigned insn_offset, uns
 #define CBEQZ_FUNCT3_BITS 0xC001
 #define CBNEZ_FUNCT3_BITS 0xE001
 #define CB_MAX_OFFSET 254
-#define CB_MIN_OFFSET -256
+#define CB_MIN_OFFSET (-256)
 
 static bool is_cbeqz_insn(unsigned short binary)
 {
@@ -284,7 +284,7 @@ static unsigned gen_ld_binary(unsigned obj_addr, unsigned insn_offset, unsigned 
 #define JAL_RD_MASK 0x00000F80
 #define JAL_IMM_BITS 21
 #define JAL_MAX_OFFSET 1048574	// +1MB-2
-#define JAL_MIN_OFFSET -1048576 // -1MB
+#define JAL_MIN_OFFSET (-1048576) // -1MB
 
 static bool is_jal_insn(unsigned binary)
 {
@@ -330,7 +330,7 @@ static unsigned gen_jal_binary(unsigned obj_addr, unsigned insn_offset, unsigned
 #define BRANCH_RS2_MASK 0x01F00000
 #define BRANCH_CORE_MASK (BRANCH_FUNCT3_MASK | BRANCH_RS1_MASK | BRANCH_RS2_MASK | OPCODE_BRANCH)
 #define BRANCH_MAX_OFFSET 4094	// +4KB-2
-#define BRANCH_MIN_OFFSET -4096 // -4KB
+#define BRANCH_MIN_OFFSET (-4096) // -4KB
 
 static bool is_branch_insn(unsigned binary)
 {
@@ -726,7 +726,7 @@ int modify_local_call_rela(elf_link_t *elf_link, elf_file_t *ef, Elf64_Rela *rel
 		// S + A
 		old_addr = sym->st_value + rela->r_addend;
 		new_addr = get_new_addr_by_old_addr(elf_link, ef, old_addr);
-		if (new_addr == -1UL) {
+		if (new_addr == NOT_FOUND) {
 			si_panic("R_RISCV_64: addr is missing\n");
 			return -1;
 		}
