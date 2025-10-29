@@ -117,13 +117,13 @@ enum section_types
 extern const char *sec_type_strings[];
 
 static char *has_rela_names[] = {
-    ".init_array",
+	".init_array",
 #ifndef __riscv
 	".init",
 #else
 	".preinit_array",
 #endif
-    ".text",
+	".text",
 	".eh_frame",
 	".fini_array",
 	".data.rel.ro",
@@ -137,7 +137,7 @@ static char *rela_names[] = {
 #else
 	".rela.preinit_array",
 #endif
-    ".rela.text",
+	".rela.text",
 	".rela.eh_frame",
 	".rela.init_array",
 	".rela.fini_array",
@@ -285,19 +285,19 @@ unsigned long elf_va_to_offset(elf_file_t *ef, unsigned long va);
 
 static inline unsigned short elf_read_u16(elf_file_t *ef, unsigned long offset)
 {
-    void *addr = ((void *)ef->hdr + (unsigned long)offset);
-    return *(unsigned short *)addr;
+	void *addr = ((void *)ef->hdr + (unsigned long)offset);
+	return *(unsigned short *)addr;
 }
 
 static inline unsigned short elf_read_u16_va(elf_file_t *ef, unsigned long va)
 {
-    return elf_read_u16(ef, elf_va_to_offset(ef, va));
+	return elf_read_u16(ef, elf_va_to_offset(ef, va));
 }
 
 static inline void elf_write_u16(elf_file_t *ef, unsigned long addr_, unsigned short value)
 {
 	unsigned short *addr = ((void *)ef->hdr + (unsigned long)addr_);
-    *addr = value;
+	*addr = value;
 }
 
 static inline int elf_read_s32(elf_file_t *ef, unsigned long offset)

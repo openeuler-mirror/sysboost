@@ -1102,7 +1102,7 @@ void show_in_efs(elf_link_t *elf_link)
 	for (unsigned i = 0; i < elf_link->in_ef_nr; i++) {
 		elf_file_t *ef = &elf_link->in_efs[i];
 		SI_LOG_DEBUG("[%u] file_name: %s, fd: %d, length: %lu\n",
-				i, ef->file_name ? ef->file_name : "(null)", ef->fd, ef->length);
+				 i, ef->file_name ? ef->file_name : "(null)", ef->fd, ef->length);
 		elf_show_sections(ef);
 	}
 }

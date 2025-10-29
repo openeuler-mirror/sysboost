@@ -1272,27 +1272,27 @@ void modify_global_pointer_sym(elf_link_t *elf_link)
 	// __global_pointer$ = MIN(__SDATA_BEGIN__ + 0x800,
 	//     MAX(__DATA_BEGIN__ + 0x800, __BSS_END__ - 0x800));
 	Elf64_Sym *gp_sym = elf_find_symbol_by_name(&elf_link->out_ef, "__global_pointer$");
-	
+
 	if (!gp_sym) {
 		si_panic("not found symbol __global_pointer$\n");
 	}
 
 	elf_sec_mapping_t *m = elf_find_sec_mapping_by_dst(elf_link, gp_sym);
 	Elf64_Sym *src_gp_sym = get_src_sym_by_dst(elf_link, gp_sym, m);
-	
+
 	// NOTE: These three symbols might appear in .dynsym, requiring further adaptation.
-	for(unsigned i = 0; i < sizeof(gp_src_list)/sizeof(gp_src_list[0]); i++) {
+	for (unsigned i = 0; i < sizeof(gp_src_list) / sizeof(gp_src_list[0]); i++) {
 		Elf64_Sym *dst_sym = elf_find_symbol_by_name(&elf_link->out_ef, gp_src_list[i]);
 		if (!dst_sym) {
 			si_panic("not found symbol %s\n", gp_src_list[i]);
 		}
 		elf_sec_mapping_t *m = elf_find_sec_mapping_by_dst(elf_link, dst_sym);
 		Elf64_Sym *src_sym = get_src_sym_by_dst(elf_link, dst_sym, m);
-		
-		if(src_gp_sym->st_value == src_sym->st_value + gp_calculate_list[i]) {
+
+		if (src_gp_sym->st_value == src_sym->st_value + gp_calculate_list[i]) {
 			gp_sym->st_value = dst_sym->st_value + gp_calculate_list[i];
-			Elf64_Sym * dyn_gp_sym = elf_find_dynsym_by_name(&elf_link->out_ef, "__global_pointer$");
-			if(dyn_gp_sym) {
+			Elf64_Sym *dyn_gp_sym = elf_find_dynsym_by_name(&elf_link->out_ef, "__global_pointer$");
+			if (dyn_gp_sym) {
 				dyn_gp_sym->st_value = gp_sym->st_value;
 			}
 			SI_LOG_INFO("change __global_pointer$ value: 0x%lx -> 0x%lx\n", src_gp_sym->st_value, gp_sym->st_value);

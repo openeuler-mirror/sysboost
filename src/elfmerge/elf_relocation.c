@@ -306,7 +306,7 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		// 000000002040  000400000002 R_RISCV_64        0000000000000000 exported_str + 0
 		if ((ELF64_ST_TYPE(sym->st_info) == STT_FUNC) || (ELF64_ST_TYPE(sym->st_info) == STT_OBJECT)) {
 			modify_rela_to_RELATIVE(elf_link, src_ef, src_rela, dst_rela);
-		} else if(ELF64_ST_TYPE(sym->st_info) == STT_NOTYPE && ELF64_ST_BIND(sym->st_info) == STB_WEAK){
+		} else if (ELF64_ST_TYPE(sym->st_info) == STT_NOTYPE && ELF64_ST_BIND(sym->st_info) == STB_WEAK) {
 			fix_rela_new_index(elf_link, src_ef, src_rela, dst_rela);
 		} else {
 			si_panic("error .rela.dyn item at %s %lx\n", src_ef->file_name, src_rela->r_offset);
@@ -355,7 +355,6 @@ void modify_rela_dyn_item(elf_link_t *elf_link, elf_file_t *src_ef, Elf64_Rela *
 		     src_rela->r_offset, src_rela->r_info, src_rela->r_addend,
 		     dst_rela->r_offset, dst_rela->r_info, dst_rela->r_addend);
 }
-
 
 // .rela.dyn
 void modify_rela_dyn(elf_link_t *elf_link)
