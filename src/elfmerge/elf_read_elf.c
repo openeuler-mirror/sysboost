@@ -32,6 +32,8 @@
 
 #ifdef __aarch64__
 #define LOCAL_RUNNING_ARCH EM_AARCH64
+#elif defined(__riscv)
+#define LOCAL_RUNNING_ARCH EM_RISCV
 #else
 #define LOCAL_RUNNING_ARCH EM_X86_64
 #endif
@@ -443,6 +445,15 @@ bool rela_init_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
 {
 	char *name = elf_get_section_name(ef, sec);
 	if (strcmp(name, ".rela.init") == 0){
+		return true;
+	}
+	return false;
+}
+
+bool rela_preinitarr_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec)
+{
+	char *name = elf_get_section_name(ef, sec);
+	if (strcmp(name, ".rela.preinit_array") == 0){
 		return true;
 	}
 	return false;

@@ -561,7 +561,11 @@ void merge_debug_sections(elf_link_t *elf_link)
 
 void merge_rela(elf_link_t *elf_link)
 {
+#ifndef __riscv
 	merge_filter_sections(elf_link, ".rela.init", rela_init_section_filter );
+#else
+	merge_filter_sections(elf_link, ".rela.preinit_array", rela_preinitarr_section_filter );
+#endif
 	merge_filter_sections(elf_link, ".rela.text", rela_text_section_filter);
 	merge_filter_sections(elf_link, ".rela.eh_frame", rela_ehframe_section_filter);
 	merge_filter_sections(elf_link, ".rela.init_array", rela_initarr_section_filter);
@@ -575,10 +579,14 @@ void merge_rela(elf_link_t *elf_link)
 
 void merge_text_sections(elf_link_t *elf_link)
 {
+#ifndef __riscv
 	merge_filter_sections(elf_link, ".init", init_section_filter);
+#endif
 	merge_filter_sections(elf_link, ".plt", plt_section_filter);
 	merge_filter_sections(elf_link, ".text", text_section_filter);
+#ifndef __riscv
 	merge_filter_sections(elf_link, ".fini", fini_section_filter);
+#endif
 }
 
 void merge_rodata_sections(elf_link_t *elf_link)

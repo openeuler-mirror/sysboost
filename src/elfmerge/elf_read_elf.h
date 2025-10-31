@@ -94,6 +94,7 @@ typedef struct {
 	MACRO(SEC_FINI,			".fini"			)\
 	MACRO(SEC_EH_FRAME,			".eh_frame"			)\
 	MACRO(SEC_RELA_EH_FRAME,			".rela.eh_frame"			)\
+	MACRO(SEC_RELA_PREINIT_ARRAY,		".rela.preinit_array"		)\
 	MACRO(SEC_RELA_INIT_ARRAY,			".rela.init_array"			)\
 	MACRO(SEC_RELA_FINI_ARRAY,			".rela.fini_array"			)\
 	MACRO(SEC_RELA_DATA_REL_RO,			".rela.data.rel.ro"			)\
@@ -116,9 +117,13 @@ enum section_types
 extern const char *sec_type_strings[];
 
 static char *has_rela_names[] = {
-    ".init_array",
+	".init_array",
+#ifndef __riscv
 	".init",
-    ".text",
+#else
+	".preinit_array",
+#endif
+	".text",
 	".eh_frame",
 	".fini_array",
 	".data.rel.ro",
@@ -127,8 +132,12 @@ static char *has_rela_names[] = {
 #define HAS_RELA_NAMES_LEN (sizeof(has_rela_names) / sizeof(has_rela_names[0]))
 
 static char *rela_names[] = {
-    ".rela.init",
-    ".rela.text",
+#ifndef __riscv
+	".rela.init",
+#else
+	".rela.preinit_array",
+#endif
+	".rela.text",
 	".rela.eh_frame",
 	".rela.init_array",
 	".rela.fini_array",
@@ -218,6 +227,12 @@ static inline char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int in
 	return elf_get_dynsym_name(ef, &syms[index]);
 }
 
+static inline Elf64_Sym *elf_get_dynsym_by_index(elf_file_t *ef, unsigned int index)
+{
+	Elf64_Sym *syms = elf_get_symtab_array(ef);
+	return &syms[index];
+}
+
 static inline bool elf_is_dynsym(elf_file_t *ef, Elf64_Sym *sym)
 {
 	unsigned long begin = (unsigned long)elf_get_dynsym_array(ef);
@@ -267,6 +282,23 @@ static inline Elf64_Sym *elf_get_dynsym_by_rela(elf_file_t *ef, Elf64_Rela *rela
 }
 
 unsigned long elf_va_to_offset(elf_file_t *ef, unsigned long va);
+
+static inline unsigned short elf_read_u16(elf_file_t *ef, unsigned long offset)
+{
+	void *addr = ((void *)ef->hdr + (unsigned long)offset);
+	return *(unsigned short *)addr;
+}
+
+static inline unsigned short elf_read_u16_va(elf_file_t *ef, unsigned long va)
+{
+	return elf_read_u16(ef, elf_va_to_offset(ef, va));
+}
+
+static inline void elf_write_u16(elf_file_t *ef, unsigned long addr_, unsigned short value)
+{
+	unsigned short *addr = ((void *)ef->hdr + (unsigned long)addr_);
+	*addr = value;
+}
 
 static inline int elf_read_s32(elf_file_t *ef, unsigned long offset)
 {
@@ -325,7 +357,7 @@ char *elf_get_dynsym_name_by_index(elf_file_t *ef, unsigned int index);
 static inline bool elf_rela_is_relative(Elf64_Rela *rela)
 {
 	int type = ELF64_R_TYPE(rela->r_info);
-	if ((type == R_X86_64_RELATIVE) || (type == R_AARCH64_RELATIVE)) {
+	if ((type == R_X86_64_RELATIVE) || (type == R_AARCH64_RELATIVE) || (type == R_RISCV_RELATIVE)) {
 		return true;
 	}
 
@@ -490,6 +522,7 @@ bool rela_text_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool rela_init_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool ehframe_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool rela_ehframe_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
+bool rela_preinitarr_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool rela_initarr_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool rela_finiarr_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);
 bool rela_datarelro_section_filter(const elf_file_t *ef, const Elf64_Shdr *sec);

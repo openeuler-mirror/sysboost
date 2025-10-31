@@ -9,7 +9,6 @@ edition = "2021"
 [dependencies]
 serde = "1.0.130"
 libc = "0.2.140"
-libmount = "0.1.15"
 log = "0.4"
 log4rs = "1.0"
 snafu = "0.7"
@@ -18,6 +17,9 @@ nix = "0.24"
 pathdiff = "0.2.1"
 caps = "0.5.5"
 lazy_static = "1.4.0"
+
+[target.'cfg(target_env = "musl")'.dependencies]
+libmount = "0.1.15"
 
 [features]
 selinux = []
